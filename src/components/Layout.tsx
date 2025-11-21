@@ -1,6 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, Settings } from 'lucide-react';
+import { Package, ShoppingCart, Settings } from 'lucide-react';
+
+import logo from '../assets/logo.png';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -22,8 +24,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
                 gap: 'var(--spacing-xl)'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', color: 'var(--color-primary)' }}>
-                    <LayoutDashboard size={24} />
-                    <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>HotelInv</h1>
+                    <img src={logo} alt="Hotel Logo" style={{ height: '40px', objectFit: 'contain' }} />
+                    <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Hotel</h1>
                 </div>
 
                 <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
