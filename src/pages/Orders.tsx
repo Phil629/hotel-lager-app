@@ -267,7 +267,65 @@ export const Orders: React.FC = () => {
 
     const openOrders = orders
         .filter(o => o.status === 'open')
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        .sort((a, b) => {
+            const now = new Date();
+
+            // Helper function to calculate days since order
+            const getDaysSince = (order: Order) => {
+                const orderDate = new Date(order.date);
+                return Math.floor((now.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
+            };
+
+            // Helper function to get days until delivery
+            const getDaysUntilDelivery = (order: Order) => {
+                if (!order.expectedDeliveryDate) return null;
+                const deliveryDate = new Date(order.expectedDeliveryDate);
+                return Math.floor((deliveryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            };
+
+            // Priority levels:
+            // 1 = Highest (defects or >14 days old - RED)
+            // 2 = High (>7 days old - ORANGE)
+            // 3 = Normal (recent orders)
+            // 4 = Low (delivery date >5 days away)
+
+            const getPriority = (order: Order) => {
+                // Defects always highest priority
+                if (order.hasDefect && !order.defectResolved) return 1;
+
+                const daysSince = getDaysSince(order);
+                const daysUntil = getDaysUntilDelivery(order);
+
+                // Orders >14 days old (RED) - highest priority
+                if (daysSince > 14) return 1;
+
+                // Orders >7 days old (ORANGE) - high priority
+                if (daysSince > 7) return 2;
+
+                // Orders with delivery date >5 days away - lowest priority
+                if (daysUntil !== null && daysUntil > 5) return 4;
+
+                // Normal priority
+                return 3;
+            };
+
+            const priorityA = getPriority(a);
+            const priorityB = getPriority(b);
+
+            // Sort by priority first
+            if (priorityA !== priorityB) {
+                return priorityA - priorityB; // Lower number = higher priority
+            }
+
+            // Within same priority, sort by date (oldest first for urgent, newest first for low priority)
+            if (priorityA <= 2) {
+                // For urgent orders, show oldest first
+                return new Date(a.date).getTime() - new Date(b.date).getTime();
+            } else {
+                // For normal/low priority, show newest first
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
+            }
+        });
 
     const receivedOrders = orders
         .filter(o => o.status === 'received')
