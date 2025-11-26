@@ -317,13 +317,15 @@ export const Orders: React.FC = () => {
                 return priorityA - priorityB; // Lower number = higher priority
             }
 
-            // Within same priority, sort by date (oldest first for urgent, newest first for low priority)
-            if (priorityA <= 2) {
-                // For urgent orders, show oldest first
-                return new Date(a.date).getTime() - new Date(b.date).getTime();
+            // Within same priority, sort by appropriate date
+            if (priorityA === 4) {
+                // For orders with delivery dates (Priority 4), sort by delivery date (earliest first)
+                const dateA = a.expectedDeliveryDate ? new Date(a.expectedDeliveryDate).getTime() : new Date(a.date).getTime();
+                const dateB = b.expectedDeliveryDate ? new Date(b.expectedDeliveryDate).getTime() : new Date(b.date).getTime();
+                return dateA - dateB; // Earliest delivery date first
             } else {
-                // For normal/low priority, show newest first
-                return new Date(b.date).getTime() - new Date(a.date).getTime();
+                // For all other priorities (1, 2, 3), sort by order date (oldest first)
+                return new Date(a.date).getTime() - new Date(b.date).getTime();
             }
         });
 
