@@ -284,19 +284,20 @@ export const Orders: React.FC = () => {
             };
 
             // Priority levels:
-            // 1 = Highest (defects or >14 days old - RED)
+            // 0 = Critical (defects - always first!)
+            // 1 = Highest (>14 days old - RED)
             // 2 = High (>7 days old - ORANGE)
             // 3 = Normal (recent orders)
             // 4 = Low (delivery date >5 days away)
 
             const getPriority = (order: Order) => {
-                // Defects always highest priority
-                if (order.hasDefect && !order.defectResolved) return 1;
+                // Defects ALWAYS highest priority - separate from age-based priorities
+                if (order.hasDefect && !order.defectResolved) return 0;
 
                 const daysSince = getDaysSince(order);
                 const daysUntil = getDaysUntilDelivery(order);
 
-                // Orders >14 days old (RED) - highest priority
+                // Orders >14 days old (RED) - highest priority (after defects)
                 if (daysSince > 14) return 1;
 
                 // Orders >7 days old (ORANGE) - high priority
