@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
-import { Plus, Edit2, Trash2, ShoppingCart, X, ChevronDown, ChevronUp, Mail, ExternalLink, CheckSquare, Square, Wifi } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShoppingCart, X, ChevronDown, ChevronUp, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone } from 'lucide-react';
 import emailjs from '@emailjs/browser';
+import { Notification, type NotificationType } from '../components/Notification';
 
 const CATEGORIES = ['Lebensmittel', 'Getränke', 'Reinigung', 'Büro', 'Sonstiges'];
 
@@ -29,6 +30,8 @@ export const Products: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
+    const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -83,7 +86,8 @@ export const Products: React.FC = () => {
             emailOrderAddress: newProduct.emailOrderAddress,
             emailOrderSubject: newProduct.emailOrderSubject,
             emailOrderBody: newProduct.emailOrderBody,
-            autoOrder: newProduct.autoOrder
+            autoOrder: newProduct.autoOrder,
+            supplierPhone: newProduct.supplierPhone
         };
 
         setIsLoading(true);
@@ -114,7 +118,7 @@ export const Products: React.FC = () => {
                 const settings = StorageService.getSettings();
 
                 if (!settings.serviceId || !settings.templateId || !settings.publicKey) {
-                    alert('Fehler: EmailJS ist nicht konfiguriert. Bitte prüfen Sie die Einstellungen.');
+                    setNotification({ message: 'Fehler: EmailJS ist nicht konfiguriert. Bitte prüfen Sie die Einstellungen.', type: 'error' });
                     return;
                 }
 
@@ -134,7 +138,7 @@ export const Products: React.FC = () => {
                     settings.publicKey
                 );
 
-                alert('Bestellung wurde automatisch per E-Mail versendet!');
+                setNotification({ message: 'Bestellung wurde automatisch per E-Mail versendet!', type: 'success' });
             }
 
             const newOrder: Order = {
@@ -143,18 +147,20 @@ export const Products: React.FC = () => {
                 productName: selectedProductForOrder.name,
                 quantity: orderQuantity,
                 status: 'open',
-                productImage: selectedProductForOrder.image
+                productImage: selectedProductForOrder.image,
+                supplierEmail: selectedProductForOrder.emailOrderAddress,
+                supplierPhone: selectedProductForOrder.supplierPhone
             };
 
             await DataService.saveOrder(newOrder);
             setIsOrderModalOpen(false);
             setSelectedProductForOrder(null);
             if (!selectedProductForOrder.autoOrder) {
-                alert('Bestellung erfolgreich angelegt!');
+                setNotification({ message: 'Bestellung erfolgreich angelegt!', type: 'success' });
             }
         } catch (error) {
             console.error('Order Error:', error);
-            alert('Fehler beim Anlegen der Bestellung.');
+            setNotification({ message: 'Fehler beim Anlegen der Bestellung.', type: 'error' });
         } finally {
             setIsLoading(false);
         }
@@ -300,7 +306,7 @@ export const Products: React.FC = () => {
                                     <button onClick={() => {
                                         const links = getIoTLink(product);
                                         if (links) setShowIoTLink(links);
-                                        else alert('Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.');
+                                        else setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
                                     }} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer' }}>
                                         <Wifi size={18} />
                                     </button>
@@ -332,447 +338,258 @@ export const Products: React.FC = () => {
                             <tr>
                                 <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bild</th>
                                 <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Name</th>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Kategorie</th>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bestand</th>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Einheit</th>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}>Aktionen</th>
+                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Kontakt / Links</th>
+                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'center', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bestellen</th>
+                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}></th>
                             </tr>
                         </thead>
                         <tbody>
-                            {products.map((product) => (
-                                <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                    <td style={{ padding: 'var(--spacing-md)' }}>
-                                        {product.image && (
-                                            <img
-                                                src={product.image}
-                                                alt={product.name}
-                                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
-                                            />
-                                        )}
-                                    </td>
-                                    <td style={{ padding: 'var(--spacing-md)' }}>
-                                        <div style={{ fontWeight: 500 }}>{product.name}</div>
-                                        {product.orderUrl && (
-                                            <a href={product.orderUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', textDecoration: 'none' }}>
-                                                Bestell-Link
-                                            </a>
-                                        )}
-                                        {product.emailOrderAddress && (
-                                            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                <Mail size={12} />
-                                                {product.autoOrder ? 'Auto-Email' : 'Email-Bestellung'}
+                            {products.map((product, index) => {
+                                const isLastRows = index >= products.length - 3;
+                                return (
+                                    <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                        <td style={{ padding: 'var(--spacing-md)' }}>
+                                            {product.image && (
+                                                <img
+                                                    src={product.image}
+                                                    alt={product.name}
+                                                    style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
+                                                />
+                                            )}
+                                        </td>
+                                        <td style={{ padding: 'var(--spacing-md)' }}>
+                                            <div style={{ fontWeight: 500, fontSize: 'var(--font-size-lg)' }}>{product.name}</div>
+                                        </td>
+                                        <td style={{ padding: 'var(--spacing-md)' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                {product.orderUrl && (
+                                                    <a href={product.orderUrl} target="_blank" rel="noopener noreferrer"
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', textDecoration: 'none', fontSize: 'var(--font-size-sm)' }}>
+                                                        <ExternalLink size={14} /> Link
+                                                    </a>
+                                                )}
+                                                {product.emailOrderAddress && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                                                        <Mail size={14} /> {product.emailOrderAddress}
+                                                    </div>
+                                                )}
+                                                {product.supplierPhone && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                                                        <Phone size={14} /> {product.supplierPhone}
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                    </td>
-                                    <td style={{ padding: 'var(--spacing-md)' }}>
-                                        <span style={{
-                                            backgroundColor: 'var(--color-background)',
-                                            padding: '4px 8px',
-                                            borderRadius: 'var(--radius-sm)',
-                                            fontSize: 'var(--font-size-sm)',
-                                            color: 'var(--color-text-muted)'
-                                        }}>
-                                            {product.category}
-                                        </span>
-                                    </td>
-                                    <td style={{ padding: 'var(--spacing-md)', textAlign: 'right' }}>
-                                        <span style={{
-                                            color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'inherit',
-                                            fontWeight: product.stock <= (product.minStock || 0) ? 700 : 400
-                                        }}>
-                                            {product.stock}
-                                        </span>
-                                    </td>
-                                    <td style={{ padding: 'var(--spacing-md)' }}>{product.unit}</td>
-                                    <td style={{ padding: 'var(--spacing-md)', textAlign: 'right' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-sm)' }}>
+                                        </td>
+                                        <td style={{ padding: 'var(--spacing-md)', textAlign: 'center' }}>
                                             <button
-                                                onClick={() => {
-                                                    const links = getIoTLink(product);
-                                                    if (links) {
-                                                        setShowIoTLink(links);
-                                                    } else {
-                                                        alert('Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.');
-                                                    }
+                                                onClick={() => handleOrderClick(product)}
+                                                style={{
+                                                    backgroundColor: 'var(--color-primary)',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    padding: '8px 16px',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    fontWeight: 500,
+                                                    boxShadow: 'var(--shadow-sm)'
                                                 }}
+                                            >
+                                                <ShoppingCart size={18} />
+                                                Bestellen
+                                            </button>
+                                        </td>
+                                        <td style={{ padding: 'var(--spacing-md)', textAlign: 'right', position: 'relative' }}>
+                                            <button
+                                                onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)}
                                                 style={{
                                                     background: 'none',
                                                     border: 'none',
                                                     color: 'var(--color-text-muted)',
-                                                    padding: '4px',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    cursor: 'pointer'
-                                                }} title="IoT Link anzeigen">
-                                                <Wifi size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleOrderClick(product)}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: 'var(--color-primary)',
-                                                    padding: '4px',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    cursor: 'pointer'
-                                                }} title="Bestellen">
-                                                <ShoppingCart size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleEdit(product)}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: 'var(--color-secondary)',
-                                                    padding: '4px',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    cursor: 'pointer'
-                                                }} title="Bearbeiten">
-                                                <Edit2 size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteClick(product.id)}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: 'var(--color-danger)',
-                                                    padding: '4px',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    cursor: 'pointer'
-                                                }} title="Löschen">
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-
-            {/* IoT Link Modal */}
-            {showIoTLink && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    zIndex: 1100
-                }}>
-                    <div style={{
-                        backgroundColor: 'var(--color-surface)',
-                        padding: 'var(--spacing-xl)',
-                        borderRadius: 'var(--radius-lg)',
-                        width: '100%',
-                        maxWidth: '600px',
-                        boxShadow: 'var(--shadow-lg)'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                            <h3 style={{ margin: 0 }}>IoT Button Konfiguration</h3>
-                            <button onClick={() => setShowIoTLink(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
-                        </div>
-                        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-md)' }}>
-                            Nutzen Sie den CURL-Befehl für den IoT Button. Zum Testen am Windows-PC nutzen Sie den PowerShell-Befehl.
-                        </p>
-
-                        <div style={{ marginBottom: 'var(--spacing-md)' }}>
-                            <strong style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)' }}>Für Shelly Button / IoT Gerät (CURL):</strong>
-                            <pre style={{
-                                backgroundColor: 'var(--color-background)',
-                                padding: 'var(--spacing-md)',
-                                borderRadius: 'var(--radius-md)',
-                                overflowX: 'auto',
-                                fontSize: '12px',
-                                fontFamily: 'monospace',
-                                whiteSpace: 'pre-wrap',
-                                margin: 0
-                            }}>
-                                {showIoTLink.curl}
-                            </pre>
-                        </div>
-
-                        <div>
-                            <strong style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)' }}>Zum Testen in Windows PowerShell:</strong>
-                            <pre style={{
-                                backgroundColor: 'var(--color-background)',
-                                padding: 'var(--spacing-md)',
-                                borderRadius: 'var(--radius-md)',
-                                overflowX: 'auto',
-                                fontSize: '12px',
-                                fontFamily: 'monospace',
-                                whiteSpace: 'pre-wrap',
-                                margin: 0
-                            }}>
-                                {showIoTLink.powershell}
-                            </pre>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--spacing-md)' }}>
-                            <button
-                                onClick={() => setShowIoTLink(null)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: 'none',
-                                    backgroundColor: 'var(--color-primary)',
-                                    color: 'white'
-                                }}
-                            >
-                                Schließen
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {isModalOpen && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    zIndex: 1000,
-                    overflowY: 'auto'
-                }}>
-                    <div style={{
-                        backgroundColor: 'var(--color-surface)',
-                        padding: 'var(--spacing-xl)',
-                        borderRadius: 'var(--radius-lg)',
-                        width: '100%',
-                        maxWidth: '500px',
-                        boxShadow: 'var(--shadow-lg)',
-                        maxHeight: '90vh',
-                        overflowY: 'auto'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-                            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>{editingId ? 'Produkt bearbeiten' : 'Neues Produkt anlegen'}</h3>
-                            <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Name</label>
-                                <input
-                                    required
-                                    value={newProduct.name || ''}
-                                    onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
-                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                />
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Kategorie</label>
-                                    {isCustomCategoryMode ? (
-                                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                                            <input
-                                                value={newProduct.category}
-                                                onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
-                                                placeholder="Kategorie eingeben..."
-                                                autoFocus
-                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setIsCustomCategoryMode(false);
-                                                    setNewProduct({ ...newProduct, category: 'Lebensmittel' });
-                                                }}
-                                                style={{
-                                                    background: 'var(--color-background)',
-                                                    border: '1px solid var(--color-border)',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    cursor: 'pointer',
-                                                    padding: '0 var(--spacing-sm)'
-                                                }}
-                                                title="Zurück zur Auswahl"
-                                            >
-                                                <X size={18} />
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <select
-                                            value={newProduct.category}
-                                            onChange={e => {
-                                                if (e.target.value === 'custom') {
-                                                    setIsCustomCategoryMode(true);
-                                                    setNewProduct({ ...newProduct, category: '' });
-                                                } else {
-                                                    setNewProduct({ ...newProduct, category: e.target.value });
-                                                }
-                                            }}
-                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                        >
-                                            {CATEGORIES.map(cat => (
-                                                <option key={cat} value={cat}>{cat}</option>
-                                            ))}
-                                            <option value="custom">Eigene eingeben...</option>
-                                        </select>
-                                    )}
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Einheit</label>
-                                    <input
-                                        value={newProduct.unit}
-                                        onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })}
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestand</label>
-                                    <input
-                                        type="number"
-                                        value={newProduct.stock}
-                                        onChange={e => setNewProduct({ ...newProduct, stock: Number(e.target.value) })}
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mindestbestand</label>
-                                    <input
-                                        type="number"
-                                        value={newProduct.minStock}
-                                        onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })}
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bild URL (optional)</label>
-                                <input
-                                    type="url"
-                                    value={newProduct.image || ''}
-                                    onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
-                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                />
-                            </div>
-
-                            <div>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestell-URL (optional)</label>
-                                <input
-                                    type="url"
-                                    value={newProduct.orderUrl || ''}
-                                    onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })}
-                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                />
-                            </div>
-
-                            {/* Email Configuration Section */}
-                            <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsEmailSectionOpen(!isEmailSectionOpen)}
-                                    style={{
-                                        width: '100%',
-                                        padding: 'var(--spacing-md)',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        background: 'var(--color-background)',
-                                        color: 'var(--color-text-main)',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontWeight: 500
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-                                        <Mail size={18} />
-                                        Email-Bestellung konfigurieren
-                                    </div>
-                                    {isEmailSectionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                </button>
-
-                                {isEmailSectionOpen && (
-                                    <div style={{ padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', marginBottom: 'var(--spacing-md)' }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    padding: 0,
+                                                    padding: '8px',
+                                                    borderRadius: 'var(--radius-md)',
                                                     cursor: 'pointer',
                                                     display: 'flex',
                                                     alignItems: 'center',
-                                                    color: newProduct.autoOrder ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                                                    justifyContent: 'center'
                                                 }}
                                             >
-                                                {newProduct.autoOrder ? <CheckSquare size={20} /> : <Square size={20} />}
+                                                <Settings size={20} />
                                             </button>
-                                            <label
-                                                onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
-                                                style={{ cursor: 'pointer', fontWeight: 500 }}
-                                            >
-                                                Automatische Bestellung (via EmailJS)
-                                            </label>
-                                        </div>
 
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Email-Adresse</label>
-                                            <input
-                                                type="email"
-                                                placeholder="bestellung@lieferant.de"
-                                                value={newProduct.emailOrderAddress || ''}
-                                                onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })}
-                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Betreff Vorlage</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Bestellung: Produktname"
-                                                value={newProduct.emailOrderSubject || ''}
-                                                onChange={e => setNewProduct({ ...newProduct, emailOrderSubject: e.target.value })}
-                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Email Text Vorlage</label>
-                                            <textarea
-                                                rows={4}
-                                                placeholder="Guten Tag, bitte liefern Sie..."
-                                                value={newProduct.emailOrderBody || ''}
-                                                onChange={e => setNewProduct({ ...newProduct, emailOrderBody: e.target.value })}
-                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
+                                            {openSettingsId === product.id && (
+                                                <>
+                                                    <div
+                                                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
+                                                        onClick={() => setOpenSettingsId(null)}
+                                                    />
+                                                    <div style={{
+                                                        position: 'absolute',
+                                                        right: 'var(--spacing-md)',
+                                                        ...(isLastRows
+                                                            ? { bottom: '100%', marginBottom: '4px' }
+                                                            : { top: '100%', marginTop: '4px' }
+                                                        ),
+                                                        backgroundColor: 'var(--color-surface)',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        boxShadow: 'var(--shadow-lg)',
+                                                        border: '1px solid var(--color-border)',
+                                                        zIndex: 20,
+                                                        minWidth: '160px',
+                                                        overflow: 'hidden'
+                                                    }}>
+                                                        <button
+                                                            onClick={() => {
+                                                                handleEdit(product);
+                                                                setOpenSettingsId(null);
+                                                            }}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '8px',
+                                                                width: '100%',
+                                                                padding: '10px 16px',
+                                                                border: 'none',
+                                                                background: 'none',
+                                                                textAlign: 'left',
+                                                                cursor: 'pointer',
+                                                                color: 'var(--color-text-main)',
+                                                                fontSize: 'var(--font-size-sm)'
+                                                            }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                        >
+                                                            <Edit2 size={16} /> Bearbeiten
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const links = getIoTLink(product);
+                                                                if (links) setShowIoTLink(links);
+                                                                else setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
+                                                                setOpenSettingsId(null);
+                                                            }}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '8px',
+                                                                width: '100%',
+                                                                padding: '10px 16px',
+                                                                border: 'none',
+                                                                background: 'none',
+                                                                textAlign: 'left',
+                                                                cursor: 'pointer',
+                                                                color: 'var(--color-text-main)',
+                                                                fontSize: 'var(--font-size-sm)'
+                                                            }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                        >
+                                                            <Wifi size={16} /> IoT Link
+                                                        </button>
+                                                        <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+                                                        <button
+                                                            onClick={() => {
+                                                                handleDeleteClick(product.id);
+                                                                setOpenSettingsId(null);
+                                                            }}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '8px',
+                                                                width: '100%',
+                                                                padding: '10px 16px',
+                                                                border: 'none',
+                                                                background: 'none',
+                                                                textAlign: 'left',
+                                                                cursor: 'pointer',
+                                                                color: 'var(--color-danger)',
+                                                                fontSize: 'var(--font-size-sm)'
+                                                            }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                        >
+                                                            <Trash2 size={16} /> Löschen
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )
+            }
+
+            {/* IoT Link Modal */}
+            {
+                showIoTLink && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 1100
+                    }}>
+                        <div style={{
+                            backgroundColor: 'var(--color-surface)',
+                            padding: 'var(--spacing-xl)',
+                            borderRadius: 'var(--radius-lg)',
+                            width: '100%',
+                            maxWidth: '600px',
+                            boxShadow: 'var(--shadow-lg)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                                <h3 style={{ margin: 0 }}>IoT Button Konfiguration</h3>
+                                <button onClick={() => setShowIoTLink(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
+                            </div>
+                            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-md)' }}>
+                                Nutzen Sie den CURL-Befehl für den IoT Button. Zum Testen am Windows-PC nutzen Sie den PowerShell-Befehl.
+                            </p>
+
+                            <div style={{ marginBottom: 'var(--spacing-md)' }}>
+                                <strong style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)' }}>Für Shelly Button / IoT Gerät (CURL):</strong>
+                                <pre style={{
+                                    backgroundColor: 'var(--color-background)',
+                                    padding: 'var(--spacing-md)',
+                                    borderRadius: 'var(--radius-md)',
+                                    overflowX: 'auto',
+                                    fontSize: '12px',
+                                    fontFamily: 'monospace',
+                                    whiteSpace: 'pre-wrap',
+                                    margin: 0
+                                }}>
+                                    {showIoTLink.curl}
+                                </pre>
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
+                            <div>
+                                <strong style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)' }}>Zum Testen in Windows PowerShell:</strong>
+                                <pre style={{
+                                    backgroundColor: 'var(--color-background)',
+                                    padding: 'var(--spacing-md)',
+                                    borderRadius: 'var(--radius-md)',
+                                    overflowX: 'auto',
+                                    fontSize: '12px',
+                                    fontFamily: 'monospace',
+                                    whiteSpace: 'pre-wrap',
+                                    margin: 0
+                                }}>
+                                    {showIoTLink.powershell}
+                                </pre>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--spacing-md)' }}>
                                 <button
-                                    type="button"
-                                    onClick={closeModal}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--color-border)',
-                                        backgroundColor: 'transparent',
-                                        color: 'var(--color-text-main)'
-                                    }}
-                                >
-                                    Abbrechen
-                                </button>
-                                <button
-                                    type="submit"
+                                    onClick={() => setShowIoTLink(null)}
                                     style={{
                                         padding: 'var(--spacing-sm) var(--spacing-md)',
                                         borderRadius: 'var(--radius-md)',
@@ -781,139 +598,448 @@ export const Products: React.FC = () => {
                                         color: 'white'
                                     }}
                                 >
-                                    {isLoading ? 'Speichert...' : 'Speichern'}
+                                    Schließen
                                 </button>
                             </div>
-                        </form>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
+
+            {
+                isModalOpen && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 1000,
+                        overflowY: 'auto'
+                    }}>
+                        <div style={{
+                            backgroundColor: 'var(--color-surface)',
+                            padding: 'var(--spacing-xl)',
+                            borderRadius: 'var(--radius-lg)',
+                            width: '100%',
+                            maxWidth: '500px',
+                            boxShadow: 'var(--shadow-lg)',
+                            maxHeight: '90vh',
+                            overflowY: 'auto'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+                                <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>{editingId ? 'Produkt bearbeiten' : 'Neues Produkt anlegen'}</h3>
+                                <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Name</label>
+                                    <input
+                                        required
+                                        value={newProduct.name || ''}
+                                        onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Kategorie</label>
+                                        {isCustomCategoryMode ? (
+                                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                                                <input
+                                                    value={newProduct.category}
+                                                    onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+                                                    placeholder="Kategorie eingeben..."
+                                                    autoFocus
+                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsCustomCategoryMode(false);
+                                                        setNewProduct({ ...newProduct, category: 'Lebensmittel' });
+                                                    }}
+                                                    style={{
+                                                        background: 'var(--color-background)',
+                                                        border: '1px solid var(--color-border)',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        cursor: 'pointer',
+                                                        padding: '0 var(--spacing-sm)'
+                                                    }}
+                                                    title="Zurück zur Auswahl"
+                                                >
+                                                    <X size={18} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <select
+                                                value={newProduct.category}
+                                                onChange={e => {
+                                                    if (e.target.value === 'custom') {
+                                                        setIsCustomCategoryMode(true);
+                                                        setNewProduct({ ...newProduct, category: '' });
+                                                    } else {
+                                                        setNewProduct({ ...newProduct, category: e.target.value });
+                                                    }
+                                                }}
+                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                            >
+                                                {CATEGORIES.map(cat => (
+                                                    <option key={cat} value={cat}>{cat}</option>
+                                                ))}
+                                                <option value="custom">Eigene eingeben...</option>
+                                            </select>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Einheit</label>
+                                        <input
+                                            value={newProduct.unit}
+                                            onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })}
+                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestand</label>
+                                        <input
+                                            type="number"
+                                            value={newProduct.stock}
+                                            onChange={e => setNewProduct({ ...newProduct, stock: Number(e.target.value) })}
+                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mindestbestand</label>
+                                        <input
+                                            type="number"
+                                            value={newProduct.minStock}
+                                            onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })}
+                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bild URL (optional)</label>
+                                    <input
+                                        type="url"
+                                        value={newProduct.image || ''}
+                                        onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestell-URL (optional)</label>
+                                    <input
+                                        type="url"
+                                        value={newProduct.orderUrl || ''}
+                                        onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Lieferanten-Telefon (optional)</label>
+                                    <input
+                                        type="tel"
+                                        value={newProduct.supplierPhone || ''}
+                                        onChange={e => setNewProduct({ ...newProduct, supplierPhone: e.target.value })}
+                                        placeholder="+49 123 456789"
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+
+                                {/* Email Configuration Section */}
+                                <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsEmailSectionOpen(!isEmailSectionOpen)}
+                                        style={{
+                                            width: '100%',
+                                            padding: 'var(--spacing-md)',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            background: 'var(--color-background)',
+                                            color: 'var(--color-text-main)',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontWeight: 500
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                                            <Mail size={18} />
+                                            Email-Bestellung konfigurieren
+                                        </div>
+                                        {isEmailSectionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                    </button>
+
+                                    {isEmailSectionOpen && (
+                                        <div style={{ padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', marginBottom: 'var(--spacing-md)' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        padding: 0,
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        color: newProduct.autoOrder ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                                                    }}
+                                                >
+                                                    {newProduct.autoOrder ? <CheckSquare size={20} /> : <Square size={20} />}
+                                                </button>
+                                                <label
+                                                    onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
+                                                    style={{ cursor: 'pointer', fontWeight: 500 }}
+                                                >
+                                                    Automatische Bestellung (via EmailJS)
+                                                </label>
+                                            </div>
+
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Email-Adresse</label>
+                                                <input
+                                                    type="email"
+                                                    placeholder="bestellung@lieferant.de"
+                                                    value={newProduct.emailOrderAddress || ''}
+                                                    onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })}
+                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Betreff Vorlage</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Bestellung: Produktname"
+                                                    value={newProduct.emailOrderSubject || ''}
+                                                    onChange={e => setNewProduct({ ...newProduct, emailOrderSubject: e.target.value })}
+                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Email Text Vorlage</label>
+                                                <textarea
+                                                    rows={4}
+                                                    placeholder="Guten Tag, bitte liefern Sie..."
+                                                    value={newProduct.emailOrderBody || ''}
+                                                    onChange={e => setNewProduct({ ...newProduct, emailOrderBody: e.target.value })}
+                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
+                                    <button
+                                        type="button"
+                                        onClick={closeModal}
+                                        style={{
+                                            padding: 'var(--spacing-sm) var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--color-border)',
+                                            backgroundColor: 'transparent',
+                                            color: 'var(--color-text-main)'
+                                        }}
+                                    >
+                                        Abbrechen
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        style={{
+                                            padding: 'var(--spacing-sm) var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: 'none',
+                                            backgroundColor: 'var(--color-primary)',
+                                            color: 'white'
+                                        }}
+                                    >
+                                        {isLoading ? 'Speichert...' : 'Speichern'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )
+            }
 
             {/* Delete Confirmation Modal */}
-            {deleteConfirmId && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    zIndex: 1200
-                }}>
+            {
+                deleteConfirmId && (
                     <div style={{
-                        backgroundColor: 'var(--color-surface)',
-                        padding: 'var(--spacing-xl)',
-                        borderRadius: 'var(--radius-lg)',
-                        width: '100%',
-                        maxWidth: '400px',
-                        boxShadow: 'var(--shadow-lg)',
-                        textAlign: 'center'
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 1200
                     }}>
-                        <h3 style={{ marginTop: 0 }}>Produkt löschen?</h3>
-                        <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-lg)' }}>
-                            Möchten Sie dieses Produkt wirklich unwiderruflich löschen?
-                        </p>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--spacing-md)' }}>
-                            <button
-                                onClick={() => setDeleteConfirmId(null)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    backgroundColor: 'transparent',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Abbrechen
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                disabled={isLoading}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: 'none',
-                                    backgroundColor: 'var(--color-danger)',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    opacity: isLoading ? 0.7 : 1
-                                }}
-                            >
-                                {isLoading ? 'Löscht...' : 'Ja, löschen'}
-                            </button>
+                        <div style={{
+                            backgroundColor: 'var(--color-surface)',
+                            padding: 'var(--spacing-xl)',
+                            borderRadius: 'var(--radius-lg)',
+                            width: '100%',
+                            maxWidth: '400px',
+                            boxShadow: 'var(--shadow-lg)',
+                            textAlign: 'center'
+                        }}>
+                            <h3 style={{ marginTop: 0 }}>Produkt löschen?</h3>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-lg)' }}>
+                                Möchten Sie dieses Produkt wirklich unwiderruflich löschen?
+                            </p>
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--spacing-md)' }}>
+                                <button
+                                    onClick={() => setDeleteConfirmId(null)}
+                                    style={{
+                                        padding: 'var(--spacing-sm) var(--spacing-md)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--color-border)',
+                                        backgroundColor: 'transparent',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Abbrechen
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    disabled={isLoading}
+                                    style={{
+                                        padding: 'var(--spacing-sm) var(--spacing-md)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: 'none',
+                                        backgroundColor: 'var(--color-danger)',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        opacity: isLoading ? 0.7 : 1
+                                    }}
+                                >
+                                    {isLoading ? 'Löscht...' : 'Ja, löschen'}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {isOrderModalOpen && selectedProductForOrder && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    zIndex: 1000
-                }}>
+            {
+                isOrderModalOpen && selectedProductForOrder && (
                     <div style={{
-                        backgroundColor: 'var(--color-surface)',
-                        padding: 'var(--spacing-xl)',
-                        borderRadius: 'var(--radius-lg)',
-                        width: '100%',
-                        maxWidth: '400px',
-                        boxShadow: 'var(--shadow-lg)'
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 1000
                     }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-                            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Bestellung aufgeben</h3>
-                            <button onClick={() => setIsOrderModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleCreateOrder} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                            <div>
-                                <p style={{ margin: '0 0 var(--spacing-sm) 0', fontWeight: 500 }}>Produkt: {selectedProductForOrder.name}</p>
+                        <div style={{
+                            backgroundColor: 'var(--color-surface)',
+                            padding: 'var(--spacing-xl)',
+                            borderRadius: 'var(--radius-lg)',
+                            width: '100%',
+                            maxWidth: '400px',
+                            boxShadow: 'var(--shadow-lg)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+                                <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Bestellung aufgeben</h3>
+                                <button onClick={() => setIsOrderModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                                    <X size={24} />
+                                </button>
                             </div>
 
-                            <div>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Menge ({selectedProductForOrder.unit})</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    required
-                                    value={orderQuantity}
-                                    onChange={e => setOrderQuantity(Number(e.target.value))}
-                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                />
-                            </div>
+                            <form onSubmit={handleCreateOrder} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                <div>
+                                    <p style={{ margin: '0 0 var(--spacing-sm) 0', fontWeight: 500 }}>Produkt: {selectedProductForOrder.name}</p>
+                                </div>
 
-                            <div>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestelldatum</label>
-                                <input
-                                    type="date"
-                                    required
-                                    value={orderDate}
-                                    onChange={e => setOrderDate(e.target.value)}
-                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                />
-                            </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Menge ({selectedProductForOrder.unit})</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        required
+                                        value={orderQuantity}
+                                        onChange={e => setOrderQuantity(Number(e.target.value))}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
 
-                            {selectedProductForOrder.emailOrderAddress && !selectedProductForOrder.autoOrder && (
-                                <div style={{
-                                    backgroundColor: 'var(--color-background)',
-                                    padding: 'var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)'
-                                }}>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Email vorbereiten:</label>
-                                    <div style={{ display: 'flex', gap: 'var(--spacing-sm)', flexDirection: 'column' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestelldatum</label>
+                                    <input
+                                        type="date"
+                                        required
+                                        value={orderDate}
+                                        onChange={e => setOrderDate(e.target.value)}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+
+
+                                {selectedProductForOrder.orderUrl && (
+                                    <div style={{
+                                        backgroundColor: 'var(--color-background)',
+                                        padding: 'var(--spacing-md)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--color-border)'
+                                    }}>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Bestelllink:</label>
+                                        <a
+                                            href={selectedProductForOrder.orderUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: 'var(--spacing-sm)',
+                                                padding: 'var(--spacing-sm)',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--color-border)',
+                                                backgroundColor: 'var(--color-primary)',
+                                                color: 'white',
+                                                cursor: 'pointer',
+                                                fontWeight: 500,
+                                                textDecoration: 'none'
+                                            }}
+                                        >
+                                            <ExternalLink size={16} />
+                                            Zur Webseite
+                                        </a>
+                                    </div>
+                                )}
+
+                                {selectedProductForOrder.emailOrderAddress && !selectedProductForOrder.autoOrder && (
+                                    <div style={{
+                                        backgroundColor: 'var(--color-background)',
+                                        padding: 'var(--spacing-md)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--color-border)'
+                                    }}>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Email vorbereiten:</label>
                                         <button
                                             type="button"
                                             onClick={() => prepareEmailLink('gmail')}
@@ -928,84 +1054,75 @@ export const Products: React.FC = () => {
                                                 backgroundColor: '#EA4335',
                                                 color: 'white',
                                                 cursor: 'pointer',
-                                                fontWeight: 500
+                                                fontWeight: 500,
+                                                width: '100%'
                                             }}
                                         >
                                             <Mail size={16} />
                                             In Gmail öffnen
                                         </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => prepareEmailLink('mailto')}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: 'var(--spacing-sm)',
-                                                padding: 'var(--spacing-sm)',
-                                                borderRadius: 'var(--radius-sm)',
-                                                border: '1px solid var(--color-border)',
-                                                backgroundColor: 'white',
-                                                color: 'var(--color-text-main)',
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            <ExternalLink size={16} />
-                                            Standard Email-App
-                                        </button>
                                     </div>
-                                </div>
-                            )}
+                                )}
 
-                            {selectedProductForOrder.autoOrder && (
-                                <div style={{
-                                    backgroundColor: 'var(--color-background)',
-                                    padding: 'var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-sm)',
-                                    color: 'var(--color-primary)'
-                                }}>
-                                    <CheckSquare size={20} />
-                                    <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                                        Wird automatisch per EmailJS versendet
-                                    </span>
-                                </div>
-                            )}
-
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsOrderModalOpen(false)}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
+                                {selectedProductForOrder.autoOrder && (
+                                    <div style={{
+                                        backgroundColor: 'var(--color-background)',
+                                        padding: 'var(--spacing-md)',
                                         borderRadius: 'var(--radius-md)',
                                         border: '1px solid var(--color-border)',
-                                        backgroundColor: 'transparent',
-                                        color: 'var(--color-text-main)'
-                                    }}
-                                >
-                                    Abbrechen
-                                </button>
-                                <button
-                                    type="submit"
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: 'none',
-                                        backgroundColor: 'var(--color-primary)',
-                                        color: 'white'
-                                    }}
-                                >
-                                    Bestellung anlegen
-                                </button>
-                            </div>
-                        </form>
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 'var(--spacing-sm)',
+                                        color: 'var(--color-primary)'
+                                    }}>
+                                        <CheckSquare size={20} />
+                                        <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                                            Wird automatisch per EmailJS versendet
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsOrderModalOpen(false)}
+                                        style={{
+                                            padding: 'var(--spacing-sm) var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--color-border)',
+                                            backgroundColor: 'transparent',
+                                            color: 'var(--color-text-main)'
+                                        }}
+                                    >
+                                        Abbrechen
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        style={{
+                                            padding: 'var(--spacing-sm) var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: 'none',
+                                            backgroundColor: 'var(--color-primary)',
+                                            color: 'white'
+                                        }}
+                                    >
+                                        Bestellung anlegen
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+            {
+                notification && (
+                    <Notification
+                        message={notification.message}
+                        type={notification.type}
+                        onClose={() => setNotification(null)}
+                    />
+                )
+            }
+        </div >
     );
 };

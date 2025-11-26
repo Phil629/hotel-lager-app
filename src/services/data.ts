@@ -15,7 +15,8 @@ const toSupabaseProduct = (p: Product) => ({
     email_order_address: p.emailOrderAddress,
     email_order_subject: p.emailOrderSubject,
     email_order_body: p.emailOrderBody,
-    order_url: p.orderUrl
+    order_url: p.orderUrl,
+    supplier_phone: p.supplierPhone
 });
 
 // Helper to map DB Model (snake_case) -> App Model (camelCase)
@@ -31,17 +32,35 @@ const fromSupabaseProduct = (p: any): Product => ({
     emailOrderAddress: p.email_order_address,
     emailOrderSubject: p.email_order_subject,
     emailOrderBody: p.email_order_body,
-    orderUrl: p.order_url
+    orderUrl: p.order_url,
+    supplierPhone: p.supplier_phone
 });
 
-const toSupabaseOrder = (o: Order) => ({
-    id: o.id,
-    product_name: o.productName,
-    quantity: o.quantity,
-    status: o.status,
-    date: o.date,
-    product_image: o.productImage
-});
+const toSupabaseOrder = (o: Order) => {
+    const base: any = {
+        id: o.id,
+        product_name: o.productName,
+        quantity: o.quantity,
+        status: o.status,
+        date: o.date
+    };
+
+    // Only add optional fields if they exist
+    if (o.productImage) base.product_image = o.productImage;
+    if (o.hasDefect !== undefined) base.has_defect = o.hasDefect;
+    if (o.defectNotes) base.defect_notes = o.defectNotes;
+    if (o.defectReportedAt) base.defect_reported_at = o.defectReportedAt;
+    if (o.defectResolved !== undefined) base.defect_resolved = o.defectResolved;
+    if (o.expectedDeliveryDate) base.expected_delivery_date = o.expectedDeliveryDate;
+    if (o.supplierName) base.supplier_name = o.supplierName;
+    if (o.orderNumber) base.order_number = o.orderNumber;
+    if (o.price) base.price = o.price;
+    if (o.supplierEmail) base.supplier_email = o.supplierEmail;
+    if (o.supplierPhone) base.supplier_phone = o.supplierPhone;
+    if (o.receivedAt) base.received_at = o.receivedAt;
+
+    return base;
+};
 
 const fromSupabaseOrder = (o: any): Order => ({
     id: o.id,
@@ -49,7 +68,18 @@ const fromSupabaseOrder = (o: any): Order => ({
     quantity: o.quantity,
     status: o.status,
     date: o.date,
-    productImage: o.product_image
+    productImage: o.product_image,
+    hasDefect: o.has_defect,
+    defectNotes: o.defect_notes,
+    defectReportedAt: o.defect_reported_at,
+    defectResolved: o.defect_resolved,
+    expectedDeliveryDate: o.expected_delivery_date,
+    supplierName: o.supplier_name,
+    orderNumber: o.order_number,
+    price: o.price,
+    supplierEmail: o.supplier_email,
+    supplierPhone: o.supplier_phone,
+    receivedAt: o.received_at
 });
 
 export const DataService = {
@@ -78,9 +108,6 @@ export const DataService = {
         const supabase = getSupabaseClient();
         if (supabase) {
             const dbProduct = toSupabaseProduct(product);
-            // Remove ID if it's a new product to let DB handle it, 
-            // BUT we want to support client-generated IDs for migration/offline-first feel.
-            // So we just upsert everything.
             const { error } = await supabase.from('products').upsert(dbProduct);
             if (error) throw error;
         } else {
