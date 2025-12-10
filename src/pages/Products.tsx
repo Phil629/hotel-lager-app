@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
-import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone, MessageSquare } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone, MessageSquare, Search } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 
@@ -40,6 +40,7 @@ export const Products: React.FC = () => {
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -272,8 +273,8 @@ export const Products: React.FC = () => {
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
-                <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0 }}>Produkte / Lagerbestand</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0 }}>Produkte</h2>
                 <button
                     onClick={() => setIsModalOpen(true)}
                     style={{
@@ -293,278 +294,298 @@ export const Products: React.FC = () => {
                 </button>
             </div>
 
-            {isMobile ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                    {products.map(product => (
-                        <div key={product.id} style={{
-                            backgroundColor: 'var(--color-surface)',
-                            borderRadius: 'var(--radius-md)',
-                            padding: 'var(--spacing-md)',
-                            boxShadow: 'var(--shadow-sm)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 'var(--spacing-sm)'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
-                                    {product.image && (
-                                        <img
-                                            src={product.image}
-                                            alt={product.name}
-                                            style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
-                                        />
-                                    )}
-                                    <div>
-                                        <div style={{ fontWeight: 600, fontSize: 'var(--font-size-lg)' }}>{product.name}</div>
-                                        <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>{product.category}</div>
-                                    </div>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <div style={{
-                                        fontSize: 'var(--font-size-xl)',
-                                        fontWeight: 700,
-                                        color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'inherit'
-                                    }}>
-                                        {product.stock}
-                                    </div>
-                                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{product.unit}</div>
-                                </div>
-                            </div>
+            <div style={{ position: 'relative', marginBottom: 'var(--spacing-lg)' }}>
+                <Search size={20} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                <input
+                    type="text"
+                    placeholder="Produkte suchen..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    style={{
+                        width: '100%',
+                        padding: '10px 10px 10px 40px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--color-border)',
+                        fontSize: 'var(--font-size-md)',
+                        backgroundColor: 'var(--color-surface)'
+                    }}
+                />
+            </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--spacing-xs)', paddingTop: 'var(--spacing-sm)', borderTop: '1px solid var(--color-border)' }}>
-                                <div style={{ display: 'flex', gap: 'var(--spacing-xs)' }}>
-                                    {product.orderUrl && (
-                                        <a href={product.orderUrl} target="_blank" rel="noopener noreferrer"
-                                            style={{ padding: '6px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-background)', color: 'var(--color-primary)' }}>
-                                            <ExternalLink size={18} />
-                                        </a>
-                                    )}
-                                    {product.emailOrderAddress && (
-                                        <div style={{ padding: '6px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-muted)' }}>
-                                            <Mail size={18} />
+            {
+                isMobile ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                        {products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).map(product => (
+                            <div key={product.id} style={{
+                                backgroundColor: 'var(--color-surface)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: 'var(--spacing-md)',
+                                boxShadow: 'var(--shadow-sm)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 'var(--spacing-sm)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+                                        {product.image && (
+                                            <img
+                                                src={product.image}
+                                                alt={product.name}
+                                                style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
+                                            />
+                                        )}
+                                        <div>
+                                            <div style={{ fontWeight: 600, fontSize: 'var(--font-size-lg)' }}>{product.name}</div>
+                                            <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>{product.category}</div>
                                         </div>
-                                    )}
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{
+                                            fontSize: 'var(--font-size-xl)',
+                                            fontWeight: 700,
+                                            color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'inherit'
+                                        }}>
+                                            {product.stock}
+                                        </div>
+                                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{product.unit}</div>
+                                    </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                                    <button onClick={() => {
-                                        const links = getIoTLink(product);
-                                        if (links) setShowIoTLink(links);
-                                        else setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
-                                    }} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer' }}>
-                                        <Wifi size={18} />
-                                    </button>
-                                    <button onClick={() => handleEdit(product)} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer' }}>
-                                        <Edit2 size={18} />
-                                    </button>
-                                    <button onClick={() => handleDeleteClick(product.id)} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', color: 'var(--color-danger)', cursor: 'pointer' }}>
-                                        <Trash2 size={18} />
-                                    </button>
-                                    <button onClick={() => handleOrderClick(product)} style={{
-                                        padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                                    }}>
-                                        <ShoppingCart size={18} /> Bestellen
-                                    </button>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--spacing-xs)', paddingTop: 'var(--spacing-sm)', borderTop: '1px solid var(--color-border)' }}>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-xs)' }}>
+                                        {product.orderUrl && (
+                                            <a href={product.orderUrl} target="_blank" rel="noopener noreferrer"
+                                                style={{ padding: '6px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-background)', color: 'var(--color-primary)' }}>
+                                                <ExternalLink size={18} />
+                                            </a>
+                                        )}
+                                        {product.emailOrderAddress && (
+                                            <div style={{ padding: '6px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-muted)' }}>
+                                                <Mail size={18} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                                        <button onClick={() => {
+                                            const links = getIoTLink(product);
+                                            if (links) setShowIoTLink(links);
+                                            else setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
+                                        }} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer' }}>
+                                            <Wifi size={18} />
+                                        </button>
+                                        <button onClick={() => handleEdit(product)} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer' }}>
+                                            <Edit2 size={18} />
+                                        </button>
+                                        <button onClick={() => handleDeleteClick(product.id)} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', color: 'var(--color-danger)', cursor: 'pointer' }}>
+                                            <Trash2 size={18} />
+                                        </button>
+                                        <button onClick={() => handleOrderClick(product)} style={{
+                                            padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                                        }}>
+                                            <ShoppingCart size={18} /> Bestellen
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <div style={{
-                    backgroundColor: 'var(--color-surface)',
-                    borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-sm)'
-                }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead style={{ backgroundColor: 'var(--color-background)', borderBottom: '1px solid var(--color-border)' }}>
-                            <tr>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bild</th>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Name</th>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Kontakt / Links</th>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'center', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bestellen</th>
-                                <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {products.map((product, index) => {
-                                const isLastRows = index >= products.length - 2 && products.length > 3;
-                                return (
-                                    <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                        <td style={{ padding: 'var(--spacing-md)' }}>
-                                            {product.image && (
-                                                <img
-                                                    src={product.image}
-                                                    alt={product.name}
-                                                    style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
-                                                />
-                                            )}
-                                        </td>
-                                        <td style={{ padding: 'var(--spacing-md)' }}>
-                                            <div style={{ fontWeight: 500, fontSize: 'var(--font-size-lg)' }}>{product.name}</div>
-                                        </td>
-                                        <td style={{ padding: 'var(--spacing-md)' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                {product.orderUrl && (
-                                                    <a href={product.orderUrl} target="_blank" rel="noopener noreferrer"
-                                                        style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', textDecoration: 'none', fontSize: 'var(--font-size-sm)' }}>
-                                                        <ExternalLink size={14} /> Link
-                                                    </a>
-                                                )}
-                                                {product.emailOrderAddress && (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
-                                                        <Mail size={14} /> {product.emailOrderAddress}
-                                                    </div>
-                                                )}
-                                                {product.supplierPhone && (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
-                                                        <Phone size={14} /> {product.supplierPhone}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: 'var(--spacing-md)', textAlign: 'center' }}>
-                                            <button
-                                                onClick={() => handleOrderClick(product)}
-                                                style={{
-                                                    backgroundColor: 'var(--color-primary)',
-                                                    color: 'white',
-                                                    border: 'none',
-                                                    padding: '8px 16px',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    cursor: 'pointer',
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    fontWeight: 500,
-                                                    boxShadow: 'var(--shadow-sm)'
-                                                }}
-                                            >
-                                                <ShoppingCart size={18} />
-                                                Bestellen
-                                            </button>
-                                        </td>
-                                        <td style={{ padding: 'var(--spacing-md)', textAlign: 'right', position: 'relative' }}>
-                                            <button
-                                                onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: 'var(--color-text-muted)',
-                                                    padding: '8px',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center'
-                                                }}
-                                            >
-                                                <Settings size={20} />
-                                            </button>
-
-                                            {openSettingsId === product.id && (
-                                                <>
-                                                    <div
-                                                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
-                                                        onClick={() => setOpenSettingsId(null)}
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{
+                        backgroundColor: 'var(--color-surface)',
+                        borderRadius: 'var(--radius-lg)',
+                        boxShadow: 'var(--shadow-sm)'
+                    }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead style={{ backgroundColor: 'var(--color-background)', borderBottom: '1px solid var(--color-border)' }}>
+                                <tr>
+                                    <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bild</th>
+                                    <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Name</th>
+                                    <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Kontakt / Links</th>
+                                    <th style={{ padding: 'var(--spacing-md)', textAlign: 'center', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bestellen</th>
+                                    <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).map((product, index) => {
+                                    const isLastRows = index >= products.length - 2 && products.length > 3;
+                                    return (
+                                        <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                            <td style={{ padding: 'var(--spacing-md)' }}>
+                                                {product.image && (
+                                                    <img
+                                                        src={product.image}
+                                                        alt={product.name}
+                                                        style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
                                                     />
-                                                    <div style={{
-                                                        position: 'absolute',
-                                                        right: 'var(--spacing-md)',
-                                                        ...(isLastRows
-                                                            ? { bottom: '100%', marginBottom: '4px' }
-                                                            : { top: '100%', marginTop: '4px' }
-                                                        ),
-                                                        backgroundColor: 'var(--color-surface)',
+                                                )}
+                                            </td>
+                                            <td style={{ padding: 'var(--spacing-md)' }}>
+                                                <div style={{ fontWeight: 500, fontSize: 'var(--font-size-lg)' }}>{product.name}</div>
+                                            </td>
+                                            <td style={{ padding: 'var(--spacing-md)' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                    {product.orderUrl && (
+                                                        <a href={product.orderUrl} target="_blank" rel="noopener noreferrer"
+                                                            style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', textDecoration: 'none', fontSize: 'var(--font-size-sm)' }}>
+                                                            <ExternalLink size={14} /> Link
+                                                        </a>
+                                                    )}
+                                                    {product.emailOrderAddress && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                                                            <Mail size={14} /> {product.emailOrderAddress}
+                                                        </div>
+                                                    )}
+                                                    {product.supplierPhone && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                                                            <Phone size={14} /> {product.supplierPhone}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: 'var(--spacing-md)', textAlign: 'center' }}>
+                                                <button
+                                                    onClick={() => handleOrderClick(product)}
+                                                    style={{
+                                                        backgroundColor: 'var(--color-primary)',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        padding: '8px 16px',
                                                         borderRadius: 'var(--radius-md)',
-                                                        boxShadow: 'var(--shadow-lg)',
-                                                        border: '1px solid var(--color-border)',
-                                                        zIndex: 20,
-                                                        minWidth: '160px',
-                                                        overflow: 'hidden'
-                                                    }}>
-                                                        <button
-                                                            onClick={() => {
-                                                                handleEdit(product);
-                                                                setOpenSettingsId(null);
-                                                            }}
-                                                            style={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '8px',
-                                                                width: '100%',
-                                                                padding: '10px 16px',
-                                                                border: 'none',
-                                                                background: 'none',
-                                                                textAlign: 'left',
-                                                                cursor: 'pointer',
-                                                                color: 'var(--color-text-main)',
-                                                                fontSize: 'var(--font-size-sm)'
-                                                            }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
-                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                        >
-                                                            <Edit2 size={16} /> Bearbeiten
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                const links = getIoTLink(product);
-                                                                if (links) setShowIoTLink(links);
-                                                                else setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
-                                                                setOpenSettingsId(null);
-                                                            }}
-                                                            style={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '8px',
-                                                                width: '100%',
-                                                                padding: '10px 16px',
-                                                                border: 'none',
-                                                                background: 'none',
-                                                                textAlign: 'left',
-                                                                cursor: 'pointer',
-                                                                color: 'var(--color-text-main)',
-                                                                fontSize: 'var(--font-size-sm)'
-                                                            }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
-                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                        >
-                                                            <Wifi size={16} /> IoT Link
-                                                        </button>
-                                                        <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
-                                                        <button
-                                                            onClick={() => {
-                                                                handleDeleteClick(product.id);
-                                                                setOpenSettingsId(null);
-                                                            }}
-                                                            style={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '8px',
-                                                                width: '100%',
-                                                                padding: '10px 16px',
-                                                                border: 'none',
-                                                                background: 'none',
-                                                                textAlign: 'left',
-                                                                cursor: 'pointer',
-                                                                color: 'var(--color-danger)',
-                                                                fontSize: 'var(--font-size-sm)'
-                                                            }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
-                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                        >
-                                                            <Trash2 size={16} /> Löschen
-                                                        </button>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            )
+                                                        cursor: 'pointer',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        fontWeight: 500,
+                                                        boxShadow: 'var(--shadow-sm)'
+                                                    }}
+                                                >
+                                                    <ShoppingCart size={18} />
+                                                    Bestellen
+                                                </button>
+                                            </td>
+                                            <td style={{ padding: 'var(--spacing-md)', textAlign: 'right', position: 'relative' }}>
+                                                <button
+                                                    onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: 'var(--color-text-muted)',
+                                                        padding: '8px',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center'
+                                                    }}
+                                                >
+                                                    <Settings size={20} />
+                                                </button>
+
+                                                {openSettingsId === product.id && (
+                                                    <>
+                                                        <div
+                                                            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
+                                                            onClick={() => setOpenSettingsId(null)}
+                                                        />
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            right: 'var(--spacing-md)',
+                                                            ...(isLastRows
+                                                                ? { bottom: '100%', marginBottom: '4px' }
+                                                                : { top: '100%', marginTop: '4px' }
+                                                            ),
+                                                            backgroundColor: 'var(--color-surface)',
+                                                            borderRadius: 'var(--radius-md)',
+                                                            boxShadow: 'var(--shadow-lg)',
+                                                            border: '1px solid var(--color-border)',
+                                                            zIndex: 20,
+                                                            minWidth: '160px',
+                                                            overflow: 'hidden'
+                                                        }}>
+                                                            <button
+                                                                onClick={() => {
+                                                                    handleEdit(product);
+                                                                    setOpenSettingsId(null);
+                                                                }}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '8px',
+                                                                    width: '100%',
+                                                                    padding: '10px 16px',
+                                                                    border: 'none',
+                                                                    background: 'none',
+                                                                    textAlign: 'left',
+                                                                    cursor: 'pointer',
+                                                                    color: 'var(--color-text-main)',
+                                                                    fontSize: 'var(--font-size-sm)'
+                                                                }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                <Edit2 size={16} /> Bearbeiten
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const links = getIoTLink(product);
+                                                                    if (links) setShowIoTLink(links);
+                                                                    else setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
+                                                                    setOpenSettingsId(null);
+                                                                }}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '8px',
+                                                                    width: '100%',
+                                                                    padding: '10px 16px',
+                                                                    border: 'none',
+                                                                    background: 'none',
+                                                                    textAlign: 'left',
+                                                                    cursor: 'pointer',
+                                                                    color: 'var(--color-text-main)',
+                                                                    fontSize: 'var(--font-size-sm)'
+                                                                }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                <Wifi size={16} /> IoT Link
+                                                            </button>
+                                                            <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+                                                            <button
+                                                                onClick={() => {
+                                                                    handleDeleteClick(product.id);
+                                                                    setOpenSettingsId(null);
+                                                                }}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '8px',
+                                                                    width: '100%',
+                                                                    padding: '10px 16px',
+                                                                    border: 'none',
+                                                                    background: 'none',
+                                                                    textAlign: 'left',
+                                                                    cursor: 'pointer',
+                                                                    color: 'var(--color-danger)',
+                                                                    fontSize: 'var(--font-size-sm)'
+                                                                }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                <Trash2 size={16} /> Löschen
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )
+                                                }
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table >
+                    </div >
+                )
             }
 
             {/* IoT Link Modal */}
