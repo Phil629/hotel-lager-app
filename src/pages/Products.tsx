@@ -804,6 +804,83 @@ export const Products: React.FC = () => {
                                     />
                                 </div>
 
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Kategorie</label>
+                                        {isCustomCategoryMode ? (
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <input
+                                                    value={newProduct.category}
+                                                    onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+                                                    placeholder="Neue Kategorie..."
+                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsCustomCategoryMode(false)}
+                                                    style={{ padding: '8px', background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <select
+                                                value={newProduct.category}
+                                                onChange={e => {
+                                                    if (e.target.value === 'custom') setIsCustomCategoryMode(true);
+                                                    else setNewProduct({ ...newProduct, category: e.target.value });
+                                                }}
+                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                            >
+                                                <option value="">-- Wählen --</option>
+                                                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                <option value="custom">+ Eigene Kategorie</option>
+                                            </select>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Einheit</label>
+                                        <input
+                                            value={newProduct.unit}
+                                            onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })}
+                                            placeholder="Stück, kg, Liter..."
+                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Aktueller Bestand</label>
+                                        <input
+                                            type="number"
+                                            value={newProduct.stock}
+                                            onChange={e => setNewProduct({ ...newProduct, stock: parseInt(e.target.value) || 0 })}
+                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mindestbestand</label>
+                                        <input
+                                            type="number"
+                                            value={newProduct.minStock}
+                                            onChange={e => setNewProduct({ ...newProduct, minStock: parseInt(e.target.value) || 0 })}
+                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Preis (Netto €)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={newProduct.price || ''}
+                                            onChange={e => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) || 0 })}
+                                            placeholder="0.00"
+                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                        />
+                                    </div>
+                                </div>
+
 
 
                                 <div>
