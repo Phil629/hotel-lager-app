@@ -114,43 +114,44 @@ export const Suppliers: React.FC = () => {
                 />
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
                 <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0 }}>Lieferanten</h2>
-                <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
-                    <div style={{ position: 'relative' }}>
-                        <Search size={20} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-                        <input
-                            type="text"
-                            placeholder="Suchen..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{
-                                padding: '10px 10px 10px 40px',
-                                borderRadius: 'var(--radius-md)',
-                                border: '1px solid var(--color-border)',
-                                width: '250px'
-                            }}
-                        />
-                    </div>
-                    <button
-                        onClick={() => handleOpenModal()}
-                        style={{
-                            backgroundColor: 'var(--color-primary)',
-                            color: 'white',
-                            border: 'none',
-                            padding: '10px 20px',
-                            borderRadius: 'var(--radius-md)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            fontWeight: 500,
-                            boxShadow: 'var(--shadow-md)'
-                        }}
-                    >
-                        <Plus size={20} /> Neuer Lieferant
-                    </button>
-                </div>
+                <button
+                    onClick={() => handleOpenModal()}
+                    style={{
+                        backgroundColor: 'var(--color-primary)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px 20px',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontWeight: 500,
+                        boxShadow: 'var(--shadow-md)'
+                    }}
+                >
+                    <Plus size={20} /> Neuer Lieferant
+                </button>
+            </div>
+
+            <div style={{ position: 'relative', marginBottom: 'var(--spacing-lg)' }}>
+                <Search size={20} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                <input
+                    type="text"
+                    placeholder="Lieferanten suchen..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{
+                        width: '100%',
+                        padding: '10px 10px 10px 40px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--color-border)',
+                        fontSize: 'var(--font-size-md)',
+                        backgroundColor: 'var(--color-surface)'
+                    }}
+                />
             </div>
 
             <div style={{ display: 'grid', gap: 'var(--spacing-md)' }}>
