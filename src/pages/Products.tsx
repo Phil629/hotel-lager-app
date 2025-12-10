@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
-import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone, MessageSquare, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone, MessageSquare, Search, AlertTriangle, Euro } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 
@@ -18,6 +18,8 @@ export const Products: React.FC = () => {
         unit: '',
         stock: 0,
         minStock: 0,
+        minStock: 0,
+        price: 0,
         autoOrder: false,
         notes: '',
         preferredOrderMethod: 'email'
@@ -41,6 +43,7 @@ export const Products: React.FC = () => {
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [showLowStockOnly, setShowLowStockOnly] = useState(false);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -95,6 +98,7 @@ export const Products: React.FC = () => {
             category: newProduct.category,
             stock: Number(newProduct.stock) || 0,
             minStock: Number(newProduct.minStock) || 0,
+            price: Number(newProduct.price) || 0,
             unit: newProduct.unit || 'Stück',
             orderUrl: newProduct.orderUrl,
             image: newProduct.image,
@@ -213,7 +217,7 @@ export const Products: React.FC = () => {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, autoOrder: false, notes: '', preferredOrderMethod: 'email' });
+        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, price: 0, autoOrder: false, notes: '', preferredOrderMethod: 'email' });
         setEditingId(null);
         // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
@@ -271,6 +275,15 @@ export const Products: React.FC = () => {
         }
     };
 
+    const filteredProducts = products.filter(p => {
+        const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesLowStock = showLowStockOnly ? p.stock <= (p.minStock || 0) : true;
+        return matchesSearch && matchesLowStock;
+    });
+
+    const totalValue = products.reduce((sum, p) => sum + (p.stock * (p.price || 0)), 0);
+    const lowStockCount = products.filter(p => p.stock <= (p.minStock || 0)).length;
+
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
@@ -294,28 +307,84 @@ export const Products: React.FC = () => {
                 </button>
             </div>
 
-            <div style={{ position: 'relative', marginBottom: 'var(--spacing-lg)' }}>
-                <Search size={20} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-                <input
-                    type="text"
-                    placeholder="Produkte suchen..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
+            {/* Dashboard Cards */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: 'var(--spacing-md)',
+                marginBottom: 'var(--spacing-xl)'
+            }}>
+                <div style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: '4px' }}>Produkte Gesamt</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700 }}>{products.length}</div>
+                </div>
+                <div
+                    onClick={() => setShowLowStockOnly(!showLowStockOnly)}
                     style={{
-                        width: '100%',
-                        padding: '10px 10px 10px 40px',
+                        backgroundColor: lowStockCount > 0 ? '#FEF2F2' : 'var(--color-surface)',
+                        padding: 'var(--spacing-md)',
                         borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--color-border)',
-                        fontSize: 'var(--font-size-md)',
-                        backgroundColor: 'var(--color-surface)'
+                        border: lowStockCount > 0 ? '1px solid #FECACA' : '1px solid var(--color-border)',
+                        boxShadow: 'var(--shadow-sm)',
+                        cursor: 'pointer'
                     }}
-                />
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: lowStockCount > 0 ? '#DC2626' : 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: '4px' }}>
+                        <AlertTriangle size={16} /> Niedriger Bestand
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: lowStockCount > 0 ? '#DC2626' : 'inherit' }}>{lowStockCount}</div>
+                </div>
+                <div style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: '4px' }}>
+                        <Euro size={16} /> Lagerwert (Netto)
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 700 }}>{totalValue.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-lg)' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                    <Search size={20} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                    <input
+                        type="text"
+                        placeholder="Produkte suchen..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        style={{
+                            width: '100%',
+                            padding: '10px 10px 10px 40px',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--color-border)',
+                            fontSize: 'var(--font-size-md)',
+                            backgroundColor: 'var(--color-surface)'
+                        }}
+                    />
+                </div>
+                <button
+                    onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+                    style={{
+                        padding: '0 20px',
+                        borderRadius: 'var(--radius-md)',
+                        border: showLowStockOnly ? '1px solid #DC2626' : '1px solid var(--color-border)',
+                        backgroundColor: showLowStockOnly ? '#FEF2F2' : 'var(--color-surface)',
+                        color: showLowStockOnly ? '#DC2626' : 'var(--color-text-main)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    <AlertTriangle size={18} />
+                    {showLowStockOnly ? 'Alle anzeigen' : '⚠️ Kritischer Bestand'}
+                </button>
             </div>
 
             {
                 isMobile ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).map(product => (
+                        {filteredProducts.map(product => (
                             <div key={product.id} style={{
                                 backgroundColor: 'var(--color-surface)',
                                 borderRadius: 'var(--radius-md)',
@@ -348,6 +417,11 @@ export const Products: React.FC = () => {
                                             {product.stock}
                                         </div>
                                         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{product.unit}</div>
+                                        {product.price && (
+                                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                                                Ø {(product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -400,14 +474,15 @@ export const Products: React.FC = () => {
                                 <tr>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bild</th>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Name</th>
+                                    <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bestand & Wert</th>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Kontakt / Links</th>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'center', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bestellen</th>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).map((product, index) => {
-                                    const isLastRows = index >= products.length - 2 && products.length > 3;
+                                {filteredProducts.map((product, index) => {
+                                    const isLastRows = index >= filteredProducts.length - 2 && filteredProducts.length > 3;
                                     return (
                                         <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                                             <td style={{ padding: 'var(--spacing-md)' }}>
@@ -421,6 +496,23 @@ export const Products: React.FC = () => {
                                             </td>
                                             <td style={{ padding: 'var(--spacing-md)' }}>
                                                 <div style={{ fontWeight: 500, fontSize: 'var(--font-size-lg)' }}>{product.name}</div>
+                                                <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                                                    {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: 'var(--spacing-md)', textAlign: 'right' }}>
+                                                <div style={{
+                                                    fontSize: 'var(--font-size-lg)',
+                                                    fontWeight: 700,
+                                                    color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'inherit'
+                                                }}>
+                                                    {product.stock} {product.unit}
+                                                </div>
+                                                {product.price && (
+                                                    <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                                                        = {(product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td style={{ padding: 'var(--spacing-md)' }}>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

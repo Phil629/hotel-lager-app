@@ -16,6 +16,7 @@ export interface Product {
   category?: string;
   stock: number;
   minStock?: number;
+  price?: number; // Net price
   unit: string;
   orderUrl?: string; // Legacy: Keep for backward compatibility or direct URL orders
   image?: string;
