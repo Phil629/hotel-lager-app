@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink } from 'lucide-react';
+import { CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 import emailjs from '@emailjs/browser';
 
@@ -925,24 +925,7 @@ export const Orders: React.FC = () => {
                                         </div>
 
                                         {/* Contact Info Display */}
-                                        {(selectedProduct.emailOrderAddress || selectedProduct.orderUrl) && (
-                                            <div style={{ marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-sm)', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-sm)' }}>
-                                                {selectedProduct.emailOrderAddress && (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: selectedProduct.orderUrl ? '4px' : '0' }}>
-                                                        <Mail size={14} color="var(--color-text-muted)" />
-                                                        <span>{selectedProduct.emailOrderAddress}</span>
-                                                    </div>
-                                                )}
-                                                {selectedProduct.orderUrl && (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <ExternalLink size={14} color="var(--color-text-muted)" />
-                                                        <a href={selectedProduct.orderUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
-                                                            Zum Shop
-                                                        </a>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
+
 
                                         <div style={{ marginBottom: 'var(--spacing-md)' }}>
                                             <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-sm)' }}>Menge</label>
@@ -977,63 +960,130 @@ export const Orders: React.FC = () => {
                                             />
                                         </div>
 
-                                        {selectedProduct.emailOrderAddress && !selectedProduct.autoOrder && (
+                                        {/* Order Methods Wrapper */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
+                                            {selectedProduct.orderUrl && (
+                                                <div style={{
+                                                    backgroundColor: 'var(--color-background)',
+                                                    padding: 'var(--spacing-md)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--color-border)',
+                                                    order: selectedProduct.preferredOrderMethod === 'link' ? -1 : 0
+                                                }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                        Bestelllink:
+                                                        {selectedProduct.preferredOrderMethod === 'link' && (
+                                                            <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
+                                                        )}
+                                                    </label>
+                                                    <a
+                                                        href={selectedProduct.orderUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: 'var(--spacing-sm)',
+                                                            padding: 'var(--spacing-sm)',
+                                                            borderRadius: 'var(--radius-sm)',
+                                                            border: '1px solid var(--color-border)',
+                                                            backgroundColor: selectedProduct.preferredOrderMethod === 'link' ? 'var(--color-primary)' : 'var(--color-surface)',
+                                                            color: selectedProduct.preferredOrderMethod === 'link' ? 'white' : 'var(--color-text-main)',
+                                                            cursor: 'pointer',
+                                                            fontWeight: 500,
+                                                            textDecoration: 'none'
+                                                        }}
+                                                    >
+                                                        <ExternalLink size={16} />
+                                                        Zur Webseite
+                                                    </a>
+                                                </div>
+                                            )}
+
+                                            {selectedProduct.emailOrderAddress && !selectedProduct.autoOrder && (
+                                                <div style={{
+                                                    backgroundColor: 'var(--color-background)',
+                                                    padding: 'var(--spacing-md)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--color-border)',
+                                                    order: selectedProduct.preferredOrderMethod === 'email' ? -1 : 0
+                                                }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                        Email Vorschau & Bearbeitung:
+                                                        {selectedProduct.preferredOrderMethod === 'email' && (
+                                                            <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
+                                                        )}
+                                                    </label>
+
+                                                    <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                        <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Betreff</label>
+                                                        <input
+                                                            type="text"
+                                                            value={emailSubject}
+                                                            onChange={e => setEmailSubject(e.target.value)}
+                                                            style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                        />
+                                                    </div>
+
+                                                    <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                        <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Nachricht</label>
+                                                        <textarea
+                                                            value={emailBody}
+                                                            onChange={e => setEmailBody(e.target.value)}
+                                                            rows={5}
+                                                            style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                        />
+                                                    </div>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const encodedSubject = encodeURIComponent(emailSubject);
+                                                            const encodedBody = encodeURIComponent(emailBody);
+                                                            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedProduct.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
+                                                        }}
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: 'var(--spacing-sm)',
+                                                            padding: 'var(--spacing-sm)',
+                                                            borderRadius: 'var(--radius-sm)',
+                                                            border: '1px solid var(--color-border)',
+                                                            backgroundColor: '#EA4335',
+                                                            color: 'white',
+                                                            cursor: 'pointer',
+                                                            fontWeight: 500,
+                                                            width: '100%'
+                                                        }}
+                                                    >
+                                                        <Mail size={16} />
+                                                        In Gmail öffnen
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {selectedProduct.autoOrder && (
                                             <div style={{
                                                 backgroundColor: 'var(--color-background)',
                                                 padding: 'var(--spacing-md)',
                                                 borderRadius: 'var(--radius-md)',
                                                 border: '1px solid var(--color-border)',
-                                                marginBottom: 'var(--spacing-md)'
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 'var(--spacing-sm)',
+                                                color: 'var(--color-primary)',
+                                                marginTop: 'var(--spacing-md)'
                                             }}>
-                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Email Vorschau & Bearbeitung:</label>
-
-                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
-                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Betreff</label>
-                                                    <input
-                                                        type="text"
-                                                        value={emailSubject}
-                                                        onChange={e => setEmailSubject(e.target.value)}
-                                                        style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                    />
-                                                </div>
-
-                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
-                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Nachricht</label>
-                                                    <textarea
-                                                        value={emailBody}
-                                                        onChange={e => setEmailBody(e.target.value)}
-                                                        rows={5}
-                                                        style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                                    />
-                                                </div>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const encodedSubject = encodeURIComponent(emailSubject);
-                                                        const encodedBody = encodeURIComponent(emailBody);
-                                                        window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedProduct.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
-                                                    }}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        gap: 'var(--spacing-sm)',
-                                                        padding: 'var(--spacing-sm)',
-                                                        borderRadius: 'var(--radius-sm)',
-                                                        border: '1px solid var(--color-border)',
-                                                        backgroundColor: '#EA4335',
-                                                        color: 'white',
-                                                        cursor: 'pointer',
-                                                        fontWeight: 500,
-                                                        width: '100%'
-                                                    }}
-                                                >
-                                                    <Mail size={16} />
-                                                    In Gmail öffnen
-                                                </button>
+                                                <CheckSquare size={20} />
+                                                <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                                                    Wird automatisch per EmailJS versendet
+                                                </span>
                                             </div>
                                         )}
+
                                         <button
                                             onClick={handleCreateOrder}
                                             style={{
@@ -1044,7 +1094,8 @@ export const Orders: React.FC = () => {
                                                 border: 'none',
                                                 borderRadius: 'var(--radius-md)',
                                                 cursor: 'pointer',
-                                                fontWeight: 500
+                                                fontWeight: 500,
+                                                marginTop: 'var(--spacing-md)'
                                             }}
                                         >
                                             Bestellung aufgeben
