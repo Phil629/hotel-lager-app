@@ -1151,10 +1151,10 @@ export const Products: React.FC = () => {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                     {selectedProductForOrder.orderUrl && (
                                         <div style={{
-                                            backgroundColor: 'var(--color-background)',
+                                            backgroundColor: selectedProductForOrder.preferredOrderMethod === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                             padding: 'var(--spacing-md)',
                                             borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--color-border)',
+                                            border: selectedProductForOrder.preferredOrderMethod === 'link' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                                             order: selectedProductForOrder.preferredOrderMethod === 'link' ? -1 : 0
                                         }}>
                                             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
@@ -1190,10 +1190,10 @@ export const Products: React.FC = () => {
 
                                     {selectedProductForOrder.emailOrderAddress && !selectedProductForOrder.autoOrder && (
                                         <div style={{
-                                            backgroundColor: 'var(--color-background)',
+                                            backgroundColor: selectedProductForOrder.preferredOrderMethod === 'email' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                             padding: 'var(--spacing-md)',
                                             borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--color-border)',
+                                            border: selectedProductForOrder.preferredOrderMethod === 'email' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                                             order: selectedProductForOrder.preferredOrderMethod === 'email' ? -1 : 0
                                         }}>
                                             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
