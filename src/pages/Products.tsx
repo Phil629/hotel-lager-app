@@ -80,7 +80,7 @@ export const Products: React.FC = () => {
         setNewProduct(product);
         setEditingId(product.id);
         // setIsEmailSectionOpen(!!product.emailOrderAddress); // Removed
-        setIsCustomCategoryMode(!CATEGORIES.includes(product.category));
+        setIsCustomCategoryMode(!CATEGORIES.includes(product.category || ''));
         setIsModalOpen(true);
     };
 
