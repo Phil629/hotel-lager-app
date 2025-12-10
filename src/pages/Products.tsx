@@ -18,7 +18,6 @@ export const Products: React.FC = () => {
         unit: '',
         stock: 0,
         minStock: 0,
-        minStock: 0,
         price: 0,
         autoOrder: false,
         notes: '',
