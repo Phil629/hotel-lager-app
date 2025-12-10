@@ -4,6 +4,8 @@ export interface Supplier {
   contactName?: string;
   email: string;
   phone?: string;
+  url?: string;
+  notes?: string;
   emailSubjectTemplate?: string;
   emailBodyTemplate?: string;
 }
@@ -11,7 +13,7 @@ export interface Supplier {
 export interface Product {
   id: string;
   name: string;
-  category: string;
+  category?: string;
   stock: number;
   minStock?: number;
   unit: string;

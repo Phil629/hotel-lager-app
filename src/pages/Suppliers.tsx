@@ -17,7 +17,6 @@ export const Suppliers: React.FC = () => {
         contactName: '',
         email: '',
         phone: '',
-        phone: '',
         url: '',
         notes: ''
     });
@@ -49,7 +48,6 @@ export const Suppliers: React.FC = () => {
                 contactName: '',
                 email: '',
                 phone: '',
-                phone: '',
                 url: '',
                 notes: ''
             });
@@ -70,7 +68,6 @@ export const Suppliers: React.FC = () => {
                 name: formData.name,
                 contactName: formData.contactName,
                 email: formData.email,
-                phone: formData.phone,
                 phone: formData.phone,
                 url: formData.url,
                 notes: formData.notes
