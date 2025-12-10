@@ -1,9 +1,10 @@
-import type { Product, Order, EmailSettings } from '../types';
+import type { Product, Order, EmailSettings, Supplier } from '../types';
 
 const STORAGE_KEYS = {
     PRODUCTS: 'hotel_inventory_products',
     ORDERS: 'hotel_inventory_orders',
     SETTINGS: 'hotel_inventory_settings',
+    SUPPLIERS: 'hotel_inventory_suppliers',
 };
 
 const INITIAL_PRODUCTS: Product[] = [
@@ -92,5 +93,17 @@ export const StorageService = {
 
     saveSettings: (settings: EmailSettings) => {
         localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    },
+
+    getSuppliers: (): Supplier[] => {
+        const stored = localStorage.getItem(STORAGE_KEYS.SUPPLIERS);
+        if (!stored) {
+            return [];
+        }
+        return JSON.parse(stored);
+    },
+
+    saveSuppliers: (suppliers: Supplier[]) => {
+        localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
     }
 };

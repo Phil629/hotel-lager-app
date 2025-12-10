@@ -54,12 +54,24 @@ export const Settings: React.FC = () => {
 
         try {
             // 1. Get local data
+            const localSuppliers = StorageService.getSuppliers();
             const localProducts = StorageService.getProducts();
             const localOrders = StorageService.getOrders();
 
-            console.log(`Migrating ${localProducts.length} products and ${localOrders.length} orders...`);
+            console.log(`Migrating ${localSuppliers.length} suppliers, ${localProducts.length} products and ${localOrders.length} orders...`);
 
-            // 2. Upload Products
+            // 2. Upload Suppliers (First, because Products depend on them)
+            const suppliersToUpload = localSuppliers.map(s => {
+                const dbSupplier = DataService.toSupabaseSupplier(s);
+                return dbSupplier;
+            });
+
+            if (suppliersToUpload.length > 0) {
+                const { error: sError } = await supabase.from('suppliers').upsert(suppliersToUpload);
+                if (sError) throw sError;
+            }
+
+            // 3. Upload Products
             const productsToUpload = localProducts.map(p => {
                 // Map to DB format
                 const dbProduct = DataService.toSupabaseProduct(p);
@@ -77,7 +89,7 @@ export const Settings: React.FC = () => {
                 if (pError) throw pError;
             }
 
-            // 3. Upload Orders
+            // 4. Upload Orders
             const ordersToUpload = localOrders.map(o => {
                 const dbOrder = DataService.toSupabaseOrder(o);
                 if (dbOrder.id.length < 10) {

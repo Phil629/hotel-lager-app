@@ -1,3 +1,13 @@
+export interface Supplier {
+  id: string;
+  name: string;
+  contactName?: string;
+  email: string;
+  phone?: string;
+  emailSubjectTemplate?: string;
+  emailBodyTemplate?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -5,12 +15,17 @@ export interface Product {
   stock: number;
   minStock?: number;
   unit: string;
-  orderUrl?: string;
+  orderUrl?: string; // Legacy: Keep for backward compatibility or direct URL orders
   image?: string;
+  supplierId?: string; // Link to Supplier
+  autoOrder?: boolean;
+  notes?: string;
+  preferredOrderMethod?: 'email' | 'link';
+
+  // Legacy fields (will be deprecated in favor of Supplier relation, but kept for now)
   emailOrderAddress?: string;
   emailOrderSubject?: string;
   emailOrderBody?: string;
-  autoOrder?: boolean;
   supplierPhone?: string;
 }
 
@@ -32,6 +47,7 @@ export interface Order {
   supplierEmail?: string; // Cached from product for easy access
   supplierPhone?: string; // Cached from product for easy access
   receivedAt?: string; // ISO string, timestamp when order was marked as received
+  notes?: string; // New: Notes for the order
 }
 
 export interface EmailSettings {

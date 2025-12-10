@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import type { Product, Order } from '../types';
+import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
-import { Plus, Edit2, Trash2, ShoppingCart, X, ChevronDown, ChevronUp, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone, MessageSquare } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 
@@ -10,23 +10,31 @@ const CATEGORIES = ['Lebensmittel', 'Getränke', 'Reinigung', 'Büro', 'Sonstige
 
 export const Products: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newProduct, setNewProduct] = useState<Partial<Product>>({
-        category: 'Lebensmittel',
-        unit: 'Stück',
+        category: '',
+        unit: '',
         stock: 0,
         minStock: 0,
-        autoOrder: false
+        autoOrder: false,
+        notes: '',
+        preferredOrderMethod: 'email'
     });
-    const [isEmailSectionOpen, setIsEmailSectionOpen] = useState(false);
+    // isEmailSectionOpen removed as requested
     const [showIoTLink, setShowIoTLink] = useState<{ curl: string, powershell: string } | null>(null);
     const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
+    const [isInventoryDetailsOpen, setIsInventoryDetailsOpen] = useState(false);
+    const [isEmailTemplateOpen, setIsEmailTemplateOpen] = useState(false);
 
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
     const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
     const [orderQuantity, setOrderQuantity] = useState(1);
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+    const [orderNotes, setOrderNotes] = useState('');
+    const [emailSubject, setEmailSubject] = useState('');
+    const [emailBody, setEmailBody] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -41,11 +49,17 @@ export const Products: React.FC = () => {
 
     useEffect(() => {
         loadProducts();
+        loadSuppliers();
     }, []);
 
     const loadProducts = async () => {
         const data = await DataService.getProducts();
         setProducts(data);
+    };
+
+    const loadSuppliers = async () => {
+        const data = await DataService.getSuppliers();
+        setSuppliers(data);
     };
 
     const handleDeleteClick = (id: string) => {
@@ -65,14 +79,14 @@ export const Products: React.FC = () => {
     const handleEdit = (product: Product) => {
         setNewProduct(product);
         setEditingId(product.id);
-        setIsEmailSectionOpen(!!product.emailOrderAddress);
+        // setIsEmailSectionOpen(!!product.emailOrderAddress); // Removed
         setIsCustomCategoryMode(!CATEGORIES.includes(product.category));
         setIsModalOpen(true);
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newProduct.name || !newProduct.category) return;
+        if (!newProduct.name) return;
 
         const productData: Product = {
             id: editingId || crypto.randomUUID(),
@@ -83,11 +97,14 @@ export const Products: React.FC = () => {
             unit: newProduct.unit || 'Stück',
             orderUrl: newProduct.orderUrl,
             image: newProduct.image,
+            supplierId: newProduct.supplierId,
             emailOrderAddress: newProduct.emailOrderAddress,
             emailOrderSubject: newProduct.emailOrderSubject,
             emailOrderBody: newProduct.emailOrderBody,
             autoOrder: newProduct.autoOrder,
-            supplierPhone: newProduct.supplierPhone
+            supplierPhone: newProduct.supplierPhone,
+            notes: newProduct.notes,
+            preferredOrderMethod: newProduct.preferredOrderMethod
         };
 
         setIsLoading(true);
@@ -104,6 +121,32 @@ export const Products: React.FC = () => {
         setSelectedProductForOrder(product);
         setOrderQuantity(1);
         setOrderDate(new Date().toISOString().split('T')[0]);
+        setOrderNotes('');
+
+        // Pre-fill email template
+        const supplier = suppliers.find(s => s.id === product.supplierId);
+        let subject = '';
+        let body = '';
+
+        if (supplier) {
+            subject = supplier.emailSubjectTemplate || `Bestellung: ${product.name}`;
+            body = supplier.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nHotel Rezeption`;
+        } else {
+            subject = product.emailOrderSubject || `Bestellung: ${product.name}`;
+            body = product.emailOrderBody || `Guten Tag,\n\nbitte liefern Sie folgende Ware:\n\nProdukt: {product_name}\nMenge: {quantity} {unit}\n\nMit freundlichen Grüßen`;
+        }
+
+        // Initial replacement for display (quantity is 1 initially)
+        subject = subject.replace(/{product_name}/g, product.name)
+            .replace(/{quantity}/g, '1')
+            .replace(/{unit}/g, product.unit);
+
+        body = body.replace(/{product_name}/g, product.name)
+            .replace(/{quantity}/g, '1')
+            .replace(/{unit}/g, product.unit);
+
+        setEmailSubject(subject);
+        setEmailBody(body);
         setIsOrderModalOpen(true);
     };
 
@@ -124,8 +167,8 @@ export const Products: React.FC = () => {
 
                 const templateParams = {
                     to_email: selectedProductForOrder.emailOrderAddress,
-                    subject: selectedProductForOrder.emailOrderSubject || `Bestellung: ${selectedProductForOrder.name}`,
-                    message: selectedProductForOrder.emailOrderBody || `Bestellung für ${selectedProductForOrder.name}, Menge: ${orderQuantity} ${selectedProductForOrder.unit}`,
+                    subject: emailSubject,
+                    message: emailBody,
                     product_name: selectedProductForOrder.name,
                     quantity: orderQuantity,
                     unit: selectedProductForOrder.unit
@@ -149,7 +192,8 @@ export const Products: React.FC = () => {
                 status: 'open',
                 productImage: selectedProductForOrder.image,
                 supplierEmail: selectedProductForOrder.emailOrderAddress,
-                supplierPhone: selectedProductForOrder.supplierPhone
+                supplierPhone: selectedProductForOrder.supplierPhone,
+                notes: orderNotes
             };
 
             await DataService.saveOrder(newOrder);
@@ -168,10 +212,12 @@ export const Products: React.FC = () => {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setNewProduct({ category: 'Lebensmittel', unit: 'Stück', stock: 0, minStock: 0, autoOrder: false });
+        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, autoOrder: false, notes: '', preferredOrderMethod: 'email' });
         setEditingId(null);
-        setIsEmailSectionOpen(false);
+        // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
+        setIsInventoryDetailsOpen(false);
+        setIsEmailTemplateOpen(false);
     };
 
     const getIoTLink = (product: Product) => {
@@ -214,11 +260,8 @@ export const Products: React.FC = () => {
     const prepareEmailLink = (type: 'mailto' | 'gmail') => {
         if (!selectedProductForOrder?.emailOrderAddress) return;
 
-        const subject = selectedProductForOrder.emailOrderSubject || `Bestellung: ${selectedProductForOrder.name}`;
-        let body = selectedProductForOrder.emailOrderBody || `Guten Tag,\n\nbitte liefern Sie folgende Ware:\n\nProdukt: ${selectedProductForOrder.name}\nMenge: ${orderQuantity} ${selectedProductForOrder.unit}\n\nMit freundlichen Grüßen`;
-
-        const encodedSubject = encodeURIComponent(subject);
-        const encodedBody = encodeURIComponent(body);
+        const encodedSubject = encodeURIComponent(emailSubject);
+        const encodedBody = encodeURIComponent(emailBody);
 
         if (type === 'gmail') {
             window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedProductForOrder.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
@@ -330,8 +373,7 @@ export const Products: React.FC = () => {
                 <div style={{
                     backgroundColor: 'var(--color-surface)',
                     borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-sm)',
-                    overflow: 'hidden'
+                    boxShadow: 'var(--shadow-sm)'
                 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ backgroundColor: 'var(--color-background)', borderBottom: '1px solid var(--color-border)' }}>
@@ -345,7 +387,7 @@ export const Products: React.FC = () => {
                         </thead>
                         <tbody>
                             {products.map((product, index) => {
-                                const isLastRows = index >= products.length - 3;
+                                const isLastRows = index >= products.length - 2 && products.length > 3;
                                 return (
                                     <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                                         <td style={{ padding: 'var(--spacing-md)' }}>
@@ -649,85 +691,120 @@ export const Products: React.FC = () => {
                                     />
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Kategorie</label>
-                                        {isCustomCategoryMode ? (
-                                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                                                <input
-                                                    value={newProduct.category}
-                                                    onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
-                                                    placeholder="Kategorie eingeben..."
-                                                    autoFocus
-                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setIsCustomCategoryMode(false);
-                                                        setNewProduct({ ...newProduct, category: 'Lebensmittel' });
-                                                    }}
-                                                    style={{
-                                                        background: 'var(--color-background)',
-                                                        border: '1px solid var(--color-border)',
-                                                        borderRadius: 'var(--radius-sm)',
-                                                        cursor: 'pointer',
-                                                        padding: '0 var(--spacing-sm)'
-                                                    }}
-                                                    title="Zurück zur Auswahl"
-                                                >
-                                                    <X size={18} />
-                                                </button>
+
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Lieferant</label>
+                                    <select
+                                        value={newProduct.supplierId || ''}
+                                        onChange={e => {
+                                            const supplierId = e.target.value;
+                                            const supplier = suppliers.find(s => s.id === supplierId);
+                                            setNewProduct({
+                                                ...newProduct,
+                                                supplierId: supplierId || undefined,
+                                                // Pre-fill legacy fields if empty, but prefer keeping them clean if using supplier
+                                                emailOrderAddress: supplier?.email || newProduct.emailOrderAddress,
+                                                supplierPhone: supplier?.phone || newProduct.supplierPhone
+                                            });
+                                        }}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', marginBottom: 'var(--spacing-sm)' }}
+                                    >
+                                        <option value="">-- Kein Lieferant ausgewählt --</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Email-Adresse</label>
+                                    <input
+                                        type="email"
+                                        placeholder="bestellung@lieferant.de"
+                                        value={newProduct.emailOrderAddress || ''}
+                                        onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+
+                                    <div style={{ marginTop: 'var(--spacing-sm)' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsEmailTemplateOpen(!isEmailTemplateOpen)}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                padding: 0,
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                fontSize: 'var(--font-size-sm)',
+                                                color: 'var(--color-primary)',
+                                                fontWeight: 500
+                                            }}
+                                        >
+                                            Standardbestelltext hinzufügen
+                                            <span style={{ transform: isEmailTemplateOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', marginLeft: '4px' }}>▼</span>
+                                        </button>
+
+                                        {isEmailTemplateOpen && (
+                                            <div style={{ marginTop: 'var(--spacing-sm)', paddingLeft: 'var(--spacing-md)', borderLeft: '2px solid var(--color-border)' }}>
+                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Standard Betreff</label>
+                                                    <input
+                                                        type="text"
+                                                        value={newProduct.emailOrderSubject || ''}
+                                                        onChange={e => setNewProduct({ ...newProduct, emailOrderSubject: e.target.value })}
+                                                        placeholder=""
+                                                        style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                    />
+                                                </div>
+                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Standard Nachricht</label>
+                                                    <textarea
+                                                        value={newProduct.emailOrderBody || ''}
+                                                        onChange={e => setNewProduct({ ...newProduct, emailOrderBody: e.target.value })}
+                                                        rows={4}
+                                                        placeholder=""
+                                                        style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                    />
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-sm)' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
+                                                        style={{
+                                                            background: 'none',
+                                                            border: 'none',
+                                                            padding: 0,
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            color: newProduct.autoOrder ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                                                        }}
+                                                    >
+                                                        {newProduct.autoOrder ? <CheckSquare size={20} /> : <Square size={20} />}
+                                                    </button>
+                                                    <label
+                                                        onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
+                                                        style={{ cursor: 'pointer', fontWeight: 500, fontSize: 'var(--font-size-sm)' }}
+                                                    >
+                                                        Automatische Bestellung (via EmailJS)
+                                                    </label>
+                                                </div>
                                             </div>
-                                        ) : (
-                                            <select
-                                                value={newProduct.category}
-                                                onChange={e => {
-                                                    if (e.target.value === 'custom') {
-                                                        setIsCustomCategoryMode(true);
-                                                        setNewProduct({ ...newProduct, category: '' });
-                                                    } else {
-                                                        setNewProduct({ ...newProduct, category: e.target.value });
-                                                    }
-                                                }}
-                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                            >
-                                                {CATEGORIES.map(cat => (
-                                                    <option key={cat} value={cat}>{cat}</option>
-                                                ))}
-                                                <option value="custom">Eigene eingeben...</option>
-                                            </select>
                                         )}
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Einheit</label>
-                                        <input
-                                            value={newProduct.unit}
-                                            onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })}
-                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                        />
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestand</label>
-                                        <input
-                                            type="number"
-                                            value={newProduct.stock}
-                                            onChange={e => setNewProduct({ ...newProduct, stock: Number(e.target.value) })}
-                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mindestbestand</label>
-                                        <input
-                                            type="number"
-                                            value={newProduct.minStock}
-                                            onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })}
-                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                        />
-                                    </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Shop-Link / Bestell-URL</label>
+                                    <input
+                                        type="url"
+                                        value={newProduct.orderUrl || ''}
+                                        onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
                                 </div>
 
                                 <div>
@@ -741,106 +818,154 @@ export const Products: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestell-URL (optional)</label>
-                                    <input
-                                        type="url"
-                                        value={newProduct.orderUrl || ''}
-                                        onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })}
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Standard Bestellweg</label>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-lg)' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
+                                            <input
+                                                type="radio"
+                                                name="preferredOrderMethod"
+                                                value="email"
+                                                checked={newProduct.preferredOrderMethod === 'email'}
+                                                onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'email' })}
+                                            />
+                                            Email
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
+                                            <input
+                                                type="radio"
+                                                name="preferredOrderMethod"
+                                                value="link"
+                                                checked={newProduct.preferredOrderMethod === 'link'}
+                                                onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'link' })}
+                                            />
+                                            Link / Shop
+                                        </label>
+                                    </div>
                                 </div>
 
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Lieferanten-Telefon (optional)</label>
-                                    <input
-                                        type="tel"
-                                        value={newProduct.supplierPhone || ''}
-                                        onChange={e => setNewProduct({ ...newProduct, supplierPhone: e.target.value })}
-                                        placeholder="+49 123 456789"
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Notizen</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <MessageSquare size={16} style={{ position: 'absolute', top: '10px', left: '10px', color: 'var(--color-text-muted)' }} />
+                                        <textarea
+                                            rows={3}
+                                            value={newProduct.notes || ''}
+                                            onChange={e => setNewProduct({ ...newProduct, notes: e.target.value })}
+                                            placeholder="Notizen zum Produkt..."
+                                            style={{ width: '100%', padding: 'var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) 36px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                        />
+                                    </div>
                                 </div>
 
-                                {/* Email Configuration Section */}
-                                <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+
+
+                                <div style={{
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: 'var(--radius-md)',
+                                    overflow: 'hidden'
+                                }}>
                                     <button
                                         type="button"
-                                        onClick={() => setIsEmailSectionOpen(!isEmailSectionOpen)}
+                                        onClick={() => setIsInventoryDetailsOpen(!isInventoryDetailsOpen)}
                                         style={{
                                             width: '100%',
                                             padding: 'var(--spacing-md)',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
                                             background: 'var(--color-background)',
-                                            color: 'var(--color-text-main)',
                                             border: 'none',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
                                             cursor: 'pointer',
                                             fontWeight: 500
                                         }}
                                     >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-                                            <Mail size={18} />
-                                            Email-Bestellung konfigurieren
-                                        </div>
-                                        {isEmailSectionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                        Lager & Details
+                                        <span style={{ transform: isInventoryDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
                                     </button>
 
-                                    {isEmailSectionOpen && (
+                                    {isInventoryDetailsOpen && (
                                         <div style={{ padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', marginBottom: 'var(--spacing-md)' }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
-                                                    style={{
-                                                        background: 'none',
-                                                        border: 'none',
-                                                        padding: 0,
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        color: newProduct.autoOrder ? 'var(--color-primary)' : 'var(--color-text-muted)'
-                                                    }}
-                                                >
-                                                    {newProduct.autoOrder ? <CheckSquare size={20} /> : <Square size={20} />}
-                                                </button>
-                                                <label
-                                                    onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
-                                                    style={{ cursor: 'pointer', fontWeight: 500 }}
-                                                >
-                                                    Automatische Bestellung (via EmailJS)
-                                                </label>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Kategorie</label>
+                                                    {isCustomCategoryMode ? (
+                                                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                                                            <input
+                                                                value={newProduct.category || ''}
+                                                                onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+                                                                placeholder="Kategorie eingeben..."
+                                                                autoFocus
+                                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setIsCustomCategoryMode(false);
+                                                                    setNewProduct({ ...newProduct, category: '' });
+                                                                }}
+                                                                style={{
+                                                                    background: 'var(--color-background)',
+                                                                    border: '1px solid var(--color-border)',
+                                                                    borderRadius: 'var(--radius-sm)',
+                                                                    cursor: 'pointer',
+                                                                    padding: '0 var(--spacing-sm)'
+                                                                }}
+                                                                title="Zurück zur Auswahl"
+                                                            >
+                                                                <X size={18} />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <select
+                                                            value={newProduct.category || ''}
+                                                            onChange={e => {
+                                                                if (e.target.value === 'custom') {
+                                                                    setIsCustomCategoryMode(true);
+                                                                    setNewProduct({ ...newProduct, category: '' });
+                                                                } else {
+                                                                    setNewProduct({ ...newProduct, category: e.target.value });
+                                                                }
+                                                            }}
+                                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                        >
+                                                            <option value="">-- Leer --</option>
+                                                            {CATEGORIES.map(cat => (
+                                                                <option key={cat} value={cat}>{cat}</option>
+                                                            ))}
+                                                            <option value="custom">Eigene eingeben...</option>
+                                                        </select>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Einheit</label>
+                                                    <input
+                                                        value={newProduct.unit || ''}
+                                                        onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })}
+                                                        placeholder="z.B. Stück"
+                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                    />
+                                                </div>
                                             </div>
 
-                                            <div>
-                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Email-Adresse</label>
-                                                <input
-                                                    type="email"
-                                                    placeholder="bestellung@lieferant.de"
-                                                    value={newProduct.emailOrderAddress || ''}
-                                                    onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })}
-                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Betreff Vorlage</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Bestellung: Produktname"
-                                                    value={newProduct.emailOrderSubject || ''}
-                                                    onChange={e => setNewProduct({ ...newProduct, emailOrderSubject: e.target.value })}
-                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Email Text Vorlage</label>
-                                                <textarea
-                                                    rows={4}
-                                                    placeholder="Guten Tag, bitte liefern Sie..."
-                                                    value={newProduct.emailOrderBody || ''}
-                                                    onChange={e => setNewProduct({ ...newProduct, emailOrderBody: e.target.value })}
-                                                    style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                                />
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestand</label>
+                                                    <input
+                                                        type="number"
+                                                        value={newProduct.stock || 0}
+                                                        onChange={e => setNewProduct({ ...newProduct, stock: Number(e.target.value) })}
+                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mindestbestand</label>
+                                                    <input
+                                                        type="number"
+                                                        value={newProduct.minStock || 0}
+                                                        onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })}
+                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -961,7 +1086,9 @@ export const Products: React.FC = () => {
                             borderRadius: 'var(--radius-lg)',
                             width: '100%',
                             maxWidth: '400px',
-                            boxShadow: 'var(--shadow-lg)'
+                            boxShadow: 'var(--shadow-lg)',
+                            maxHeight: '90vh', // Ensure it doesn't overflow screen
+                            overflowY: 'auto'  // Allow scrolling
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
                                 <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Bestellung aufgeben</h3>
@@ -982,7 +1109,17 @@ export const Products: React.FC = () => {
                                         min="1"
                                         required
                                         value={orderQuantity}
-                                        onChange={e => setOrderQuantity(Number(e.target.value))}
+                                        onChange={e => {
+                                            const newQty = Number(e.target.value);
+                                            setOrderQuantity(newQty);
+
+                                            // Update body placeholder dynamically if needed, 
+                                            // but since we allow manual edits, maybe we shouldn't overwrite automatically 
+                                            // unless the user hasn't edited it? 
+                                            // For simplicity, we won't auto-update text after initial load to avoid overwriting user edits.
+                                            // But we could re-run the replacement if we want strictly template behavior.
+                                            // Better strategy: Simple replacement on load, then manual.
+                                        }}
                                         style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                     />
                                 </div>
@@ -998,71 +1135,118 @@ export const Products: React.FC = () => {
                                     />
                                 </div>
 
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Notizen</label>
+                                    <textarea
+                                        rows={3}
+                                        value={orderNotes}
+                                        onChange={e => setOrderNotes(e.target.value)}
+                                        placeholder="Optionale Notizen zur Bestellung..."
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                    />
+                                </div>
 
-                                {selectedProductForOrder.orderUrl && (
-                                    <div style={{
-                                        backgroundColor: 'var(--color-background)',
-                                        padding: 'var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--color-border)'
-                                    }}>
-                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Bestelllink:</label>
-                                        <a
-                                            href={selectedProductForOrder.orderUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: 'var(--spacing-sm)',
-                                                padding: 'var(--spacing-sm)',
-                                                borderRadius: 'var(--radius-sm)',
-                                                border: '1px solid var(--color-border)',
-                                                backgroundColor: 'var(--color-primary)',
-                                                color: 'white',
-                                                cursor: 'pointer',
-                                                fontWeight: 500,
-                                                textDecoration: 'none'
-                                            }}
-                                        >
-                                            <ExternalLink size={16} />
-                                            Zur Webseite
-                                        </a>
-                                    </div>
-                                )}
 
-                                {selectedProductForOrder.emailOrderAddress && !selectedProductForOrder.autoOrder && (
-                                    <div style={{
-                                        backgroundColor: 'var(--color-background)',
-                                        padding: 'var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--color-border)'
-                                    }}>
-                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Email vorbereiten:</label>
-                                        <button
-                                            type="button"
-                                            onClick={() => prepareEmailLink('gmail')}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: 'var(--spacing-sm)',
-                                                padding: 'var(--spacing-sm)',
-                                                borderRadius: 'var(--radius-sm)',
-                                                border: '1px solid var(--color-border)',
-                                                backgroundColor: '#EA4335',
-                                                color: 'white',
-                                                cursor: 'pointer',
-                                                fontWeight: 500,
-                                                width: '100%'
-                                            }}
-                                        >
-                                            <Mail size={16} />
-                                            In Gmail öffnen
-                                        </button>
-                                    </div>
-                                )}
+                                {/* Order Methods Wrapper */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                    {selectedProductForOrder.orderUrl && (
+                                        <div style={{
+                                            backgroundColor: 'var(--color-background)',
+                                            padding: 'var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--color-border)',
+                                            order: selectedProductForOrder.preferredOrderMethod === 'link' ? -1 : 0
+                                        }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                Bestelllink:
+                                                {selectedProductForOrder.preferredOrderMethod === 'link' && (
+                                                    <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
+                                                )}
+                                            </label>
+                                            <a
+                                                href={selectedProductForOrder.orderUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: 'var(--spacing-sm)',
+                                                    padding: 'var(--spacing-sm)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid var(--color-border)',
+                                                    backgroundColor: selectedProductForOrder.preferredOrderMethod === 'link' ? 'var(--color-primary)' : 'var(--color-surface)',
+                                                    color: selectedProductForOrder.preferredOrderMethod === 'link' ? 'white' : 'var(--color-text-main)',
+                                                    cursor: 'pointer',
+                                                    fontWeight: 500,
+                                                    textDecoration: 'none'
+                                                }}
+                                            >
+                                                <ExternalLink size={16} />
+                                                Zur Webseite
+                                            </a>
+                                        </div>
+                                    )}
+
+                                    {selectedProductForOrder.emailOrderAddress && !selectedProductForOrder.autoOrder && (
+                                        <div style={{
+                                            backgroundColor: 'var(--color-background)',
+                                            padding: 'var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--color-border)',
+                                            order: selectedProductForOrder.preferredOrderMethod === 'email' ? -1 : 0
+                                        }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                Email Vorschau & Bearbeitung:
+                                                {selectedProductForOrder.preferredOrderMethod === 'email' && (
+                                                    <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
+                                                )}
+                                            </label>
+
+                                            <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Betreff</label>
+                                                <input
+                                                    type="text"
+                                                    value={emailSubject}
+                                                    onChange={e => setEmailSubject(e.target.value)}
+                                                    style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                />
+                                            </div>
+
+                                            <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Nachricht</label>
+                                                <textarea
+                                                    value={emailBody}
+                                                    onChange={e => setEmailBody(e.target.value)}
+                                                    rows={5}
+                                                    style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                />
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => prepareEmailLink('gmail')}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: 'var(--spacing-sm)',
+                                                    padding: 'var(--spacing-sm)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid var(--color-border)',
+                                                    backgroundColor: '#EA4335',
+                                                    color: 'white',
+                                                    cursor: 'pointer',
+                                                    fontWeight: 500,
+                                                    width: '100%'
+                                                }}
+                                            >
+                                                <Mail size={16} />
+                                                In Gmail öffnen
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
 
                                 {selectedProductForOrder.autoOrder && (
                                     <div style={{

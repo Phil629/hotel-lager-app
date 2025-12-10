@@ -1,8 +1,28 @@
 import { StorageService } from './storage';
 import { getSupabaseClient } from './supabase';
-import type { Product, Order } from '../types';
+import type { Product, Order, Supplier } from '../types';
 
 // Helper to map App Model (camelCase) -> DB Model (snake_case)
+const toSupabaseSupplier = (s: Supplier) => ({
+    id: s.id,
+    name: s.name,
+    contact_name: s.contactName,
+    email: s.email,
+    phone: s.phone,
+    url: s.url,
+    notes: s.notes
+});
+
+const fromSupabaseSupplier = (s: any): Supplier => ({
+    id: s.id,
+    name: s.name,
+    contactName: s.contact_name,
+    email: s.email,
+    phone: s.phone,
+    url: s.url,
+    notes: s.notes
+});
+
 const toSupabaseProduct = (p: Product) => ({
     id: p.id,
     name: p.name,
@@ -12,14 +32,16 @@ const toSupabaseProduct = (p: Product) => ({
     unit: p.unit,
     image: p.image,
     auto_order: p.autoOrder,
+    supplier_id: p.supplierId,
     email_order_address: p.emailOrderAddress,
     email_order_subject: p.emailOrderSubject,
     email_order_body: p.emailOrderBody,
     order_url: p.orderUrl,
-    supplier_phone: p.supplierPhone
+    supplier_phone: p.supplierPhone,
+    notes: p.notes,
+    preferred_order_method: p.preferredOrderMethod
 });
 
-// Helper to map DB Model (snake_case) -> App Model (camelCase)
 const fromSupabaseProduct = (p: any): Product => ({
     id: p.id,
     name: p.name,
@@ -29,11 +51,14 @@ const fromSupabaseProduct = (p: any): Product => ({
     unit: p.unit,
     image: p.image,
     autoOrder: p.auto_order,
+    supplierId: p.supplier_id,
     emailOrderAddress: p.email_order_address,
     emailOrderSubject: p.email_order_subject,
     emailOrderBody: p.email_order_body,
     orderUrl: p.order_url,
-    supplierPhone: p.supplier_phone
+    supplierPhone: p.supplier_phone,
+    notes: p.notes,
+    preferredOrderMethod: p.preferred_order_method
 });
 
 const toSupabaseOrder = (o: Order) => {
@@ -58,6 +83,7 @@ const toSupabaseOrder = (o: Order) => {
     if (o.supplierEmail) base.supplier_email = o.supplierEmail;
     if (o.supplierPhone) base.supplier_phone = o.supplierPhone;
     if (o.receivedAt) base.received_at = o.receivedAt;
+    if (o.notes) base.notes = o.notes;
 
     return base;
 };
@@ -79,13 +105,15 @@ const fromSupabaseOrder = (o: any): Order => ({
     price: o.price,
     supplierEmail: o.supplier_email,
     supplierPhone: o.supplier_phone,
-    receivedAt: o.received_at
+    receivedAt: o.received_at,
+    notes: o.notes
 });
 
 export const DataService = {
     // Export helpers for migration tool
     toSupabaseProduct,
     toSupabaseOrder,
+    toSupabaseSupplier,
 
     async getProducts(): Promise<Product[]> {
         const supabase = getSupabaseClient();
@@ -173,6 +201,53 @@ export const DataService = {
             const orders = StorageService.getOrders();
             const updated = orders.map(o => o.id === order.id ? order : o);
             StorageService.saveOrders(updated);
+        }
+    },
+
+    async getSuppliers(): Promise<Supplier[]> {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+            const { data, error } = await supabase
+                .from('suppliers')
+                .select('*')
+                .order('name');
+
+            if (error) {
+                console.error('Supabase error:', error);
+                return StorageService.getSuppliers();
+            }
+            return (data || []).map(fromSupabaseSupplier);
+        }
+        return StorageService.getSuppliers();
+    },
+
+    async saveSupplier(supplier: Supplier): Promise<void> {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+            const dbSupplier = toSupabaseSupplier(supplier);
+            const { error } = await supabase.from('suppliers').upsert(dbSupplier);
+            if (error) throw error;
+        } else {
+            const suppliers = StorageService.getSuppliers();
+            const index = suppliers.findIndex(s => s.id === supplier.id);
+            let updated;
+            if (index >= 0) {
+                updated = suppliers.map(s => s.id === supplier.id ? supplier : s);
+            } else {
+                updated = [...suppliers, supplier];
+            }
+            StorageService.saveSuppliers(updated);
+        }
+    },
+
+    async deleteSupplier(id: string): Promise<void> {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+            const { error } = await supabase.from('suppliers').delete().eq('id', id);
+            if (error) throw error;
+        } else {
+            const suppliers = StorageService.getSuppliers().filter(s => s.id !== id);
+            StorageService.saveSuppliers(suppliers);
         }
     }
 };

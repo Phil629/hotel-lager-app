@@ -1,16 +1,15 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Package, ShoppingCart, Settings } from 'lucide-react';
-
+import { Link, useLocation } from 'react-router-dom';
+import { Package, ShoppingCart, Settings, Users } from 'lucide-react';
 import logo from '../assets/logo.png';
 
 interface LayoutProps {
     children: React.ReactNode;
-    currentPage: 'products' | 'orders' | 'settings';
-    onNavigate: (page: 'products' | 'orders' | 'settings') => void;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) => {
+export const Layout: React.FC<LayoutProps> = ({ children }) => {
+    const location = useLocation();
+    const isActive = (path: string) => location.pathname === path;
+
     return (
         <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--color-background)' }}>
             {/* Sidebar */}
@@ -31,7 +30,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
                 <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
                     <Link
                         to="/orders"
-                        onClick={() => onNavigate('orders')}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -39,8 +37,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
                             padding: 'var(--spacing-md)',
                             border: 'none',
                             borderRadius: 'var(--radius-md)',
-                            backgroundColor: currentPage === 'orders' ? 'var(--color-primary)' : 'transparent',
-                            color: currentPage === 'orders' ? 'white' : 'var(--color-text-muted)',
+                            backgroundColor: isActive('/orders') ? 'var(--color-primary)' : 'transparent',
+                            color: isActive('/orders') ? 'white' : 'var(--color-text-muted)',
                             textDecoration: 'none',
                             fontSize: 'var(--font-size-base)',
                             transition: 'all 0.2s'
@@ -52,7 +50,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
 
                     <Link
                         to="/products"
-                        onClick={() => onNavigate('products')}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -60,8 +57,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
                             padding: 'var(--spacing-md)',
                             border: 'none',
                             borderRadius: 'var(--radius-md)',
-                            backgroundColor: currentPage === 'products' ? 'var(--color-primary)' : 'transparent',
-                            color: currentPage === 'products' ? 'white' : 'var(--color-text-muted)',
+                            backgroundColor: isActive('/products') ? 'var(--color-primary)' : 'transparent',
+                            color: isActive('/products') ? 'white' : 'var(--color-text-muted)',
                             textDecoration: 'none',
                             fontSize: 'var(--font-size-base)',
                             transition: 'all 0.2s'
@@ -72,8 +69,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
                     </Link>
 
                     <Link
-                        to="/settings"
-                        onClick={() => onNavigate('settings')}
+                        to="/suppliers"
                         style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -81,8 +77,28 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
                             padding: 'var(--spacing-md)',
                             border: 'none',
                             borderRadius: 'var(--radius-md)',
-                            backgroundColor: currentPage === 'settings' ? 'var(--color-primary)' : 'transparent',
-                            color: currentPage === 'settings' ? 'white' : 'var(--color-text-muted)',
+                            backgroundColor: isActive('/suppliers') ? 'var(--color-primary)' : 'transparent',
+                            color: isActive('/suppliers') ? 'white' : 'var(--color-text-muted)',
+                            textDecoration: 'none',
+                            fontSize: 'var(--font-size-base)',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        <Users size={20} />
+                        Lieferanten
+                    </Link>
+
+                    <Link
+                        to="/settings"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--spacing-sm)',
+                            padding: 'var(--spacing-md)',
+                            border: 'none',
+                            borderRadius: 'var(--radius-md)',
+                            backgroundColor: isActive('/settings') ? 'var(--color-primary)' : 'transparent',
+                            color: isActive('/settings') ? 'white' : 'var(--color-text-muted)',
                             textDecoration: 'none',
                             fontSize: 'var(--font-size-base)',
                             transition: 'all 0.2s'

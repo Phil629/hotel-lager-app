@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Order, Product } from '../types';
+import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
 import { CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink } from 'lucide-react';
@@ -18,10 +18,14 @@ export const Orders: React.FC = () => {
     // Create Order Modal State
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [createTab, setCreateTab] = useState<'existing' | 'onetime'>('existing');
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [orderQuantity, setOrderQuantity] = useState<number | ''>(1);
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+    const [orderNotes, setOrderNotes] = useState('');
+    const [emailSubject, setEmailSubject] = useState('');
+    const [emailBody, setEmailBody] = useState('');
 
     // Pagination State
     const [visibleReceivedCount, setVisibleReceivedCount] = useState(10);
@@ -31,19 +35,23 @@ export const Orders: React.FC = () => {
         name: string;
         quantity: number | '';
         supplierName: string;
-        supplierEmail: string;
-        supplierPhone: string;
+        supplierId: string;
         orderNumber: string;
         price: number | '';
+        supplierEmail: string;
+        supplierPhone: string;
+        notes: string;
         orderUrl: string;
     }>({
         name: '',
         quantity: 1,
         supplierName: '',
-        supplierEmail: '',
-        supplierPhone: '',
+        supplierId: '',
         orderNumber: '',
         price: '',
+        supplierEmail: '',
+        supplierPhone: '',
+        notes: '',
         orderUrl: ''
     });
 
@@ -53,6 +61,7 @@ export const Orders: React.FC = () => {
     useEffect(() => {
         loadOrders();
         loadProducts();
+        loadSuppliers();
     }, []);
 
     const loadOrders = async () => {
@@ -65,7 +74,43 @@ export const Orders: React.FC = () => {
         setProducts(data);
     };
 
-    const handleCreateOrder = async () => {
+    const loadSuppliers = async () => {
+        const data = await DataService.getSuppliers();
+        setSuppliers(data);
+    };
+
+    const handleProductSelect = (product: Product) => {
+        setSelectedProduct(product);
+        setOrderQuantity(1); // Reset quantity locally
+
+        // Pre-fill email template
+        const supplier = suppliers.find(s => s.id === product.supplierId);
+        let subject = '';
+        let body = '';
+
+        if (supplier) {
+            subject = supplier.emailSubjectTemplate || `Bestellung: ${product.name}`;
+            body = supplier.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nHotel Rezeption`;
+        } else {
+            subject = product.emailOrderSubject || `Bestellung: ${product.name}`;
+            body = product.emailOrderBody || `Guten Tag,\n\nbitte liefern Sie folgende Ware:\n\nProdukt: {product_name}\nMenge: {quantity} {unit}\n\nMit freundlichen Grüßen`;
+        }
+
+        // Initial replacement for display (quantity is 1 initially)
+        subject = subject.replace(/{product_name}/g, product.name)
+            .replace(/{quantity}/g, '1')
+            .replace(/{unit}/g, product.unit);
+
+        body = body.replace(/{product_name}/g, product.name)
+            .replace(/{quantity}/g, '1')
+            .replace(/{unit}/g, product.unit);
+
+        setEmailSubject(subject);
+        setEmailBody(body);
+    };
+
+    const handleCreateOrder = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         try {
             const quantity = orderQuantity === '' ? 1 : orderQuantity;
 
@@ -74,30 +119,39 @@ export const Orders: React.FC = () => {
 
                 // 1. Send Email if configured
                 if (selectedProduct.autoOrder && selectedProduct.emailOrderAddress) {
+                    // Check if we have settings for EmailJS
                     const settings = StorageService.getSettings();
-                    if (settings.serviceId && settings.templateId && settings.publicKey) {
+
+                    if (settings && settings.serviceId && settings.templateId && settings.publicKey) {
                         try {
+                            const qty = orderQuantity === '' ? 1 : orderQuantity;
+                            const templateParams = {
+                                to_email: selectedProduct.emailOrderAddress,
+                                subject: emailSubject, // Use edited subject
+                                message: emailBody, // Use edited body
+                                product_name: selectedProduct.name,
+                                quantity: qty,
+                                unit: selectedProduct.unit
+                            };
+
                             await emailjs.send(
                                 settings.serviceId,
                                 settings.templateId,
-                                {
-                                    to_email: selectedProduct.emailOrderAddress,
-                                    subject: selectedProduct.emailOrderSubject || `Bestellung: ${selectedProduct.name}`,
-                                    message: selectedProduct.emailOrderBody || `Bitte liefern Sie ${quantity}x ${selectedProduct.name}.`,
-                                    product_name: selectedProduct.name,
-                                    quantity: quantity,
-                                    unit: selectedProduct.unit
-                                },
+                                templateParams,
                                 settings.publicKey
                             );
-                            setNotification({ message: 'Bestellung wurde per E-Mail versendet!', type: 'success' });
-                        } catch (error) {
-                            console.error('EmailJS Error:', error);
-                            setNotification({ message: 'Fehler beim Senden der E-Mail, Bestellung wird trotzdem gespeichert.', type: 'info' });
-                        }
-                    }
-                }
 
+                            setNotification({ message: 'Bestellung wurde erstellt und Email versendet!', type: 'success' });
+                        } catch (error) {
+                            console.error('Email send error:', error);
+                            setNotification({ message: 'Bestellung erstellt, aber Email konnte nicht gesendet werden.', type: 'error' });
+                        }
+                    } else {
+                        setNotification({ message: 'Bestellung erstellt. Für Auto-Versand bitte Email-Einstellungen prüfen.', type: 'info' });
+                    }
+                } else {
+                    setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
+                }
                 // 2. Save Order
                 const newOrder: Order = {
                     id: crypto.randomUUID(),
@@ -107,7 +161,8 @@ export const Orders: React.FC = () => {
                     status: 'open',
                     productImage: selectedProduct.image,
                     supplierEmail: selectedProduct.emailOrderAddress,
-                    supplierPhone: selectedProduct.supplierPhone
+                    supplierPhone: selectedProduct.supplierPhone,
+                    notes: orderNotes
                 };
                 await DataService.saveOrder(newOrder);
 
@@ -131,6 +186,7 @@ export const Orders: React.FC = () => {
                     supplierPhone: oneTimeOrder.supplierPhone,
                     orderNumber: oneTimeOrder.orderNumber,
                     price: oneTimeOrder.price === '' ? undefined : (typeof oneTimeOrder.price === 'string' ? parseFloat(oneTimeOrder.price) : oneTimeOrder.price),
+                    notes: oneTimeOrder.notes
                 };
                 await DataService.saveOrder(newOrder);
             }
@@ -139,14 +195,17 @@ export const Orders: React.FC = () => {
             setIsCreateModalOpen(false);
             setSelectedProduct(null);
             setOrderQuantity(1);
+            setOrderNotes('');
             setOneTimeOrder({
                 name: '',
                 quantity: 1,
                 supplierName: '',
-                supplierEmail: '',
-                supplierPhone: '',
+                supplierId: '',
                 orderNumber: '',
                 price: '',
+                supplierEmail: '',
+                supplierPhone: '',
+                notes: '',
                 orderUrl: ''
             });
             setIsDetailsOpen(false);
@@ -391,6 +450,11 @@ export const Orders: React.FC = () => {
                             {order.orderNumber && ` • Nr: ${order.orderNumber}`}
                             {order.price && ` • Preis: ${order.price.toFixed(2)} €`}
                         </div>
+                        {order.notes && (
+                            <div style={{ fontSize: 'var(--font-size-sm)', fontStyle: 'italic', marginBottom: 'var(--spacing-xs)', color: 'var(--color-text-main)' }}>
+                                "{order.notes}"
+                            </div>
+                        )}
                         {order.supplierEmail && (
                             <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Mail size={12} />
@@ -830,7 +894,7 @@ export const Orders: React.FC = () => {
                                             .map(product => (
                                                 <div
                                                     key={product.id}
-                                                    onClick={() => setSelectedProduct(product)}
+                                                    onClick={() => handleProductSelect(product)}
                                                     style={{
                                                         padding: '10px',
                                                         borderBottom: '1px solid var(--color-border)',
@@ -902,6 +966,74 @@ export const Orders: React.FC = () => {
                                                 style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                             />
                                         </div>
+                                        <div style={{ marginBottom: 'var(--spacing-md)' }}>
+                                            <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-sm)' }}>Notizen</label>
+                                            <textarea
+                                                rows={3}
+                                                value={orderNotes}
+                                                onChange={e => setOrderNotes(e.target.value)}
+                                                placeholder="Optionale Notizen..."
+                                                style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                            />
+                                        </div>
+
+                                        {selectedProduct.emailOrderAddress && !selectedProduct.autoOrder && (
+                                            <div style={{
+                                                backgroundColor: 'var(--color-background)',
+                                                padding: 'var(--spacing-md)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--color-border)',
+                                                marginBottom: 'var(--spacing-md)'
+                                            }}>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Email Vorschau & Bearbeitung:</label>
+
+                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Betreff</label>
+                                                    <input
+                                                        type="text"
+                                                        value={emailSubject}
+                                                        onChange={e => setEmailSubject(e.target.value)}
+                                                        style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                    />
+                                                </div>
+
+                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Nachricht</label>
+                                                    <textarea
+                                                        value={emailBody}
+                                                        onChange={e => setEmailBody(e.target.value)}
+                                                        rows={5}
+                                                        style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                    />
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const encodedSubject = encodeURIComponent(emailSubject);
+                                                        const encodedBody = encodeURIComponent(emailBody);
+                                                        window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedProduct.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: 'var(--spacing-sm)',
+                                                        padding: 'var(--spacing-sm)',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        border: '1px solid var(--color-border)',
+                                                        backgroundColor: '#EA4335',
+                                                        color: 'white',
+                                                        cursor: 'pointer',
+                                                        fontWeight: 500,
+                                                        width: '100%'
+                                                    }}
+                                                >
+                                                    <Mail size={16} />
+                                                    In Gmail öffnen
+                                                </button>
+                                            </div>
+                                        )}
                                         <button
                                             onClick={handleCreateOrder}
                                             style={{
@@ -933,6 +1065,7 @@ export const Orders: React.FC = () => {
                                         style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                     />
                                 </div>
+
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-sm)' }}>Menge</label>
                                     <input
@@ -946,6 +1079,31 @@ export const Orders: React.FC = () => {
                                         style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                     />
                                 </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-sm)' }}>Lieferant (Optional)</label>
+                                    <select
+                                        value={oneTimeOrder.supplierId || ''}
+                                        onChange={e => {
+                                            const supplierId = e.target.value;
+                                            const supplier = suppliers.find(s => s.id === supplierId);
+                                            setOneTimeOrder({
+                                                ...oneTimeOrder,
+                                                supplierId: supplierId || '',
+                                                supplierName: supplier ? supplier.name : oneTimeOrder.supplierName,
+                                                supplierEmail: supplier ? supplier.email : oneTimeOrder.supplierEmail,
+                                                supplierPhone: supplier?.phone || oneTimeOrder.supplierPhone
+                                            });
+                                        }}
+                                        style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    >
+                                        <option value="">-- Kein Lieferant / Manuell --</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
 
                                 {/* Collapsible Supplier Details */}
                                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
@@ -1030,6 +1188,16 @@ export const Orders: React.FC = () => {
                                         value={orderDate}
                                         onChange={e => setOrderDate(e.target.value)}
                                         style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-sm)' }}>Notizen</label>
+                                    <textarea
+                                        rows={3}
+                                        value={oneTimeOrder.notes}
+                                        onChange={e => setOneTimeOrder({ ...oneTimeOrder, notes: e.target.value })}
+                                        placeholder="Optionale Notizen..."
+                                        style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
                                     />
                                 </div>
                                 <button
