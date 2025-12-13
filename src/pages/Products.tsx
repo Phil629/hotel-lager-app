@@ -46,7 +46,8 @@ export const Products: React.FC = () => {
     const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
-    const [enableStockManagement, setEnableStockManagement] = useState(true);
+
+
 
     // Stock Update Modal (Scan Action)
     const [isStockUpdateModalOpen, setIsStockUpdateModalOpen] = useState(false);
@@ -69,8 +70,7 @@ export const Products: React.FC = () => {
             const loadedProducts = await DataService.getProducts();
             setProducts(loadedProducts);
 
-            const settings = StorageService.getSettings();
-            setEnableStockManagement(settings.enableStockManagement ?? true);
+
 
             // Handle URL Actions (QR Scans)
             const action = searchParams.get('action');
