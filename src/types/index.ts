@@ -8,6 +8,7 @@ export interface Supplier {
   notes?: string;
   emailSubjectTemplate?: string;
   emailBodyTemplate?: string;
+  documents?: { name: string; url: string; date?: string; }[];
 }
 
 export interface Product {
@@ -59,4 +60,5 @@ export interface EmailSettings {
   publicKey: string;
   supabaseUrl?: string;
   supabaseKey?: string;
+  enableStockManagement?: boolean;
 }

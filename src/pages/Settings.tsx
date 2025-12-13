@@ -3,6 +3,7 @@ import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { Save, Database, ArrowRight } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
+import { Notification, type NotificationType } from '../components/Notification';
 
 export const Settings: React.FC = () => {
     const [settings, setSettings] = useState({
@@ -10,9 +11,11 @@ export const Settings: React.FC = () => {
         templateId: '',
         publicKey: '',
         supabaseUrl: '',
-        supabaseKey: ''
+        supabaseKey: '',
+        enableStockManagement: true
     });
     const [isMigrating, setIsMigrating] = useState(false);
+    const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
 
     useEffect(() => {
         const stored = StorageService.getSettings();
@@ -21,21 +24,22 @@ export const Settings: React.FC = () => {
             templateId: stored.templateId,
             publicKey: stored.publicKey,
             supabaseUrl: stored.supabaseUrl || '',
-            supabaseKey: stored.supabaseKey || ''
+            supabaseKey: stored.supabaseKey || '',
+            enableStockManagement: stored.enableStockManagement ?? true
         });
     }, []);
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         StorageService.saveSettings(settings);
-        alert('Einstellungen gespeichert!');
+        setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
         // Force reload to apply new Supabase settings to DataService
-        window.location.reload();
+        setTimeout(() => window.location.reload(), 1500);
     };
 
     const handleMigration = async () => {
         if (!settings.supabaseUrl || !settings.supabaseKey) {
-            alert('Bitte zuerst Supabase konfigurieren und speichern.');
+            setNotification({ message: 'Bitte zuerst Supabase konfigurieren und speichern.', type: 'error' });
             return;
         }
 
@@ -47,7 +51,7 @@ export const Settings: React.FC = () => {
         const supabase = getSupabaseClient();
 
         if (!supabase) {
-            alert('Fehler: Supabase Client konnte nicht initialisiert werden.');
+            setNotification({ message: 'Fehler: Supabase Client konnte nicht initialisiert werden.', type: 'error' });
             setIsMigrating(false);
             return;
         }
@@ -104,10 +108,10 @@ export const Settings: React.FC = () => {
                 if (oError) throw oError;
             }
 
-            alert('Daten erfolgreich migriert! Sie sind nun in der Cloud verfügbar.');
+            setNotification({ message: 'Daten erfolgreich migriert! Sie sind nun in der Cloud verfügbar.', type: 'success' });
         } catch (error: any) {
             console.error('Migration error:', error);
-            alert(`Fehler bei der Migration: ${error.message}`);
+            setNotification({ message: `Fehler bei der Migration: ${error.message}`, type: 'error' });
         } finally {
             setIsMigrating(false);
         }
@@ -115,9 +119,64 @@ export const Settings: React.FC = () => {
 
     return (
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+            {notification && (
+                <Notification
+                    message={notification.message}
+                    type={notification.type}
+                    onClose={() => setNotification(null)}
+                />
+            )}
             <h2 style={{ fontSize: 'var(--font-size-2xl)', marginBottom: 'var(--spacing-xl)' }}>Einstellungen</h2>
 
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
+                {/* Feature Toggles */}
+                <div style={{
+                    backgroundColor: 'var(--color-surface)',
+                    padding: 'var(--spacing-lg)',
+                    borderRadius: 'var(--radius-lg)',
+                    boxShadow: 'var(--shadow-sm)'
+                }}>
+                    <h3 style={{ marginTop: 0 }}>Funktionen verwalten</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                            <div style={{ fontWeight: 500, marginBottom: '4px' }}>Lagerbestand verwalten</div>
+                            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                                Aktiviert Bestandsanzeigen, Warnungen und Lagerwert-Berechnung.
+                            </div>
+                        </div>
+                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <input
+                                type="checkbox"
+                                checked={settings.enableStockManagement}
+                                onChange={e => setSettings({ ...settings, enableStockManagement: e.target.checked })}
+                                style={{ opacity: 0, width: 0, height: 0 }}
+                            />
+                            <span style={{
+                                position: 'absolute',
+                                cursor: 'pointer',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                backgroundColor: settings.enableStockManagement ? 'var(--color-primary)' : '#ccc',
+                                transition: '.4s',
+                                borderRadius: '24px'
+                            }}>
+                                <span style={{
+                                    position: 'absolute',
+                                    content: '""',
+                                    height: '18px',
+                                    width: '18px',
+                                    left: settings.enableStockManagement ? '26px' : '4px',
+                                    bottom: '3px',
+                                    backgroundColor: 'white',
+                                    transition: '.4s',
+                                    borderRadius: '50%'
+                                }}></span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
 
                 {/* Supabase Section */}
                 <div style={{

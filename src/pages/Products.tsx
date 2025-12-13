@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
-import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone, MessageSquare, Search, AlertTriangle, Euro } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone, MessageSquare, Search, AlertTriangle, Euro, QrCode, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
+import QRCode from "react-qr-code";
+import { useSearchParams } from 'react-router-dom';
 
 const CATEGORIES = ['Lebensmittel', 'Getränke', 'Reinigung', 'Büro', 'Sonstiges'];
 
@@ -24,7 +26,8 @@ export const Products: React.FC = () => {
         preferredOrderMethod: 'email'
     });
     // isEmailSectionOpen removed as requested
-    const [showIoTLink, setShowIoTLink] = useState<{ curl: string, powershell: string } | null>(null);
+    const [showIoTLink, setShowIoTLink] = useState<{ product: Product, curl: string, powershell: string } | null>(null);
+    const [qrTab, setQrTab] = useState<'api' | 'order' | 'stock'>('api');
     const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
     const [isInventoryDetailsOpen, setIsInventoryDetailsOpen] = useState(false);
     const [isEmailTemplateOpen, setIsEmailTemplateOpen] = useState(false);
@@ -43,6 +46,15 @@ export const Products: React.FC = () => {
     const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+    const [enableStockManagement, setEnableStockManagement] = useState(true);
+
+    // Stock Update Modal (Scan Action)
+    const [isStockUpdateModalOpen, setIsStockUpdateModalOpen] = useState(false);
+    const [stockUpdateProduct, setStockUpdateProduct] = useState<Product | null>(null);
+    const [stockUpdateValue, setStockUpdateValue] = useState<number>(0);
+
+    const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'stock' | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
+    const [searchParams] = useSearchParams();
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -51,13 +63,46 @@ export const Products: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        loadProducts();
-        loadSuppliers();
-    }, []);
+        // Load data and then check params
+        const init = async () => {
+            await loadSuppliers();
+            const loadedProducts = await DataService.getProducts();
+            setProducts(loadedProducts);
+
+            const settings = StorageService.getSettings();
+            setEnableStockManagement(settings.enableStockManagement ?? true);
+
+            // Handle URL Actions (QR Scans)
+            const action = searchParams.get('action');
+            const id = searchParams.get('id');
+
+            if (action && id && loadedProducts.length > 0) {
+                const product = loadedProducts.find(p => p.id === id);
+                if (product) {
+                    if (action === 'order') {
+                        handleOrderClick(product);
+                    } else if (action === 'stock') {
+                        setStockUpdateProduct(product);
+                        setStockUpdateValue(product.stock);
+                        setIsStockUpdateModalOpen(true);
+                    }
+                }
+            }
+        };
+        init();
+    }, [searchParams]); // Re-run if params change (though mostly on mount)
 
     const loadProducts = async () => {
         const data = await DataService.getProducts();
         setProducts(data);
+    };
+
+    const handleStockUpdate = async (product: Product, newStock: number) => {
+        const updatedProduct = { ...product, stock: newStock };
+        // Optimistic update
+        setProducts(products.map(p => p.id === product.id ? updatedProduct : p));
+        // Save to backend
+        await DataService.updateProduct(updatedProduct);
     };
 
     const loadSuppliers = async () => {
@@ -226,7 +271,10 @@ export const Products: React.FC = () => {
 
     const getIoTLink = (product: Product) => {
         const settings = StorageService.getSettings();
-        if (!settings.supabaseUrl || !settings.supabaseKey) return null;
+        // Return structure even if settings are missing, for QR codes
+        if (!settings.supabaseUrl || !settings.supabaseKey) {
+            return { product, curl: '', powershell: '' };
+        }
 
         // Ensure no trailing slash in URL
         const baseUrl = settings.supabaseUrl.replace(/\/$/, '');
@@ -253,12 +301,9 @@ export const Products: React.FC = () => {
         const bodyJsonPwsh = bodyJson.replace(/'/g, "''");
 
         // Robust PowerShell command:
-        // 1. Uses -ContentType parameter explicitly
-        // 2. Forces UTF-8 encoding for the body to handle special characters (umlauts, emojis)
-        // 3. Uses a one-liner format with ; for easy copy-pasting
         const powershell = `$h=@{"apikey"="${settings.supabaseKey}";"Authorization"="Bearer ${settings.supabaseKey}"}; Invoke-RestMethod -Uri "${url}" -Method Post -Headers $h -ContentType "application/json" -Body ([System.Text.Encoding]::UTF8.GetBytes('${bodyJsonPwsh}'))`;
 
-        return { curl, powershell };
+        return { product, curl, powershell };
     };
 
     const prepareEmailLink = (type: 'mailto' | 'gmail') => {
@@ -274,10 +319,34 @@ export const Products: React.FC = () => {
         }
     };
 
+    const handleSort = (key: 'name' | 'stock') => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
     const filteredProducts = products.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesLowStock = showLowStockOnly ? p.stock <= (p.minStock || 0) : true;
         return matchesSearch && matchesLowStock;
+    }).sort((a, b) => {
+        if (!sortConfig.key) return 0;
+
+        if (sortConfig.key === 'name') {
+            return sortConfig.direction === 'asc'
+                ? a.name.localeCompare(b.name)
+                : b.name.localeCompare(a.name);
+        }
+
+        if (sortConfig.key === 'stock') {
+            return sortConfig.direction === 'asc'
+                ? a.stock - b.stock
+                : b.stock - a.stock;
+        }
+
+        return 0;
     });
 
     const totalValue = products.reduce((sum, p) => sum + (p.stock * (p.price || 0)), 0);
@@ -313,7 +382,10 @@ export const Products: React.FC = () => {
                 gap: 'var(--spacing-md)',
                 marginBottom: 'var(--spacing-xl)'
             }}>
-                <div style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
+                <div
+                    onClick={() => setShowLowStockOnly(false)}
+                    style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)', cursor: 'pointer' }}
+                >
                     <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: '4px' }}>Produkte Gesamt</div>
                     <div style={{ fontSize: '24px', fontWeight: 700 }}>{products.length}</div>
                 </div>
@@ -376,7 +448,7 @@ export const Products: React.FC = () => {
                     }}
                 >
                     <AlertTriangle size={18} />
-                    {showLowStockOnly ? 'Alle anzeigen' : '⚠️ Kritischer Bestand'}
+                    {showLowStockOnly ? 'Alle anzeigen' : 'Kritischer Bestand'}
                 </button>
             </div>
 
@@ -441,10 +513,26 @@ export const Products: React.FC = () => {
                                     <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
                                         <button onClick={() => {
                                             const links = getIoTLink(product);
-                                            if (links) setShowIoTLink(links);
-                                            else setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
-                                        }} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer' }}>
-                                            <Wifi size={18} />
+                                            // Ensure links is not null before setting state
+                                            if (links) {
+                                                setShowIoTLink(links);
+                                                setQrTab('api'); // Reset to first tab
+                                            } else {
+                                                setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
+                                            }
+                                        }} style={{
+                                            padding: '8px',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--color-border)',
+                                            background: 'white',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        }}
+                                            title="IoT / QR Code"
+                                        >
+                                            <QrCode size={18} />
                                         </button>
                                         <button onClick={() => handleEdit(product)} style={{ padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer' }}>
                                             <Edit2 size={18} />
@@ -472,8 +560,22 @@ export const Products: React.FC = () => {
                             <thead style={{ backgroundColor: 'var(--color-background)', borderBottom: '1px solid var(--color-border)' }}>
                                 <tr>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bild</th>
-                                    <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Name</th>
-                                    <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bestand & Wert</th>
+                                    <th
+                                        onClick={() => handleSort('name')}
+                                        style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600, cursor: 'pointer' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            Name {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />) : <ArrowUpDown size={16} style={{ opacity: 0.3 }} />}
+                                        </div>
+                                    </th>
+                                    <th
+                                        onClick={() => handleSort('stock')}
+                                        style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600, cursor: 'pointer' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                                            Bestand & Wert {sortConfig.key === 'stock' ? (sortConfig.direction === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />) : <ArrowUpDown size={16} style={{ opacity: 0.3 }} />}
+                                        </div>
+                                    </th>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'left', color: 'var(--color-text-muted)', fontWeight: 600 }}>Kontakt / Links</th>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'center', color: 'var(--color-text-muted)', fontWeight: 600 }}>Bestellen</th>
                                     <th style={{ padding: 'var(--spacing-md)', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600 }}></th>
@@ -593,6 +695,35 @@ export const Products: React.FC = () => {
                                                             minWidth: '160px',
                                                             overflow: 'hidden'
                                                         }}>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const links = getIoTLink(product);
+                                                                    // Ensure links is not null before setting state
+                                                                    if (links) {
+                                                                        setShowIoTLink(links);
+                                                                        setQrTab('api'); // Reset to first tab
+                                                                    } else {
+                                                                        setNotification({ message: 'Bitte konfigurieren Sie zuerst Supabase in den Einstellungen.', type: 'error' });
+                                                                    }
+                                                                    setOpenSettingsId(null);
+                                                                }}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '8px',
+                                                                    width: '100%',
+                                                                    padding: '12px 16px',
+                                                                    border: 'none',
+                                                                    background: 'none',
+                                                                    textAlign: 'left',
+                                                                    cursor: 'pointer',
+                                                                    color: 'var(--color-text-main)',
+                                                                    fontSize: 'var(--font-size-md)'
+                                                                }}
+                                                            >
+                                                                <QrCode size={16} />
+                                                                IoT / QR Code
+                                                            </button>
                                                             <button
                                                                 onClick={() => {
                                                                     handleEdit(product);
@@ -1336,6 +1467,50 @@ export const Products: React.FC = () => {
                                 </div>
 
 
+
+                                {/* Supplier Documents */}
+                                {(() => {
+                                    const supplier = suppliers.find(s => s.id === selectedProductForOrder.supplierId);
+                                    if (supplier && supplier.documents && supplier.documents.length > 0) {
+                                        return (
+                                            <div style={{
+                                                backgroundColor: 'var(--color-background)',
+                                                padding: 'var(--spacing-md)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--color-border)',
+                                                marginBottom: 'var(--spacing-md)'
+                                            }}>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                    Lieferanten-Dokumente:
+                                                </label>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                    {supplier.documents.map((doc, index) => (
+                                                        <a
+                                                            key={index}
+                                                            href={doc.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '8px',
+                                                                color: 'var(--color-primary)',
+                                                                textDecoration: 'none',
+                                                                fontSize: 'var(--font-size-sm)'
+                                                            }}
+                                                        >
+                                                            <ExternalLink size={14} />
+                                                            {doc.name}
+                                                            {doc.date && <span style={{ color: 'var(--color-text-muted)', fontSize: '10px' }}>({doc.date})</span>}
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+
                                 {/* Order Methods Wrapper */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                     {selectedProductForOrder.orderUrl && (
@@ -1487,6 +1662,259 @@ export const Products: React.FC = () => {
                     </div>
                 )
             }
+            {/* IoT / QR Code Modal with Tabs */}
+            {showIoTLink && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 1000
+                }}>
+                    <div style={{
+                        backgroundColor: 'var(--color-surface)',
+                        padding: 'var(--spacing-xl)',
+                        borderRadius: 'var(--radius-lg)',
+                        width: '100%',
+                        maxWidth: '600px',
+                        maxHeight: '90vh',
+                        overflowY: 'auto'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                            <h3 style={{ margin: 0 }}>IoT & QR Code Integration</h3>
+                            <button onClick={() => setShowIoTLink(null)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={24} /></button>
+                        </div>
+
+                        {/* Tabs */}
+                        <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 'var(--spacing-md)' }}>
+                            <button
+                                onClick={() => setQrTab('api')}
+                                style={{
+                                    padding: '10px 16px',
+                                    border: 'none',
+                                    background: 'none',
+                                    borderBottom: qrTab === 'api' ? '2px solid var(--color-primary)' : 'none',
+                                    color: qrTab === 'api' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                    fontWeight: qrTab === 'api' ? 600 : 400,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                API / IoT Button
+                            </button>
+                            <button
+                                onClick={() => setQrTab('order')}
+                                style={{
+                                    padding: '10px 16px',
+                                    border: 'none',
+                                    background: 'none',
+                                    borderBottom: qrTab === 'order' ? '2px solid var(--color-primary)' : 'none',
+                                    color: qrTab === 'order' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                    fontWeight: qrTab === 'order' ? 600 : 400,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                QR: Bestellen
+                            </button>
+                            <button
+                                onClick={() => setQrTab('stock')}
+                                style={{
+                                    padding: '10px 16px',
+                                    border: 'none',
+                                    background: 'none',
+                                    borderBottom: qrTab === 'stock' ? '2px solid var(--color-primary)' : 'none',
+                                    color: qrTab === 'stock' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                    fontWeight: qrTab === 'stock' ? 600 : 400,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                QR: Bestand
+                            </button>
+                        </div>
+
+                        {/* Tab Content */}
+                        {qrTab === 'api' && (
+                            <>
+                                {showIoTLink.curl ? (
+                                    <>
+                                        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-md)' }}>
+                                            Dieser API-Endpunkt erzeugt eine offene Bestellung für <strong>{showIoTLink.product.name}</strong>.
+                                            Ideal für IoT-Buttons (z.B. AWS IoT Button, flic.io) oder Skripte.
+                                        </p>
+
+                                        <div style={{ marginBottom: 'var(--spacing-md)' }}>
+                                            <div style={{ fontWeight: 600, marginBottom: '4px' }}>CURL (Linux/Mac)</div>
+                                            <div style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '12px', borderRadius: '4px', overflowX: 'auto', fontFamily: 'monospace', fontSize: '12px' }}>
+                                                {showIoTLink.curl}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div style={{ fontWeight: 600, marginBottom: '4px' }}>PowerShell (Windows)</div>
+                                            <div style={{ backgroundColor: '#012456', color: '#ffffff', padding: '12px', borderRadius: '4px', overflowX: 'auto', fontFamily: 'monospace', fontSize: '12px' }}>
+                                                {showIoTLink.powershell}
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div>
+                                        <div style={{ padding: '20px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', color: '#991B1B' }}>
+                                            <h4 style={{ marginTop: 0 }}>Supabase ist nicht konfiguriert</h4>
+                                            <p>Die IoT-Button Integration benötigt eine Supabase-Datenbank.</p>
+                                            <p>Bitte konfigurieren Sie diese in den Einstellungen.</p>
+                                            <p style={{ fontWeight: 'bold' }}>Die QR-Codes (siehe andere Tabs) funktionieren auch ohne Supabase!</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {qrTab === 'order' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                <p>Scannt diesen Code, um direkt die Bestellmaske für <strong>{showIoTLink.product.name}</strong> zu öffnen.</p>
+                                <div style={{ padding: '20px', background: 'white', border: '1px solid #eee' }}>
+                                    <QRCode
+                                        value={`${window.location.protocol}//${window.location.host}${window.location.pathname}?action=order&id=${showIoTLink.product.id}`}
+                                        size={200}
+                                    />
+                                </div>
+                                <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
+                                    Funktioniert auf jedem Gerät im gleichen Netzwerk.
+                                </p>
+                            </div>
+                        )}
+
+                        {qrTab === 'stock' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                <p>Scannt diesen Code, um den Bestand von <strong>{showIoTLink.product.name}</strong> zu aktualisieren.</p>
+                                <div style={{ padding: '20px', background: 'white', border: '1px solid #eee' }}>
+                                    <QRCode
+                                        value={`${window.location.protocol}//${window.location.host}${window.location.pathname}?action=stock&id=${showIoTLink.product.id}`}
+                                        size={200}
+                                    />
+                                </div>
+                                <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
+                                    Öffnet direkt den Dialog zur Bestandsänderung (+/-).
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Stock Update Modal (Scan Action) */}
+            {isStockUpdateModalOpen && stockUpdateProduct && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 1200
+                }}>
+                    <div style={{
+                        backgroundColor: 'var(--color-surface)',
+                        padding: 'var(--spacing-xl)',
+                        borderRadius: 'var(--radius-lg)',
+                        width: '100%',
+                        maxWidth: '400px',
+                        boxShadow: 'var(--shadow-lg)'
+                    }}>
+                        <h3 style={{ marginTop: 0, marginBottom: 'var(--spacing-md)' }}>Bestand aktualisieren</h3>
+                        <p style={{ marginBottom: 'var(--spacing-lg)' }}>
+                            Produkt: <strong>{stockUpdateProduct.name}</strong>
+                        </p>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)' }}>
+                            <button
+                                onClick={() => setStockUpdateValue(prev => Math.max(0, prev - 1))}
+                                style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-border)',
+                                    background: 'var(--color-background)',
+                                    fontSize: '1.2rem',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                -
+                            </button>
+                            <input
+                                type="number"
+                                value={stockUpdateValue}
+                                onChange={(e) => setStockUpdateValue(parseInt(e.target.value) || 0)}
+                                style={{
+                                    flex: 1,
+                                    textAlign: 'center',
+                                    fontSize: '1.5rem',
+                                    fontWeight: 'bold',
+                                    border: 'none',
+                                    background: 'transparent'
+                                }}
+                            />
+                            <button
+                                onClick={() => setStockUpdateValue(prev => prev + 1)}
+                                style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-border)',
+                                    background: 'var(--color-background)',
+                                    fontSize: '1.2rem',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                +
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+                            <button
+                                onClick={() => setIsStockUpdateModalOpen(false)}
+                                style={{
+                                    flex: 1,
+                                    padding: '12px',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-border)',
+                                    backgroundColor: 'white',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={() => {
+                                    handleStockUpdate(stockUpdateProduct, stockUpdateValue);
+                                    setIsStockUpdateModalOpen(false);
+                                    setNotification({ message: 'Bestand aktualisiert!', type: 'success' });
+                                }}
+                                style={{
+                                    flex: 1,
+                                    padding: '12px',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: 'none',
+                                    backgroundColor: 'var(--color-primary)',
+                                    color: 'white',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Speichern
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {
                 notification && (
                     <Notification

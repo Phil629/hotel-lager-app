@@ -49,7 +49,8 @@ export const Suppliers: React.FC = () => {
                 email: '',
                 phone: '',
                 url: '',
-                notes: ''
+                notes: '',
+                documents: []
             });
         }
         setIsModalOpen(true);
@@ -70,7 +71,8 @@ export const Suppliers: React.FC = () => {
                 email: formData.email,
                 phone: formData.phone,
                 url: formData.url,
-                notes: formData.notes
+                notes: formData.notes,
+                documents: formData.documents || []
             } as Supplier;
 
             await DataService.saveSupplier(supplierToSave);
@@ -305,6 +307,152 @@ export const Suppliers: React.FC = () => {
                                     style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', minHeight: '80px', fontFamily: 'inherit' }}
                                     placeholder="Interne Notizen zum Lieferanten..."
                                 />
+                            </div>
+
+                            {/* Documents Section */}
+                            <div>
+                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 500 }}>Dokumente / Dateilinks</label>
+                                <div style={{ marginBottom: '10px' }}>
+                                    {formData.documents?.map((doc, index) => (
+                                        <div key={index} style={{
+                                            display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px',
+                                            padding: '8px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-md)'
+                                        }}>
+                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'var(--color-primary)', fontWeight: 500 }}>
+                                                    📄 {doc.name}
+                                                </a>
+                                                {doc.date && (
+                                                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                                                        Hochgeladen: {new Date(doc.date).toLocaleDateString('de-DE')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newDocs = [...(formData.documents || [])];
+                                                    newDocs.splice(index, 1);
+                                                    setFormData({ ...formData, documents: newDocs });
+                                                }}
+                                                style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-danger)' }}
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Dokument-Name"
+                                            id="newDocName"
+                                            style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
+                                        />
+                                        <div style={{ position: 'relative', flex: 2 }}>
+                                            <input
+                                                type="file"
+                                                id="fileUpload"
+                                                accept="application/pdf,image/*"
+                                                style={{ display: 'none' }}
+                                                onChange={async (e) => {
+                                                    const file = e.target.files?.[0];
+                                                    const nameInput = document.getElementById('newDocName') as HTMLInputElement;
+
+                                                    if (file) {
+                                                        const btn = document.getElementById('uploadBtn') as HTMLButtonElement;
+                                                        const originalText = btn.innerText;
+                                                        btn.disabled = true;
+                                                        btn.innerText = 'Lädt hoch...';
+
+                                                        try {
+                                                            const url = await DataService.uploadFile(file);
+                                                            if (url) {
+                                                                // Use file name if name input is empty
+                                                                const docName = nameInput.value || file.name;
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    documents: [...(formData.documents || []), {
+                                                                        name: docName,
+                                                                        url: url,
+                                                                        date: new Date().toISOString()
+                                                                    }]
+                                                                });
+                                                                nameInput.value = '';
+                                                            } else {
+                                                                setNotification({ message: 'Supabase Storage nicht konfiguriert.', type: 'error' });
+                                                            }
+                                                        } catch (err) {
+                                                            setNotification({ message: 'Fehler beim Hochladen.', type: 'error' });
+                                                        } finally {
+                                                            btn.disabled = false;
+                                                            btn.innerText = originalText;
+                                                            // Clear file input
+                                                            e.target.value = '';
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                            <button
+                                                type="button"
+                                                id="uploadBtn"
+                                                onClick={() => document.getElementById('fileUpload')?.click()}
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '8px',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--color-border)',
+                                                    backgroundColor: 'white',
+                                                    cursor: 'pointer',
+                                                    textAlign: 'left',
+                                                    color: 'var(--color-text-muted)'
+                                                }}
+                                            >
+                                                📁 PDF / Bild hochladen...
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--color-border)' }}></div>
+                                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>ODER URL</span>
+                                        <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--color-border)' }}></div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input
+                                            type="url"
+                                            placeholder="URL (https://...)"
+                                            id="newDocUrl"
+                                            style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const nameInput = document.getElementById('newDocName') as HTMLInputElement;
+                                                const urlInput = document.getElementById('newDocUrl') as HTMLInputElement;
+                                                if (nameInput.value && urlInput.value) {
+                                                    setFormData({
+                                                        ...formData,
+                                                        documents: [...(formData.documents || []), {
+                                                            name: nameInput.value,
+                                                            url: urlInput.value,
+                                                            date: new Date().toISOString()
+                                                        }]
+                                                    });
+                                                    nameInput.value = '';
+                                                    urlInput.value = '';
+                                                }
+                                            }}
+                                            style={{
+                                                padding: '8px 12px', borderRadius: 'var(--radius-md)', border: 'none',
+                                                backgroundColor: 'var(--color-secondary)', color: 'var(--color-text-main)', cursor: 'pointer'
+                                            }}
+                                        >
+                                            <Plus size={16} /> Link hinzufügen
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-lg)' }}>

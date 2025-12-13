@@ -151,6 +151,10 @@ export const DataService = {
         }
     },
 
+    async updateProduct(product: Product): Promise<void> {
+        return this.saveProduct(product);
+    },
+
     async deleteProduct(id: string): Promise<void> {
         const supabase = getSupabaseClient();
         if (supabase) {
@@ -249,5 +253,30 @@ export const DataService = {
             const suppliers = StorageService.getSuppliers().filter(s => s.id !== id);
             StorageService.saveSuppliers(suppliers);
         }
+    },
+
+    async uploadFile(file: File): Promise<string | null> {
+        const supabase = getSupabaseClient();
+        if (!supabase) return null;
+
+        const timestamp = new Date().getTime();
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${timestamp}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('supplier-documents')
+            .upload(filePath, file);
+
+        if (uploadError) {
+            console.error('Error uploading file:', uploadError);
+            throw uploadError;
+        }
+
+        const { data } = supabase.storage
+            .from('supplier-documents')
+            .getPublicUrl(filePath);
+
+        return data.publicUrl;
     }
 };

@@ -88,7 +88,7 @@ export const StorageService = {
 
     getSettings: (): EmailSettings => {
         const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-        return stored ? JSON.parse(stored) : { serviceId: '', templateId: '', publicKey: '' };
+        return stored ? JSON.parse(stored) : { serviceId: '', templateId: '', publicKey: '', enableStockManagement: true };
     },
 
     saveSettings: (settings: EmailSettings) => {
