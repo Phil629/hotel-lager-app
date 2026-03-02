@@ -1623,6 +1623,23 @@ export const Products: React.FC = () => {
 
 
 
+                                {/* Supplier Note Warning */}
+                                {(() => {
+                                    const supplier = suppliers.find(s => s.id === selectedProductForOrder.supplierId);
+                                    if (supplier && supplier.showNoteOnOrder && supplier.notes) {
+                                        return (
+                                            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                <div>
+                                                    <strong>Wichtige Lieferantennotiz:</strong><br />
+                                                    {supplier.notes}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+
                                 {/* Supplier Documents */}
                                 {(() => {
                                     const supplier = suppliers.find(s => s.id === selectedProductForOrder.supplierId);

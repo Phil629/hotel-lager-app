@@ -208,6 +208,17 @@ export const DataService = {
         }
     },
 
+    async deleteOrder(id: string): Promise<void> {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+            const { error } = await supabase.from('orders').delete().eq('id', id);
+            if (error) throw error;
+        } else {
+            const orders = StorageService.getOrders().filter(o => o.id !== id);
+            StorageService.saveOrders(orders);
+        }
+    },
+
     async getSuppliers(): Promise<Supplier[]> {
         const supabase = getSupabaseClient();
         if (supabase) {

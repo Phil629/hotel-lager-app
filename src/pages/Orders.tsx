@@ -1253,8 +1253,8 @@ export const Orders: React.FC = () => {
                                                 ...oneTimeOrder,
                                                 supplierId: supplierId || '',
                                                 supplierName: supplier ? supplier.name : oneTimeOrder.supplierName,
-                                                supplierEmail: supplier ? supplier.email : oneTimeOrder.supplierEmail,
-                                                supplierPhone: supplier?.phone || oneTimeOrder.supplierPhone
+                                                supplierEmail: supplier ? supplier.email : '',
+                                                supplierPhone: supplier ? (supplier.phone || '') : ''
                                             });
                                         }}
                                         style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
@@ -1674,36 +1674,58 @@ export const Orders: React.FC = () => {
                                     />
                                 </div>
 
-                                <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'flex-end', marginTop: 'var(--spacing-sm)' }}>
-                                    <button
-                                        onClick={() => setEditingOrder(null)}
-                                        style={{
-                                            padding: 'var(--spacing-sm) var(--spacing-md)',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--color-border)',
-                                            backgroundColor: 'transparent',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        Abbrechen
-                                    </button>
+                                <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'space-between', marginTop: 'var(--spacing-sm)' }}>
                                     <button
                                         onClick={async () => {
-                                            await DataService.updateOrder(editingOrder);
-                                            setEditingOrder(null);
-                                            loadOrders();
+                                            if (window.confirm('Möchten Sie diese Bestellung wirklich löschen?')) {
+                                                await DataService.deleteOrder(editingOrder.id);
+                                                setEditingOrder(null);
+                                                loadOrders();
+                                                setNotification({ message: 'Bestellung erfolgreich gelöscht.', type: 'success' });
+                                            }
                                         }}
                                         style={{
                                             padding: 'var(--spacing-sm) var(--spacing-md)',
                                             borderRadius: 'var(--radius-md)',
                                             border: 'none',
-                                            backgroundColor: 'var(--color-primary)',
+                                            backgroundColor: 'var(--color-danger)',
                                             color: 'white',
                                             cursor: 'pointer'
                                         }}
                                     >
-                                        Speichern
+                                        Löschen
                                     </button>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+                                        <button
+                                            onClick={() => setEditingOrder(null)}
+                                            style={{
+                                                padding: 'var(--spacing-sm) var(--spacing-md)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--color-border)',
+                                                backgroundColor: 'transparent',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Abbrechen
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                await DataService.updateOrder(editingOrder);
+                                                setEditingOrder(null);
+                                                loadOrders();
+                                            }}
+                                            style={{
+                                                padding: 'var(--spacing-sm) var(--spacing-md)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: 'none',
+                                                backgroundColor: 'var(--color-primary)',
+                                                color: 'white',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Speichern
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
