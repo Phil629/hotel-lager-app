@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare } from 'lucide-react';
+import { CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2 } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 import emailjs from '@emailjs/browser';
 
@@ -13,6 +13,7 @@ export const Orders: React.FC = () => {
     const [defectNotes, setDefectNotes] = useState('');
     const [deliveryDateModalOrder, setDeliveryDateModalOrder] = useState<Order | null>(null);
     const [deliveryDate, setDeliveryDate] = useState('');
+    const [deliveryTrackingLink, setDeliveryTrackingLink] = useState('');
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
 
     // Create Order Modal State
@@ -26,6 +27,8 @@ export const Orders: React.FC = () => {
     const [orderNotes, setOrderNotes] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
     const [emailBody, setEmailBody] = useState('');
+    const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
+    const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
     // Pagination State
     const [visibleReceivedCount, setVisibleReceivedCount] = useState(10);
@@ -82,6 +85,7 @@ export const Orders: React.FC = () => {
     const handleProductSelect = (product: Product) => {
         setSelectedProduct(product);
         setOrderQuantity(1); // Reset quantity locally
+        setIsOrderEmailExpanded(product.preferredOrderMethod === 'email');
 
         // Pre-fill email template
         const supplier = suppliers.find(s => s.id === product.supplierId);
@@ -286,18 +290,21 @@ export const Orders: React.FC = () => {
     const openDeliveryDateModal = (order: Order) => {
         setDeliveryDateModalOrder(order);
         setDeliveryDate(order.expectedDeliveryDate || '');
+        setDeliveryTrackingLink(order.trackingLink || '');
     };
 
     const closeDeliveryDateModal = () => {
         setDeliveryDateModalOrder(null);
         setDeliveryDate('');
+        setDeliveryTrackingLink('');
     };
 
     const saveDeliveryDate = async () => {
         if (deliveryDateModalOrder) {
             const updatedOrder: Order = {
                 ...deliveryDateModalOrder,
-                expectedDeliveryDate: deliveryDate || undefined
+                expectedDeliveryDate: deliveryDate || undefined,
+                trackingLink: deliveryTrackingLink || undefined
             };
             await DataService.updateOrder(updatedOrder);
             loadOrders();
@@ -597,10 +604,16 @@ export const Orders: React.FC = () => {
                             <div style={{ marginTop: 'var(--spacing-xs)', display: 'flex', gap: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)' }}>
                                 {order.supplierPhone && (
                                     <a href={`tel:${order.supplierPhone}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <Phone size={14} />
-                                        {order.supplierPhone}
                                     </a>
                                 )}
+                            </div>
+                        )}
+                        {order.trackingLink && (
+                            <div style={{ marginTop: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: 'var(--font-size-sm)' }}>
+                                <ExternalLink size={14} />
+                                <a href={order.trackingLink} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}>
+                                    Sendungsverfolgung
+                                </a>
                             </div>
                         )}
                     </div>
@@ -684,7 +697,26 @@ export const Orders: React.FC = () => {
                                 }}
                             >
                                 <Calendar size={16} />
-                                Liefertermin
+                                Liefertermin/ -link
+                            </button>
+                            <button
+                                onClick={() => setEditingOrder(order)}
+                                style={{
+                                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-border)',
+                                    backgroundColor: 'white',
+                                    color: 'var(--color-text-main)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 'var(--spacing-xs)',
+                                    fontSize: 'var(--font-size-sm)',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                <Edit2 size={16} />
+                                Bearbeiten
                             </button>
                         </>
                     )}
@@ -924,6 +956,22 @@ export const Orders: React.FC = () => {
                                             <button onClick={() => setSelectedProduct(null)} style={{ color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Ändern</button>
                                         </div>
 
+                                        {(() => {
+                                            const supplier = suppliers.find(s => s.id === selectedProduct.supplierId);
+                                            if (supplier && supplier.showNoteOnOrder && supplier.notes) {
+                                                return (
+                                                    <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                        <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                        <div>
+                                                            <strong>Wichtige Lieferantennotiz:</strong><br />
+                                                            {supplier.notes}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+
                                         {/* Contact Info Display */}
 
 
@@ -962,6 +1010,43 @@ export const Orders: React.FC = () => {
 
                                         {/* Order Methods Wrapper */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
+                                            {(selectedProduct.supplierPhone || (suppliers.find(s => s.id === selectedProduct.supplierId)?.phone)) && (
+                                                <div style={{
+                                                    backgroundColor: selectedProduct.preferredOrderMethod === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                                    padding: 'var(--spacing-md)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: selectedProduct.preferredOrderMethod === 'phone' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                    order: selectedProduct.preferredOrderMethod === 'phone' ? -1 : 0
+                                                }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                        Telefonische Bestellung:
+                                                        {selectedProduct.preferredOrderMethod === 'phone' && (
+                                                            <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
+                                                        )}
+                                                    </label>
+                                                    <a
+                                                        href={`tel:${selectedProduct.supplierPhone || suppliers.find(s => s.id === selectedProduct.supplierId)?.phone}`}
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: 'var(--spacing-sm)',
+                                                            padding: 'var(--spacing-sm)',
+                                                            borderRadius: 'var(--radius-sm)',
+                                                            border: '1px solid var(--color-border)',
+                                                            backgroundColor: 'var(--color-surface)',
+                                                            color: 'var(--color-text-main)',
+                                                            cursor: 'pointer',
+                                                            fontWeight: 500,
+                                                            textDecoration: 'none'
+                                                        }}
+                                                    >
+                                                        <Phone size={16} />
+                                                        {selectedProduct.supplierPhone || suppliers.find(s => s.id === selectedProduct.supplierId)?.phone}
+                                                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>(Anrufen)</span>
+                                                    </a>
+                                                </div>
+                                            )}
                                             {selectedProduct.orderUrl && (
                                                 <div style={{
                                                     backgroundColor: selectedProduct.preferredOrderMethod === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
@@ -1002,66 +1087,92 @@ export const Orders: React.FC = () => {
                                             )}
 
                                             {selectedProduct.emailOrderAddress && !selectedProduct.autoOrder && (
-                                                <div style={{
-                                                    backgroundColor: selectedProduct.preferredOrderMethod === 'email' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
-                                                    padding: 'var(--spacing-md)',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    border: selectedProduct.preferredOrderMethod === 'email' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                    order: selectedProduct.preferredOrderMethod === 'email' ? -1 : 0
-                                                }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                                                        Email Vorschau & Bearbeitung:
-                                                        {selectedProduct.preferredOrderMethod === 'email' && (
-                                                            <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
-                                                        )}
-                                                    </label>
+                                                <>
+                                                    {selectedProduct.preferredOrderMethod !== 'email' && !isOrderEmailExpanded ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setIsOrderEmailExpanded(true)}
+                                                            style={{
+                                                                width: '100%',
+                                                                padding: 'var(--spacing-md)',
+                                                                borderRadius: 'var(--radius-md)',
+                                                                border: '1px solid var(--color-border)',
+                                                                backgroundColor: 'var(--color-background)',
+                                                                color: 'var(--color-text-muted)',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                gap: '8px',
+                                                                fontWeight: 500
+                                                            }}
+                                                        >
+                                                            <Mail size={16} />
+                                                            Email-Bestellung öffnen
+                                                        </button>
+                                                    ) : (
+                                                        <div style={{
+                                                            backgroundColor: selectedProduct.preferredOrderMethod === 'email' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                                            padding: 'var(--spacing-md)',
+                                                            borderRadius: 'var(--radius-md)',
+                                                            border: selectedProduct.preferredOrderMethod === 'email' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                            order: selectedProduct.preferredOrderMethod === 'email' ? -1 : 0
+                                                        }}>
+                                                            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                                Email Vorschau & Bearbeitung:
+                                                                {selectedProduct.preferredOrderMethod === 'email' && (
+                                                                    <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
+                                                                )}
+                                                            </label>
 
-                                                    <div style={{ marginBottom: 'var(--spacing-sm)' }}>
-                                                        <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Betreff</label>
-                                                        <input
-                                                            type="text"
-                                                            value={emailSubject}
-                                                            onChange={e => setEmailSubject(e.target.value)}
-                                                            style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                        />
-                                                    </div>
+                                                            <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                                <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Betreff</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={emailSubject}
+                                                                    onChange={e => setEmailSubject(e.target.value)}
+                                                                    style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                                />
+                                                            </div>
 
-                                                    <div style={{ marginBottom: 'var(--spacing-sm)' }}>
-                                                        <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Nachricht</label>
-                                                        <textarea
-                                                            value={emailBody}
-                                                            onChange={e => setEmailBody(e.target.value)}
-                                                            rows={5}
-                                                            style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                                        />
-                                                    </div>
+                                                            <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                                <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Nachricht</label>
+                                                                <textarea
+                                                                    value={emailBody}
+                                                                    onChange={e => setEmailBody(e.target.value)}
+                                                                    rows={5}
+                                                                    style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                                />
+                                                            </div>
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const encodedSubject = encodeURIComponent(emailSubject);
-                                                            const encodedBody = encodeURIComponent(emailBody);
-                                                            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedProduct.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
-                                                        }}
-                                                        style={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            gap: 'var(--spacing-sm)',
-                                                            padding: 'var(--spacing-sm)',
-                                                            borderRadius: 'var(--radius-sm)',
-                                                            border: '1px solid var(--color-border)',
-                                                            backgroundColor: '#EA4335',
-                                                            color: 'white',
-                                                            cursor: 'pointer',
-                                                            fontWeight: 500,
-                                                            width: '100%'
-                                                        }}
-                                                    >
-                                                        <Mail size={16} />
-                                                        In Gmail öffnen
-                                                    </button>
-                                                </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const encodedSubject = encodeURIComponent(emailSubject);
+                                                                    const encodedBody = encodeURIComponent(emailBody);
+                                                                    window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedProduct.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
+                                                                }}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    gap: 'var(--spacing-sm)',
+                                                                    padding: 'var(--spacing-sm)',
+                                                                    borderRadius: 'var(--radius-sm)',
+                                                                    border: '1px solid var(--color-border)',
+                                                                    backgroundColor: '#EA4335',
+                                                                    color: 'white',
+                                                                    cursor: 'pointer',
+                                                                    fontWeight: 500,
+                                                                    width: '100%'
+                                                                }}
+                                                            >
+                                                                <Mail size={16} />
+                                                                In Gmail öffnen
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
 
@@ -1155,6 +1266,21 @@ export const Orders: React.FC = () => {
                                     </select>
                                 </div>
 
+                                {(() => {
+                                    const supplier = suppliers.find(s => s.id === oneTimeOrder.supplierId);
+                                    if (supplier && supplier.showNoteOnOrder && supplier.notes) {
+                                        return (
+                                            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                <div>
+                                                    <strong>Wichtige Lieferantennotiz:</strong><br />
+                                                    {supplier.notes}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
 
                                 {/* Collapsible Supplier Details */}
                                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
@@ -1417,6 +1543,30 @@ export const Orders: React.FC = () => {
                                     Leer lassen, um Liefertermin zu entfernen
                                 </p>
                             </div>
+                            <div style={{ marginBottom: 'var(--spacing-md)' }}>
+                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                                    Tracking Link / Sendungsverfolgung
+                                </label>
+                                <input
+                                    type="url"
+                                    value={deliveryTrackingLink}
+                                    onChange={e => setDeliveryTrackingLink(e.target.value)}
+                                    onBlur={e => {
+                                        const val = e.target.value;
+                                        if (val && !/^https?:\/\//i.test(val)) {
+                                            setDeliveryTrackingLink(`https://${val}`);
+                                        }
+                                    }}
+                                    placeholder="https://..."
+                                    style={{
+                                        width: '100%',
+                                        padding: 'var(--spacing-sm)',
+                                        borderRadius: 'var(--radius-sm)',
+                                        border: '1px solid var(--color-border)',
+                                        fontSize: 'var(--font-size-sm)'
+                                    }}
+                                />
+                            </div>
                             <div style={{ display: 'flex', gap: 'var(--spacing-sm)', justifyContent: 'flex-end' }}>
                                 <button
                                     onClick={closeDeliveryDateModal}
@@ -1444,6 +1594,117 @@ export const Orders: React.FC = () => {
                                 >
                                     Speichern
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                editingOrder && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 1100
+                    }}>
+                        <div style={{
+                            backgroundColor: 'var(--color-surface)',
+                            padding: 'var(--spacing-xl)',
+                            borderRadius: 'var(--radius-lg)',
+                            width: '100%',
+                            maxWidth: '500px',
+                            boxShadow: 'var(--shadow-lg)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+                                <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Bestellung bearbeiten</h3>
+                                <button onClick={() => setEditingOrder(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                                        Menge
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={editingOrder.quantity}
+                                        onChange={e => setEditingOrder({ ...editingOrder, quantity: Number(e.target.value) })}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                                        Notizen
+                                    </label>
+                                    <textarea
+                                        rows={3}
+                                        value={editingOrder.notes || ''}
+                                        onChange={e => setEditingOrder({ ...editingOrder, notes: e.target.value })}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                                        Tracking Link / Sendungsverfolgung
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={editingOrder.trackingLink || ''}
+                                        onChange={e => setEditingOrder({ ...editingOrder, trackingLink: e.target.value })}
+                                        onBlur={e => {
+                                            const val = e.target.value;
+                                            if (val && !/^https?:\/\//i.test(val)) {
+                                                setEditingOrder({ ...editingOrder, trackingLink: `https://${val}` });
+                                            }
+                                        }}
+                                        placeholder="https://..."
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'flex-end', marginTop: 'var(--spacing-sm)' }}>
+                                    <button
+                                        onClick={() => setEditingOrder(null)}
+                                        style={{
+                                            padding: 'var(--spacing-sm) var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--color-border)',
+                                            backgroundColor: 'transparent',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Abbrechen
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            await DataService.updateOrder(editingOrder);
+                                            setEditingOrder(null);
+                                            loadOrders();
+                                        }}
+                                        style={{
+                                            padding: 'var(--spacing-sm) var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: 'none',
+                                            backgroundColor: 'var(--color-primary)',
+                                            color: 'white',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Speichern
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -18,7 +18,8 @@ export const Suppliers: React.FC = () => {
         email: '',
         phone: '',
         url: '',
-        notes: ''
+        notes: '',
+        showNoteOnOrder: false
     });
 
     useEffect(() => {
@@ -72,6 +73,7 @@ export const Suppliers: React.FC = () => {
                 phone: formData.phone,
                 url: formData.url,
                 notes: formData.notes,
+                showNoteOnOrder: formData.showNoteOnOrder,
                 documents: formData.documents || []
             } as Supplier;
 
@@ -182,6 +184,11 @@ export const Suppliers: React.FC = () => {
                                     <span>Kontakt: {supplier.contactName}</span>
                                 )}
                             </div>
+                            {supplier.notes && (
+                                <div style={{ marginTop: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
+                                    Notiz: {supplier.notes}
+                                </div>
+                            )}
                         </div>
                         <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
                             <button
@@ -307,6 +314,19 @@ export const Suppliers: React.FC = () => {
                                     style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', minHeight: '80px', fontFamily: 'inherit' }}
                                     placeholder="Interne Notizen zum Lieferanten..."
                                 />
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.showNoteOnOrder || false}
+                                        onChange={e => setFormData({ ...formData, showNoteOnOrder: e.target.checked })}
+                                    />
+                                    <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                                        Notiz beim Bestellen anzeigen?
+                                    </span>
+                                </label>
                             </div>
 
                             {/* Documents Section */}
@@ -486,8 +506,8 @@ export const Suppliers: React.FC = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div >
             )}
-        </div>
+        </div >
     );
 };

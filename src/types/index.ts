@@ -9,6 +9,7 @@ export interface Supplier {
   emailSubjectTemplate?: string;
   emailBodyTemplate?: string;
   documents?: { name: string; url: string; date?: string; }[];
+  showNoteOnOrder?: boolean;
 }
 
 export interface Product {
@@ -24,7 +25,8 @@ export interface Product {
   supplierId?: string; // Link to Supplier
   autoOrder?: boolean;
   notes?: string;
-  preferredOrderMethod?: 'email' | 'link';
+  preferredOrderMethod?: 'email' | 'link' | 'phone';
+  productNumber?: string; // e.g. EAN or internal sku
 
   // Legacy fields (will be deprecated in favor of Supplier relation, but kept for now)
   emailOrderAddress?: string;
@@ -45,6 +47,7 @@ export interface Order {
   defectReportedAt?: string; // ISO string
   defectResolved?: boolean; // New: Track if defect is resolved
   expectedDeliveryDate?: string; // ISO string
+  trackingLink?: string; // New: Tracking URL
   supplierName?: string; // New: Supplier name for one-time orders
   orderNumber?: string; // New: Order number for tracking
   price?: number; // New: Price of the order
