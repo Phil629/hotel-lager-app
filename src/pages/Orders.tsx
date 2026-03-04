@@ -1252,7 +1252,7 @@ export const Orders: React.FC = () => {
                                             setOneTimeOrder({
                                                 ...oneTimeOrder,
                                                 supplierId: supplierId || '',
-                                                supplierName: supplier ? supplier.name : oneTimeOrder.supplierName,
+                                                supplierName: supplier ? supplier.name : '',
                                                 supplierEmail: supplier ? supplier.email : '',
                                                 supplierPhone: supplier ? (supplier.phone || '') : ''
                                             });

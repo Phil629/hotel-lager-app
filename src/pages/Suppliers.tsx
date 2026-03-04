@@ -51,6 +51,7 @@ export const Suppliers: React.FC = () => {
                 phone: '',
                 url: '',
                 notes: '',
+                showNoteOnOrder: false,
                 documents: []
             });
         }

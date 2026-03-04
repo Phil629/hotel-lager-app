@@ -10,7 +10,8 @@ const toSupabaseSupplier = (s: Supplier) => ({
     email: s.email,
     phone: s.phone,
     url: s.url,
-    notes: s.notes
+    notes: s.notes,
+    show_note_on_order: s.showNoteOnOrder
 });
 
 const fromSupabaseSupplier = (s: any): Supplier => ({
@@ -20,7 +21,8 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     email: s.email,
     phone: s.phone,
     url: s.url,
-    notes: s.notes
+    notes: s.notes,
+    showNoteOnOrder: s.show_note_on_order
 });
 
 const toSupabaseProduct = (p: Product) => ({
