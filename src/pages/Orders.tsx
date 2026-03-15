@@ -462,6 +462,21 @@ export const Orders: React.FC = () => {
                                 "{order.notes}"
                             </div>
                         )}
+                        {(() => {
+                            const supplier = suppliers.find((s: Supplier) => s.name === order.supplierName);
+                            if (supplier && supplier.showNoteOnOrder && supplier.notes) {
+                                return (
+                                    <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '8px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--spacing-xs)', marginBottom: 'var(--spacing-xs)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
+                                        <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                        <div>
+                                            <strong>Lieferantennotiz:</strong><br />
+                                            {supplier.notes}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
                         {order.supplierEmail && (
                             <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Mail size={12} />
@@ -1249,13 +1264,23 @@ export const Orders: React.FC = () => {
                                         onChange={e => {
                                             const supplierId = e.target.value;
                                             const supplier = suppliers.find(s => s.id === supplierId);
-                                            setOneTimeOrder({
-                                                ...oneTimeOrder,
-                                                supplierId: supplierId || '',
-                                                supplierName: supplier ? supplier.name : '',
-                                                supplierEmail: supplier ? supplier.email : '',
-                                                supplierPhone: supplier ? (supplier.phone || '') : ''
-                                            });
+                                            if (supplier) {
+                                                setOneTimeOrder({
+                                                    ...oneTimeOrder,
+                                                    supplierId: supplierId,
+                                                    supplierName: supplier.name,
+                                                    supplierEmail: supplier.email,
+                                                    supplierPhone: supplier.phone || ''
+                                                });
+                                            } else {
+                                                setOneTimeOrder({
+                                                    ...oneTimeOrder,
+                                                    supplierId: '',
+                                                    supplierName: '',
+                                                    supplierEmail: '',
+                                                    supplierPhone: ''
+                                                });
+                                            }
                                         }}
                                         style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                     >

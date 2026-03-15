@@ -23,6 +23,7 @@ export const Products: React.FC = () => {
         price: 0,
         autoOrder: false,
         notes: '',
+        showNoteOnOrder: false,
         preferredOrderMethod: 'email'
     });
     const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
@@ -200,6 +201,7 @@ export const Products: React.FC = () => {
             autoOrder: newProduct.autoOrder,
             supplierPhone: newProduct.supplierPhone,
             notes: newProduct.notes,
+            showNoteOnOrder: newProduct.showNoteOnOrder,
             preferredOrderMethod: newProduct.preferredOrderMethod
         };
 
@@ -309,7 +311,7 @@ export const Products: React.FC = () => {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, price: 0, autoOrder: false, notes: '', preferredOrderMethod: 'email' });
+        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, price: 0, autoOrder: false, notes: '', showNoteOnOrder: false, preferredOrderMethod: 'email' });
         setEditingId(null);
         // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
@@ -525,6 +527,17 @@ export const Products: React.FC = () => {
                                         <div>
                                             <div style={{ fontWeight: 600, fontSize: 'var(--font-size-lg)' }}>{product.name}</div>
                                             <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>{product.category}</div>
+                                            {(() => {
+                                                const supplier = suppliers.find(s => s.id === product.supplierId);
+                                                if (supplier && supplier.showNoteOnOrder && supplier.notes) {
+                                                    return (
+                                                        <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
+                                                            <strong>Notiz:</strong> {supplier.notes}
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
@@ -648,6 +661,17 @@ export const Products: React.FC = () => {
                                                 <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
                                                     {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
                                                 </div>
+                                                {(() => {
+                                                    const supplier = suppliers.find(s => s.id === product.supplierId);
+                                                    if (supplier && supplier.showNoteOnOrder && supplier.notes) {
+                                                        return (
+                                                            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '8px', border: '1px solid #ffeeba', fontSize: '12px' }}>
+                                                                <strong>Notiz:</strong> {supplier.notes}
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                             </td>
                                             <td style={{ padding: 'var(--spacing-md)', textAlign: 'right' }}>
                                                 <div style={{
@@ -1309,7 +1333,7 @@ export const Products: React.FC = () => {
 
                                 <div>
                                     <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Notizen</label>
-                                    <div style={{ position: 'relative' }}>
+                                    <div style={{ position: 'relative', marginBottom: 'var(--spacing-xs)' }}>
                                         <MessageSquare size={16} style={{ position: 'absolute', top: '10px', left: '10px', color: 'var(--color-text-muted)' }} />
                                         <textarea
                                             rows={3}
@@ -1319,6 +1343,16 @@ export const Products: React.FC = () => {
                                             style={{ width: '100%', padding: 'var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) 36px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
                                         />
                                     </div>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '4px' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={newProduct.showNoteOnOrder || false}
+                                            onChange={e => setNewProduct({ ...newProduct, showNoteOnOrder: e.target.checked })}
+                                        />
+                                        <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: 'var(--color-text-main)' }}>
+                                            Wichtige Produktnotiz beim Bestellen anzeigen
+                                        </span>
+                                    </label>
                                 </div>
 
 
@@ -1622,6 +1656,22 @@ export const Products: React.FC = () => {
                                 </div>
 
 
+
+                                {/* Product Note Warning */}
+                                {(() => {
+                                    if (selectedProductForOrder.showNoteOnOrder && selectedProductForOrder.notes) {
+                                        return (
+                                            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                <div>
+                                                    <strong>Wichtige Produktnotiz:</strong><br />
+                                                    {selectedProductForOrder.notes}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
 
                                 {/* Supplier Note Warning */}
                                 {(() => {

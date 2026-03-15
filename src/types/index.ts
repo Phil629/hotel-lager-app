@@ -25,6 +25,7 @@ export interface Product {
   supplierId?: string; // Link to Supplier
   autoOrder?: boolean;
   notes?: string;
+  showNoteOnOrder?: boolean;
   preferredOrderMethod?: 'email' | 'link' | 'phone';
   productNumber?: string; // e.g. EAN or internal sku
 

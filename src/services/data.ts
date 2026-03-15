@@ -41,6 +41,7 @@ const toSupabaseProduct = (p: Product) => ({
     order_url: p.orderUrl,
     supplier_phone: p.supplierPhone,
     notes: p.notes,
+    show_note_on_order: p.showNoteOnOrder,
     preferred_order_method: p.preferredOrderMethod
 });
 
@@ -60,6 +61,7 @@ const fromSupabaseProduct = (p: any): Product => ({
     orderUrl: p.order_url,
     supplierPhone: p.supplier_phone,
     notes: p.notes,
+    showNoteOnOrder: p.show_note_on_order,
     preferredOrderMethod: p.preferred_order_method
 });
 
