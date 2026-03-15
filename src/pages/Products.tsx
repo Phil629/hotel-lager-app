@@ -532,12 +532,17 @@ export const Products: React.FC = () => {
                                                 if (supplier && supplier.showNoteOnOrder && supplier.notes) {
                                                     return (
                                                         <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
-                                                            <strong>Notiz:</strong> {supplier.notes}
+                                                            <strong>Lieferant:</strong> {supplier.notes}
                                                         </div>
                                                     );
                                                 }
                                                 return null;
                                             })()}
+                                            {product.showNoteOnOrder && product.notes && (
+                                                <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
+                                                    <strong>Produktnotiz:</strong> {product.notes}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
@@ -666,12 +671,17 @@ export const Products: React.FC = () => {
                                                     if (supplier && supplier.showNoteOnOrder && supplier.notes) {
                                                         return (
                                                             <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '8px', border: '1px solid #ffeeba', fontSize: '12px' }}>
-                                                                <strong>Notiz:</strong> {supplier.notes}
+                                                                <strong>Lieferant:</strong> {supplier.notes}
                                                             </div>
                                                         );
                                                     }
                                                     return null;
                                                 })()}
+                                                {product.showNoteOnOrder && product.notes && (
+                                                    <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '8px', border: '1px solid #ffeeba', fontSize: '12px' }}>
+                                                        <strong>Produktnotiz:</strong> {product.notes}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td style={{ padding: 'var(--spacing-md)', textAlign: 'right' }}>
                                                 <div style={{
