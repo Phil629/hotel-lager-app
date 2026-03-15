@@ -972,6 +972,21 @@ export const Orders: React.FC = () => {
                                         </div>
 
                                         {(() => {
+                                            if (selectedProduct.showNoteOnOrder && selectedProduct.notes) {
+                                                return (
+                                                    <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                        <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                        <div>
+                                                            <strong>Wichtige Produktnotiz:</strong><br />
+                                                            {selectedProduct.notes}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+
+                                        {(() => {
                                             const supplier = suppliers.find(s => s.id === selectedProduct.supplierId);
                                             if (supplier && supplier.showNoteOnOrder && supplier.notes) {
                                                 return (
