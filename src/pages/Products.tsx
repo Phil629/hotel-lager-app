@@ -546,14 +546,34 @@ export const Products: React.FC = () => {
                                         </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
-                                        <div style={{
-                                            fontSize: 'var(--font-size-xl)',
-                                            fontWeight: 700,
-                                            color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'inherit'
-                                        }}>
-                                            {product.stock}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                            <button
+                                                onClick={() => handleStockUpdate(product, Math.max(0, product.stock - 1))}
+                                                style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-background)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '16px', color: 'var(--color-text-muted)' }}
+                                            >−</button>
+                                            <input
+                                                type="number"
+                                                value={product.stock}
+                                                min={0}
+                                                onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))}
+                                                style={{
+                                                    width: '52px',
+                                                    textAlign: 'center',
+                                                    fontSize: 'var(--font-size-xl)',
+                                                    fontWeight: 700,
+                                                    border: '1px solid var(--color-border)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    padding: '2px 4px',
+                                                    color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'inherit',
+                                                    background: 'var(--color-surface)'
+                                                }}
+                                            />
+                                            <button
+                                                onClick={() => handleStockUpdate(product, product.stock + 1)}
+                                                style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-background)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '16px', color: 'var(--color-primary)' }}
+                                            >+</button>
                                         </div>
-                                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{product.unit}</div>
+                                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', textAlign: 'center', marginTop: '2px' }}>{product.unit}</div>
                                         {product.price && (
                                             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '4px' }}>
                                                 Ø {(product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
@@ -684,15 +704,36 @@ export const Products: React.FC = () => {
                                                 )}
                                             </td>
                                             <td style={{ padding: 'var(--spacing-md)', textAlign: 'right' }}>
-                                                <div style={{
-                                                    fontSize: 'var(--font-size-lg)',
-                                                    fontWeight: 700,
-                                                    color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'inherit'
-                                                }}>
-                                                    {product.stock} {product.unit}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                                    <button
+                                                        onClick={() => handleStockUpdate(product, Math.max(0, product.stock - 1))}
+                                                        style={{ width: '26px', height: '26px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-background)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    >−</button>
+                                                    <input
+                                                        type="number"
+                                                        value={product.stock}
+                                                        min={0}
+                                                        onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))}
+                                                        style={{
+                                                            width: '56px',
+                                                            textAlign: 'center',
+                                                            fontSize: 'var(--font-size-lg)',
+                                                            fontWeight: 700,
+                                                            border: '1px solid var(--color-border)',
+                                                            borderRadius: 'var(--radius-sm)',
+                                                            padding: '2px 4px',
+                                                            color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'inherit',
+                                                            background: 'var(--color-surface)'
+                                                        }}
+                                                    />
+                                                    <button
+                                                        onClick={() => handleStockUpdate(product, product.stock + 1)}
+                                                        style={{ width: '26px', height: '26px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-background)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    >+</button>
                                                 </div>
+                                                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', textAlign: 'center', marginTop: '2px' }}>{product.unit}</div>
                                                 {product.price && (
-                                                    <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                                                    <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginTop: '4px', textAlign: 'center' }}>
                                                         = {(product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                                                     </div>
                                                 )}
