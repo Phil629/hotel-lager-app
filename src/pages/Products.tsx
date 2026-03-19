@@ -1264,7 +1264,7 @@ export const Products: React.FC = () => {
                                                                                 setNewSupplier({ ...newSupplier, notes: updated });
                                                                             }}
                                                                         />
-                                                                        <span style={{ fontSize: 'var(--font-size-xs)' }}>Beim Anlegen anzeigen</span>
+                                                                        <span style={{ fontSize: 'var(--font-size-xs)' }}>Beim Anlegen einer Bestellung anzeigen</span>
                                                                     </label>
                                                                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                                                         <input
@@ -1508,7 +1508,7 @@ export const Products: React.FC = () => {
                                                             setNewProduct({ ...newProduct, notes: updated });
                                                         }}
                                                     />
-                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}>Beim Anlegen der Bestellung anzeigen</span>
+                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}>Beim Anlegen einer Bestellung anzeigen</span>
                                                 </label>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                                     <input

@@ -351,7 +351,7 @@ export const Suppliers: React.FC = () => {
                                                         setFormData({ ...formData, notes: updated });
                                                     }}
                                                 />
-                                                <span style={{ fontSize: 'var(--font-size-sm)' }}>Beim Anlegen anzeigen</span>
+                                                <span style={{ fontSize: 'var(--font-size-sm)' }}>Beim Anlegen einer Bestellung anzeigen</span>
                                             </label>
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                                 <input
