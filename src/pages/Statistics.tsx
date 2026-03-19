@@ -78,6 +78,18 @@ export const Statistics: React.FC = () => {
 
     const selectedProductData = selectedProductId ? productStats.find(p => p.id === selectedProductId) : null;
 
+    // Local state for editable fields in "Aktuell eingestellter Auto-Verbrauch"
+    const [editConsumptionAmount, setEditConsumptionAmount] = useState<number | ''>('');
+    const [editConsumptionPeriod, setEditConsumptionPeriod] = useState<'day' | 'week' | ''>('');
+
+    // Update local state when a new product is selected
+    useEffect(() => {
+        if (selectedProductData) {
+            setEditConsumptionAmount(selectedProductData.consumptionAmount ?? '');
+            setEditConsumptionPeriod(selectedProductData.consumptionPeriod ?? '');
+        }
+    }, [selectedProductData?.id]);
+
     const handleAdoptSuggestion = async (product: Product, suggestedWeekly: number) => {
         setIsSaving(true);
         try {
@@ -85,6 +97,23 @@ export const Statistics: React.FC = () => {
                 ...product,
                 consumptionAmount: suggestedWeekly,
                 consumptionPeriod: 'week' as const,
+                lastConsumptionDate: new Date().toISOString()
+            };
+            await DataService.saveProduct(updatedProduct);
+            await loadData();
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSaveManualConsumption = async () => {
+        if (!selectedProductData) return;
+        setIsSaving(true);
+        try {
+            const updatedProduct = {
+                ...selectedProductData,
+                consumptionAmount: editConsumptionAmount === '' ? undefined : editConsumptionAmount,
+                consumptionPeriod: editConsumptionPeriod === '' ? undefined : editConsumptionPeriod,
                 lastConsumptionDate: new Date().toISOString()
             };
             await DataService.saveProduct(updatedProduct);
@@ -211,14 +240,63 @@ export const Statistics: React.FC = () => {
                             </div>
                         </div>
 
-                        {selectedProductData.consumptionAmount && selectedProductData.consumptionPeriod && (
-                           <div style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', borderLeft: '4px solid var(--color-success)' }}>
-                                <h4 style={{ margin: '0 0 8px 0' }}>Aktuell eingestellter Auto-Verbrauch</h4>
-                                <p style={{ margin: 0, color: 'var(--color-text-main)' }}>
-                                    Dieses Produkt reduziert seinen Bestand automatisch um <strong>{selectedProductData.consumptionAmount} {selectedProductData.unit}</strong> pro <strong>{selectedProductData.consumptionPeriod === 'day' ? 'Tag' : 'Woche'}</strong>.
-                                </p>
-                           </div> 
-                        )}
+                        <div style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', borderLeft: '4px solid var(--color-success)' }}>
+                            <h4 style={{ margin: '0 0 16px 0' }}>Aktuell eingestellter Auto-Verbrauch</h4>
+                            
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Menge einstellen</label>
+                                    <input
+                                        type="number"
+                                        step="1"
+                                        min="0"
+                                        value={editConsumptionAmount}
+                                        onChange={e => setEditConsumptionAmount(parseFloat(e.target.value) || '')}
+                                        placeholder="Menge (z.B. 1)"
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Zeitraum einstellen</label>
+                                    <select
+                                        value={editConsumptionPeriod}
+                                        onChange={e => setEditConsumptionPeriod(e.target.value as 'day' | 'week' | '')}
+                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                    >
+                                        <option value="">-- Keiner --</option>
+                                        <option value="day">pro Tag</option>
+                                        <option value="week">pro Woche</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div style={{ marginTop: 'var(--spacing-md)', display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)' }}>
+                                <button
+                                    onClick={handleSaveManualConsumption}
+                                    disabled={isSaving || (editConsumptionAmount !== '' && editConsumptionPeriod === '') || (editConsumptionAmount === '' && editConsumptionPeriod !== '')}
+                                    style={{
+                                        padding: 'var(--spacing-sm) var(--spacing-md)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: 'none',
+                                        backgroundColor: 'var(--color-success)',
+                                        color: 'white',
+                                        fontWeight: 600,
+                                        cursor: isSaving ? 'not-allowed' : 'pointer',
+                                        opacity: (isSaving || (editConsumptionAmount !== '' && editConsumptionPeriod === '') || (editConsumptionAmount === '' && editConsumptionPeriod !== '')) ? 0.6 : 1
+                                    }}
+                                >
+                                    {isSaving ? 'Speichert...' : 'Einstellungen speichern & anwenden'}
+                                </button>
+                            </div>
+                            
+                            <p style={{ margin: 'margin-top: var(--spacing-sm)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                                {editConsumptionAmount && editConsumptionPeriod ? (
+                                    <>Dieses Produkt reduziert seinen Bestand automatisch um <strong>{editConsumptionAmount} {selectedProductData.unit}</strong> pro <strong>{editConsumptionPeriod === 'day' ? 'Tag' : 'Woche'}</strong>.</>
+                                ) : (
+                                    <>Momentan ist kein automatischer Verbrauch für dieses Produkt aktiv.</>
+                                )}
+                            </p>
+                        </div> 
                         
                     </div>
                 ) : (
