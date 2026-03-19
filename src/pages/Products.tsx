@@ -242,6 +242,7 @@ export const Products: React.FC = () => {
             autoOrder: newProduct.autoOrder,
             supplierPhone: newProduct.supplierPhone,
             notes: newProduct.notes,
+            showNoteOnOrder: newProduct.showNoteOnOrder,
             preferredOrderMethod: newProduct.preferredOrderMethod,
             consumptionAmount: newProduct.consumptionAmount,
             consumptionPeriod: newProduct.consumptionPeriod,
