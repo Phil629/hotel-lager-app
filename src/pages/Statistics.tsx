@@ -8,17 +8,19 @@ export const Statistics: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [orders, setOrders] = useState<Order[]>([]);
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const loadData = async () => {
+        const [p, o] = await Promise.all([
+            DataService.getProducts(),
+            DataService.getOrders()
+        ]);
+        setProducts(p);
+        setOrders(o);
+    };
 
     useEffect(() => {
-        const load = async () => {
-            const [p, o] = await Promise.all([
-                DataService.getProducts(),
-                DataService.getOrders()
-            ]);
-            setProducts(p);
-            setOrders(o);
-        };
-        load();
+        loadData();
     }, []);
 
     // Aggragate stats per product
@@ -76,6 +78,22 @@ export const Statistics: React.FC = () => {
 
     const selectedProductData = selectedProductId ? productStats.find(p => p.id === selectedProductId) : null;
 
+    const handleAdoptSuggestion = async (product: Product, suggestedWeekly: number) => {
+        setIsSaving(true);
+        try {
+            const updatedProduct = {
+                ...product,
+                consumptionAmount: suggestedWeekly,
+                consumptionPeriod: 'week' as const,
+                lastConsumptionDate: new Date().toISOString()
+            };
+            await DataService.saveProduct(updatedProduct);
+            await loadData();
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)' }}>
@@ -113,7 +131,7 @@ export const Statistics: React.FC = () => {
                                 <div style={{ fontWeight: 600 }}>{stat.name}</div>
                                 <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
                                     <span>{stat.totalOrdered} {stat.unit} bestellt</span>
-                                    {stat.suggestedWeekly > 0 && <span style={{ color: 'var(--color-primary)' }}>Ø {stat.suggestedWeekly} / Woche</span>}
+                                    {stat.suggestedWeekly > 0 && stat.orderCount >= 3 && <span style={{ color: 'var(--color-primary)' }}>Ø {stat.suggestedWeekly} / Woche</span>}
                                 </div>
                             </div>
                         ))}
@@ -137,13 +155,36 @@ export const Statistics: React.FC = () => {
                                     </div>
                                 </div>
                                 
-                                {selectedProductData.suggestedWeekly > 0 && (
+                                {selectedProductData.suggestedWeekly > 0 && selectedProductData.orderCount >= 3 ? (
                                     <div style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--color-primary)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                                         <TrendingDown size={24} />
                                         <div>
-                                            <div style={{ fontSize: 'var(--font-size-xs)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>Vorgeschlagener Verbrauch</div>
+                                            <div style={{ fontSize: 'var(--font-size-xs)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>Erwarteter Verbrauch</div>
                                             <div style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>~ {selectedProductData.suggestedWeekly} {selectedProductData.unit} / Woche</div>
+                                            <button 
+                                                onClick={() => handleAdoptSuggestion(selectedProductData, selectedProductData.suggestedWeekly)}
+                                                disabled={isSaving}
+                                                style={{ 
+                                                    marginTop: '8px',
+                                                    padding: '4px 12px',
+                                                    fontSize: 'var(--font-size-sm)',
+                                                    fontWeight: 600,
+                                                    color: 'white',
+                                                    backgroundColor: 'var(--color-primary)',
+                                                    border: 'none',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    cursor: isSaving ? 'not-allowed' : 'pointer',
+                                                    opacity: isSaving ? 0.7 : 1
+                                                }}
+                                            >
+                                                {isSaving ? 'Speichert...' : 'Einstellung übernehmen'}
+                                            </button>
                                         </div>
+                                    </div>
+                                ) : (
+                                    <div style={{ backgroundColor: 'var(--color-surface)', border: '1px dashed var(--color-border)', color: 'var(--color-text-muted)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--font-size-sm)' }}>
+                                        <TrendingDown size={18} />
+                                        <span>Erwarteter Verbrauch: <br/>(möglich ab 3 Bestellungen)</span>
                                     </div>
                                 )}
                             </div>
