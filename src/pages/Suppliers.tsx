@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Mail, Phone, Search, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle } from 'lucide-react';
 import type { Supplier } from '../types';
 import { DataService } from '../services/data';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -9,6 +9,7 @@ export const Suppliers: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+    const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
 
     // Form State
@@ -89,15 +90,14 @@ export const Suppliers: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (window.confirm('Soll dieser Lieferant wirklich gelöscht werden?')) {
-            try {
-                await DataService.deleteSupplier(id);
-                setNotification({ message: 'Lieferant gelöscht.', type: 'success' });
-                loadSuppliers();
-            } catch (error) {
-                console.error(error);
-                setNotification({ message: 'Fehler beim Löschen.', type: 'error' });
-            }
+        try {
+            await DataService.deleteSupplier(id);
+            setNotification({ message: 'Lieferant gelöscht.', type: 'success' });
+            setSupplierToDelete(null);
+            loadSuppliers();
+        } catch (error) {
+            console.error(error);
+            setNotification({ message: 'Fehler beim Löschen.', type: 'error' });
         }
     };
 
@@ -212,7 +212,7 @@ export const Suppliers: React.FC = () => {
                                 <Edit2 size={16} />
                             </button>
                             <button
-                                onClick={() => handleDelete(supplier.id)}
+                                onClick={() => setSupplierToDelete(supplier)}
                                 style={{
                                     padding: '8px',
                                     borderRadius: 'var(--radius-md)',
@@ -558,6 +558,61 @@ export const Suppliers: React.FC = () => {
                         </form>
                     </div>
                 </div >
+            )}
+
+            {supplierToDelete && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100
+                }}>
+                    <div style={{
+                        backgroundColor: 'white',
+                        padding: 'var(--spacing-xl)',
+                        borderRadius: 'var(--radius-lg)',
+                        maxWidth: '400px',
+                        width: '100%',
+                        boxShadow: 'var(--shadow-lg)',
+                        textAlign: 'center'
+                    }}>
+                        <div style={{ color: 'var(--color-danger)', marginBottom: 'var(--spacing-md)' }}>
+                            <AlertTriangle size={48} style={{ margin: '0 auto' }} />
+                        </div>
+                        <h3 style={{ margin: '0 0 var(--spacing-sm) 0' }}>Lieferant löschen?</h3>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-lg)' }}>
+                            Möchtest du den Lieferanten <strong>{supplierToDelete.name}</strong> wirklich unwiderruflich löschen?
+                        </p>
+                        <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'center' }}>
+                            <button
+                                onClick={() => setSupplierToDelete(null)}
+                                style={{
+                                    padding: 'var(--spacing-sm) var(--spacing-lg)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-border)',
+                                    backgroundColor: 'transparent',
+                                    cursor: 'pointer',
+                                    fontWeight: 500
+                                }}
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={() => handleDelete(supplierToDelete.id)}
+                                style={{
+                                    padding: 'var(--spacing-sm) var(--spacing-lg)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: 'none',
+                                    backgroundColor: 'var(--color-danger)',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontWeight: 500
+                                }}
+                            >
+                                Löschen
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div >
     );
