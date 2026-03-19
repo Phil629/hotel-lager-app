@@ -18,8 +18,7 @@ export const Suppliers: React.FC = () => {
         email: '',
         phone: '',
         url: '',
-        notes: '',
-        showNoteOnOrder: false
+        notes: []
     });
 
     useEffect(() => {
@@ -50,8 +49,7 @@ export const Suppliers: React.FC = () => {
                 email: '',
                 phone: '',
                 url: '',
-                notes: '',
-                showNoteOnOrder: false,
+                notes: [],
                 documents: []
             });
         }
@@ -74,7 +72,6 @@ export const Suppliers: React.FC = () => {
                 phone: formData.phone,
                 url: formData.url,
                 notes: formData.notes,
-                showNoteOnOrder: formData.showNoteOnOrder,
                 documents: formData.documents || []
             } as Supplier;
 
@@ -185,9 +182,18 @@ export const Suppliers: React.FC = () => {
                                     <span>Kontakt: {supplier.contactName}</span>
                                 )}
                             </div>
-                            {supplier.notes && (
+                            {supplier.notes && supplier.notes.length > 0 && (
                                 <div style={{ marginTop: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
-                                    Notiz: {supplier.notes}
+                                    <div style={{ fontWeight: 600 }}>Notizen:</div>
+                                    {supplier.notes.map(n => (
+                                        <div key={n.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            <span>- {n.text}</span>
+                                            <div style={{ display: 'flex', gap: '4px', fontSize: '10px' }}>
+                                                {n.showOnOrderCreation && <span style={{ backgroundColor: '#e2f0d9', color: '#38761d', padding: '2px 4px', borderRadius: '4px' }}>Bestellung</span>}
+                                                {n.showOnOpenOrders && <span style={{ backgroundColor: '#fff2cc', color: '#b45f06', padding: '2px 4px', borderRadius: '4px' }}>Offen</span>}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -308,26 +314,70 @@ export const Suppliers: React.FC = () => {
                             </div>
 
                             <div>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 500 }}>Notizen</label>
-                                <textarea
-                                    value={formData.notes || ''}
-                                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                    style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', minHeight: '80px', fontFamily: 'inherit' }}
-                                    placeholder="Interne Notizen zum Lieferanten..."
-                                />
-                            </div>
-
-                            <div>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.showNoteOnOrder || false}
-                                        onChange={e => setFormData({ ...formData, showNoteOnOrder: e.target.checked })}
-                                    />
-                                    <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                                        Notiz beim Bestellen anzeigen?
-                                    </span>
-                                </label>
+                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 500 }}>Notizen zum Lieferanten</label>
+                                {(formData.notes || []).map((note, idx) => (
+                                    <div key={note.id} style={{ marginBottom: '8px', padding: '8px', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-background)' }}>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                            <textarea
+                                                rows={2}
+                                                value={note.text}
+                                                onChange={e => {
+                                                    const updated = [...(formData.notes || [])];
+                                                    updated[idx].text = e.target.value;
+                                                    setFormData({ ...formData, notes: updated });
+                                                }}
+                                                placeholder="Notiz eingeben..."
+                                                style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const updated = (formData.notes || []).filter((_, i) => i !== idx);
+                                                    setFormData({ ...formData, notes: updated });
+                                                }}
+                                                style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '4px' }}
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={note.showOnOrderCreation}
+                                                    onChange={e => {
+                                                        const updated = [...(formData.notes || [])];
+                                                        updated[idx].showOnOrderCreation = e.target.checked;
+                                                        setFormData({ ...formData, notes: updated });
+                                                    }}
+                                                />
+                                                <span style={{ fontSize: 'var(--font-size-sm)' }}>Beim Anlegen anzeigen</span>
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={note.showOnOpenOrders}
+                                                    onChange={e => {
+                                                        const updated = [...(formData.notes || [])];
+                                                        updated[idx].showOnOpenOrders = e.target.checked;
+                                                        setFormData({ ...formData, notes: updated });
+                                                    }}
+                                                />
+                                                <span style={{ fontSize: 'var(--font-size-sm)' }}>Bei offenen Bestellungen anzeigen</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const updated = [...(formData.notes || []), { id: crypto.randomUUID(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
+                                        setFormData({ ...formData, notes: updated });
+                                    }}
+                                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-sm)', fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: '8px' }}
+                                >
+                                    + Weitere Notiz
+                                </button>
                             </div>
 
                             {/* Documents Section */}

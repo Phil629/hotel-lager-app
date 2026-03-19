@@ -1,3 +1,10 @@
+export interface Note {
+  id: string;
+  text: string;
+  showOnOrderCreation: boolean;
+  showOnOpenOrders: boolean;
+}
+
 export interface Supplier {
   id: string;
   name: string;
@@ -5,11 +12,10 @@ export interface Supplier {
   email: string;
   phone?: string;
   url?: string;
-  notes?: string;
+  notes?: Note[];
   emailSubjectTemplate?: string;
   emailBodyTemplate?: string;
   documents?: { name: string; url: string; date?: string; }[];
-  showNoteOnOrder?: boolean;
 }
 
 export interface Product {
@@ -24,8 +30,7 @@ export interface Product {
   image?: string;
   supplierId?: string; // Link to Supplier
   autoOrder?: boolean;
-  notes?: string;
-  showNoteOnOrder?: boolean;
+  notes?: Note[];
   preferredOrderMethod?: 'email' | 'link' | 'phone';
   productNumber?: string; // e.g. EAN or internal sku
   consumptionAmount?: number;

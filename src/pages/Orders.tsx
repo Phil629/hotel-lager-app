@@ -472,31 +472,31 @@ export const Orders: React.FC = () => {
                                 }
                             }
 
-                            if (supplier && supplier.showNoteOnOrder && supplier.notes) {
-                                return (
-                                    <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '8px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--spacing-xs)', marginBottom: 'var(--spacing-xs)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
+                            if (supplier?.notes && supplier.notes.length > 0) {
+                                return supplier.notes.filter(n => n.showOnOpenOrders).map(n => (
+                                    <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '8px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--spacing-xs)', marginBottom: 'var(--spacing-xs)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
                                         <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
                                         <div>
                                             <strong>Lieferantennotiz:</strong><br />
-                                            {supplier.notes}
+                                            {n.text}
                                         </div>
                                     </div>
-                                );
+                                ));
                             }
                             return null;
                         })()}
                         {(() => {
                             const product = products.find((p: Product) => p.name === order.productName);
-                            if (product && product.showNoteOnOrder && product.notes) {
-                                return (
-                                    <div style={{ backgroundColor: '#e3f2fd', color: '#0d47a1', padding: '8px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--spacing-xs)', marginBottom: 'var(--spacing-xs)', border: '1px solid #bbdefb', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
+                            if (product?.notes && product.notes.length > 0) {
+                                return product.notes.filter(n => n.showOnOpenOrders).map(n => (
+                                    <div key={n.id} style={{ backgroundColor: '#e3f2fd', color: '#0d47a1', padding: '8px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--spacing-xs)', marginBottom: 'var(--spacing-xs)', border: '1px solid #bbdefb', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
                                         <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
                                         <div>
                                             <strong>Produktnotiz:</strong><br />
-                                            {product.notes}
+                                            {n.text}
                                         </div>
                                     </div>
-                                );
+                                ));
                             }
                             return null;
                         })()}
@@ -995,32 +995,32 @@ export const Orders: React.FC = () => {
                                         </div>
 
                                         {(() => {
-                                            if (selectedProduct.showNoteOnOrder && selectedProduct.notes) {
-                                                return (
-                                                    <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                            if (selectedProduct.notes && selectedProduct.notes.length > 0) {
+                                                return selectedProduct.notes.filter(n => n.showOnOrderCreation).map(n => (
+                                                    <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                                                         <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
                                                         <div>
                                                             <strong>Wichtige Produktnotiz:</strong><br />
-                                                            {selectedProduct.notes}
+                                                            {n.text}
                                                         </div>
                                                     </div>
-                                                );
+                                                ));
                                             }
                                             return null;
                                         })()}
 
                                         {(() => {
                                             const supplier = suppliers.find(s => s.id === selectedProduct.supplierId);
-                                            if (supplier && supplier.showNoteOnOrder && supplier.notes) {
-                                                return (
-                                                    <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                            if (supplier?.notes && supplier.notes.length > 0) {
+                                                return supplier.notes.filter(n => n.showOnOrderCreation).map(n => (
+                                                    <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                                                         <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
                                                         <div>
                                                             <strong>Wichtige Lieferantennotiz:</strong><br />
-                                                            {supplier.notes}
+                                                            {n.text}
                                                         </div>
                                                     </div>
-                                                );
+                                                ));
                                             }
                                             return null;
                                         })()}
@@ -1331,16 +1331,16 @@ export const Orders: React.FC = () => {
 
                                 {(() => {
                                     const supplier = suppliers.find(s => s.id === oneTimeOrder.supplierId);
-                                    if (supplier && supplier.showNoteOnOrder && supplier.notes) {
-                                        return (
-                                            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                    if (supplier?.notes && supplier.notes.length > 0) {
+                                        return supplier.notes.filter(n => n.showOnOrderCreation).map(n => (
+                                            <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                                                 <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
                                                 <div>
                                                     <strong>Wichtige Lieferantennotiz:</strong><br />
-                                                    {supplier.notes}
+                                                    {n.text}
                                                 </div>
                                             </div>
-                                        );
+                                        ));
                                     }
                                     return null;
                                 })()}

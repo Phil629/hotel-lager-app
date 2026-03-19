@@ -1,6 +1,22 @@
 import { StorageService } from './storage';
 import { getSupabaseClient } from './supabase';
-import type { Product, Order, Supplier } from '../types';
+import type { Product, Order, Supplier, Note } from '../types';
+
+const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: boolean | undefined): Note[] => {
+    if (!notesStr) return [];
+    try {
+        const parsed = JSON.parse(notesStr);
+        if (Array.isArray(parsed)) return parsed;
+    } catch (e) {
+        // Fallback to legacy string
+    }
+    return [{
+        id: crypto.randomUUID(),
+        text: notesStr,
+        showOnOrderCreation: !!showNoteOnOrder,
+        showOnOpenOrders: !!showNoteOnOrder
+    }];
+};
 
 // Helper to map App Model (camelCase) -> DB Model (snake_case)
 const toSupabaseSupplier = (s: Supplier) => ({
@@ -10,8 +26,7 @@ const toSupabaseSupplier = (s: Supplier) => ({
     email: s.email,
     phone: s.phone,
     url: s.url,
-    notes: s.notes,
-    show_note_on_order: s.showNoteOnOrder
+    notes: s.notes ? JSON.stringify(s.notes) : null
 });
 
 const fromSupabaseSupplier = (s: any): Supplier => ({
@@ -21,8 +36,10 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     email: s.email,
     phone: s.phone,
     url: s.url,
-    notes: s.notes,
-    showNoteOnOrder: s.show_note_on_order
+    notes: parseLegacyNotes(s.notes, s.show_note_on_order),
+    emailSubjectTemplate: s.email_subject_template,
+    emailBodyTemplate: s.email_body_template,
+    documents: s.documents ? (typeof s.documents === 'string' ? JSON.parse(s.documents) : s.documents) : []
 });
 
 const toSupabaseProduct = (p: Product) => ({
@@ -40,8 +57,7 @@ const toSupabaseProduct = (p: Product) => ({
     email_order_body: p.emailOrderBody,
     order_url: p.orderUrl,
     supplier_phone: p.supplierPhone,
-    notes: p.notes,
-    show_note_on_order: p.showNoteOnOrder,
+    notes: p.notes ? JSON.stringify(p.notes) : null,
     preferred_order_method: p.preferredOrderMethod,
     consumption_amount: p.consumptionAmount,
     consumption_period: p.consumptionPeriod,
@@ -63,8 +79,7 @@ const fromSupabaseProduct = (p: any): Product => ({
     emailOrderBody: p.email_order_body,
     orderUrl: p.order_url,
     supplierPhone: p.supplier_phone,
-    notes: p.notes,
-    showNoteOnOrder: p.show_note_on_order,
+    notes: parseLegacyNotes(p.notes, p.show_note_on_order),
     preferredOrderMethod: p.preferred_order_method,
     consumptionAmount: p.consumption_amount,
     consumptionPeriod: p.consumption_period,

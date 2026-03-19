@@ -22,8 +22,7 @@ export const Products: React.FC = () => {
         minStock: 0,
         price: 0,
         autoOrder: false,
-        notes: '',
-        showNoteOnOrder: false,
+        notes: [],
         preferredOrderMethod: 'email'
     });
     const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
@@ -34,10 +33,9 @@ export const Products: React.FC = () => {
         phone: '',
         contactName: '',
         url: '',
-        notes: '',
+        notes: [],
         emailSubjectTemplate: '',
-        emailBodyTemplate: '',
-        showNoteOnOrder: false
+        emailBodyTemplate: ''
     });
     // isEmailSectionOpen removed as requested
     const [showIoTLink, setShowIoTLink] = useState<{ product: Product, curl: string, powershell: string } | null>(null);
@@ -206,7 +204,6 @@ export const Products: React.FC = () => {
                     contactName: newSupplier.contactName,
                     url: newSupplier.url,
                     notes: newSupplier.notes,
-                    showNoteOnOrder: newSupplier.showNoteOnOrder,
                     emailSubjectTemplate: newSupplier.emailSubjectTemplate,
                     emailBodyTemplate: newSupplier.emailBodyTemplate
                 };
@@ -242,7 +239,6 @@ export const Products: React.FC = () => {
             autoOrder: newProduct.autoOrder,
             supplierPhone: newProduct.supplierPhone,
             notes: newProduct.notes,
-            showNoteOnOrder: newProduct.showNoteOnOrder,
             preferredOrderMethod: newProduct.preferredOrderMethod,
             consumptionAmount: newProduct.consumptionAmount,
             consumptionPeriod: newProduct.consumptionPeriod,
@@ -355,7 +351,7 @@ export const Products: React.FC = () => {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, price: 0, autoOrder: false, notes: '', showNoteOnOrder: false, preferredOrderMethod: 'email' });
+        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, price: 0, autoOrder: false, notes: [], preferredOrderMethod: 'email' });
         setEditingId(null);
         // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
@@ -573,20 +569,20 @@ export const Products: React.FC = () => {
                                             <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>{product.category}</div>
                                             {(() => {
                                                 const supplier = suppliers.find(s => s.id === product.supplierId);
-                                                if (supplier && supplier.showNoteOnOrder && supplier.notes) {
-                                                    return (
-                                                        <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
-                                                            <strong>Lieferant:</strong> {supplier.notes}
+                                                if (supplier?.notes) {
+                                                    return (supplier.notes.filter(n => n.showOnOpenOrders) || []).map(n => (
+                                                        <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
+                                                            <strong>Lieferant:</strong> {n.text}
                                                         </div>
-                                                    );
+                                                    ));
                                                 }
                                                 return null;
                                             })()}
-                                            {product.showNoteOnOrder && product.notes && (
-                                                <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
-                                                    <strong>Produktnotiz:</strong> {product.notes}
+                                            {(product.notes || []).filter(n => n.showOnOpenOrders).map(n => (
+                                                <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
+                                                    <strong>Produktnotiz:</strong> {n.text}
                                                 </div>
-                                            )}
+                                            ))}
                                         </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
@@ -732,20 +728,20 @@ export const Products: React.FC = () => {
                                                 </div>
                                                 {(() => {
                                                     const supplier = suppliers.find(s => s.id === product.supplierId);
-                                                    if (supplier && supplier.showNoteOnOrder && supplier.notes) {
-                                                        return (
-                                                            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '8px', border: '1px solid #ffeeba', fontSize: '12px' }}>
-                                                                <strong>Lieferant:</strong> {supplier.notes}
+                                                    if (supplier?.notes) {
+                                                        return (supplier.notes.filter(n => n.showOnOpenOrders) || []).map(n => (
+                                                            <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
+                                                                <strong>Lieferant:</strong> {n.text}
                                                             </div>
-                                                        );
+                                                        ));
                                                     }
                                                     return null;
                                                 })()}
-                                                {product.showNoteOnOrder && product.notes && (
-                                                    <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '8px', border: '1px solid #ffeeba', fontSize: '12px' }}>
-                                                        <strong>Produktnotiz:</strong> {product.notes}
+                                                {(product.notes || []).filter(n => n.showOnOpenOrders).map(n => (
+                                                    <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '4px 8px', borderRadius: 'var(--radius-sm)', marginTop: '4px', border: '1px solid #ffeeba', fontSize: '12px' }}>
+                                                        <strong>Produktnotiz:</strong> {n.text}
                                                     </div>
-                                                )}
+                                                ))}
                                             </td>
                                             <td style={{ padding: 'var(--spacing-md)', textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
@@ -1230,14 +1226,71 @@ export const Products: React.FC = () => {
                                                             style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                                         />
                                                     </div>
-                                                    <div style={{ marginBottom: '8px' }}>
-                                                        <textarea
-                                                            placeholder="Interne Notizen zum Lieferanten..."
-                                                            rows={2}
-                                                            value={newSupplier.notes || ''}
-                                                            onChange={e => setNewSupplier({ ...newSupplier, notes: e.target.value })}
-                                                            style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                                        />
+                                                    <div>
+                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>Notizen zum Lieferanten</label>
+                                                        {(newSupplier.notes || []).map((note, idx) => (
+                                                            <div key={note.id} style={{ marginBottom: '8px', padding: '8px', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-background)' }}>
+                                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                                    <textarea
+                                                                        rows={2}
+                                                                        value={note.text}
+                                                                        onChange={e => {
+                                                                            const updated = [...(newSupplier.notes || [])];
+                                                                            updated[idx].text = e.target.value;
+                                                                            setNewSupplier({ ...newSupplier, notes: updated });
+                                                                        }}
+                                                                        placeholder="Notiz eingeben..."
+                                                                        style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const updated = (newSupplier.notes || []).filter((_, i) => i !== idx);
+                                                                            setNewSupplier({ ...newSupplier, notes: updated });
+                                                                        }}
+                                                                        style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '4px' }}
+                                                                    >
+                                                                        <X size={14} />
+                                                                    </button>
+                                                                </div>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={note.showOnOrderCreation}
+                                                                            onChange={e => {
+                                                                                const updated = [...(newSupplier.notes || [])];
+                                                                                updated[idx].showOnOrderCreation = e.target.checked;
+                                                                                setNewSupplier({ ...newSupplier, notes: updated });
+                                                                            }}
+                                                                        />
+                                                                        <span style={{ fontSize: 'var(--font-size-xs)' }}>Beim Anlegen anzeigen</span>
+                                                                    </label>
+                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={note.showOnOpenOrders}
+                                                                            onChange={e => {
+                                                                                const updated = [...(newSupplier.notes || [])];
+                                                                                updated[idx].showOnOpenOrders = e.target.checked;
+                                                                                setNewSupplier({ ...newSupplier, notes: updated });
+                                                                            }}
+                                                                        />
+                                                                        <span style={{ fontSize: 'var(--font-size-xs)' }}>Bei offenen Bestellungen anzeigen</span>
+                                                                    </label>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const updated = [...(newSupplier.notes || []), { id: crypto.randomUUID(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
+                                                                setNewSupplier({ ...newSupplier, notes: updated });
+                                                            }}
+                                                            style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)', fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: '8px' }}
+                                                        >
+                                                            + Weitere Notiz
+                                                        </button>
                                                     </div>
                                                     <div style={{ marginBottom: '8px' }}>
                                                         <label style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>Standard Email-Textvorlage</label>
@@ -1255,16 +1308,6 @@ export const Products: React.FC = () => {
                                                             onChange={e => setNewSupplier({ ...newSupplier, emailBodyTemplate: e.target.value })}
                                                             style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit', marginBottom: '8px' }}
                                                         />
-                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '4px' }}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={newSupplier.showNoteOnOrder || false}
-                                                                onChange={e => setNewSupplier({ ...newSupplier, showNoteOnOrder: e.target.checked })}
-                                                            />
-                                                            <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 500 }}>
-                                                                Notiz beim Bestellen anzeigen?
-                                                            </span>
-                                                        </label>
                                                     </div>
                                                 </div>
                                             )}
@@ -1428,26 +1471,70 @@ export const Products: React.FC = () => {
 
                                 <div>
                                     <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Notizen</label>
-                                    <div style={{ position: 'relative', marginBottom: 'var(--spacing-xs)' }}>
-                                        <MessageSquare size={16} style={{ position: 'absolute', top: '10px', left: '10px', color: 'var(--color-text-muted)' }} />
-                                        <textarea
-                                            rows={3}
-                                            value={newProduct.notes || ''}
-                                            onChange={e => setNewProduct({ ...newProduct, notes: e.target.value })}
-                                            placeholder="Notizen zum Produkt..."
-                                            style={{ width: '100%', padding: 'var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) 36px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                        />
-                                    </div>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '4px' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={newProduct.showNoteOnOrder || false}
-                                            onChange={e => setNewProduct({ ...newProduct, showNoteOnOrder: e.target.checked })}
-                                        />
-                                        <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: 'var(--color-text-main)' }}>
-                                            Wichtige Produktnotiz beim Bestellen anzeigen
-                                        </span>
-                                    </label>
+                                    {(newProduct.notes || []).map((note, idx) => (
+                                        <div key={note.id} style={{ marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-sm)', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-background)' }}>
+                                            <div style={{ display: 'flex', position: 'relative' }}>
+                                                <MessageSquare size={16} style={{ position: 'absolute', top: '10px', left: '10px', color: 'var(--color-text-muted)' }} />
+                                                <textarea
+                                                    rows={2}
+                                                    value={note.text}
+                                                    onChange={e => {
+                                                        const updated = [...(newProduct.notes || [])];
+                                                        updated[idx].text = e.target.value;
+                                                        setNewProduct({ ...newProduct, notes: updated });
+                                                    }}
+                                                    placeholder="Notiz eingeben..."
+                                                    style={{ width: '100%', padding: 'var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) 36px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const updated = (newProduct.notes || []).filter((_, i) => i !== idx);
+                                                        setNewProduct({ ...newProduct, notes: updated });
+                                                    }}
+                                                    style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '0 0 0 8px', alignSelf: 'flex-start', marginTop: '4px' }}
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={note.showOnOrderCreation}
+                                                        onChange={e => {
+                                                            const updated = [...(newProduct.notes || [])];
+                                                            updated[idx].showOnOrderCreation = e.target.checked;
+                                                            setNewProduct({ ...newProduct, notes: updated });
+                                                        }}
+                                                    />
+                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}>Beim Anlegen der Bestellung anzeigen</span>
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={note.showOnOpenOrders}
+                                                        onChange={e => {
+                                                            const updated = [...(newProduct.notes || [])];
+                                                            updated[idx].showOnOpenOrders = e.target.checked;
+                                                            setNewProduct({ ...newProduct, notes: updated });
+                                                        }}
+                                                    />
+                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}>Bei offenen Bestellungen anzeigen</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const updated = [...(newProduct.notes || []), { id: crypto.randomUUID(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
+                                            setNewProduct({ ...newProduct, notes: updated });
+                                        }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 500, cursor: 'pointer', padding: 0 }}
+                                    >
+                                        <Plus size={16} /> Weitere Notiz hinzufügen
+                                    </button>
                                 </div>
 
 
@@ -1777,16 +1864,16 @@ export const Products: React.FC = () => {
 
                                 {/* Product Note Warning */}
                                 {(() => {
-                                    if (selectedProductForOrder.showNoteOnOrder && selectedProductForOrder.notes) {
-                                        return (
-                                            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                    if (selectedProductForOrder.notes && selectedProductForOrder.notes.length > 0) {
+                                        return selectedProductForOrder.notes.filter(n => n.showOnOrderCreation).map(n => (
+                                            <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                                                 <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
                                                 <div>
                                                     <strong>Wichtige Produktnotiz:</strong><br />
-                                                    {selectedProductForOrder.notes}
+                                                    {n.text}
                                                 </div>
                                             </div>
-                                        );
+                                        ));
                                     }
                                     return null;
                                 })()}
@@ -1794,16 +1881,16 @@ export const Products: React.FC = () => {
                                 {/* Supplier Note Warning */}
                                 {(() => {
                                     const supplier = suppliers.find(s => s.id === selectedProductForOrder.supplierId);
-                                    if (supplier && supplier.showNoteOnOrder && supplier.notes) {
-                                        return (
-                                            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                    if (supplier?.notes && supplier.notes.length > 0) {
+                                        return supplier.notes.filter(n => n.showOnOrderCreation).map(n => (
+                                            <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                                                 <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
                                                 <div>
                                                     <strong>Wichtige Lieferantennotiz:</strong><br />
-                                                    {supplier.notes}
+                                                    {n.text}
                                                 </div>
                                             </div>
-                                        );
+                                        ));
                                     }
                                     return null;
                                 })()}
