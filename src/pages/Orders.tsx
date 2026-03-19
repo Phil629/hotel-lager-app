@@ -477,6 +477,21 @@ export const Orders: React.FC = () => {
                             }
                             return null;
                         })()}
+                        {(() => {
+                            const product = products.find((p: Product) => p.name === order.productName);
+                            if (product && product.showNoteOnOrder && product.notes) {
+                                return (
+                                    <div style={{ backgroundColor: '#e3f2fd', color: '#0d47a1', padding: '8px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--spacing-xs)', marginBottom: 'var(--spacing-xs)', border: '1px solid #bbdefb', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
+                                        <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                        <div>
+                                            <strong>Produktnotiz:</strong><br />
+                                            {product.notes}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
                         {order.supplierEmail && (
                             <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Mail size={12} />
