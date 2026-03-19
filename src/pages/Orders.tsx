@@ -29,6 +29,7 @@ export const Orders: React.FC = () => {
     const [emailBody, setEmailBody] = useState('');
     const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+    const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
 
     // Pagination State
     const [visibleReceivedCount, setVisibleReceivedCount] = useState(10);
@@ -1739,14 +1740,7 @@ export const Orders: React.FC = () => {
 
                                 <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'space-between', marginTop: 'var(--spacing-sm)' }}>
                                     <button
-                                        onClick={async () => {
-                                            if (window.confirm('Möchten Sie diese Bestellung wirklich löschen?')) {
-                                                await DataService.deleteOrder(editingOrder.id);
-                                                setEditingOrder(null);
-                                                loadOrders();
-                                                setNotification({ message: 'Bestellung erfolgreich gelöscht.', type: 'success' });
-                                            }
-                                        }}
+                                        onClick={() => setOrderToDelete(editingOrder)}
                                         style={{
                                             padding: 'var(--spacing-sm) var(--spacing-md)',
                                             borderRadius: 'var(--radius-md)',
@@ -1790,6 +1784,69 @@ export const Orders: React.FC = () => {
                                         </button>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                orderToDelete && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100
+                    }}>
+                        <div style={{
+                            backgroundColor: 'white',
+                            padding: 'var(--spacing-xl)',
+                            borderRadius: 'var(--radius-lg)',
+                            maxWidth: '400px',
+                            width: '100%',
+                            boxShadow: 'var(--shadow-lg)',
+                            textAlign: 'center'
+                        }}>
+                            <div style={{ color: 'var(--color-danger)', marginBottom: 'var(--spacing-md)' }}>
+                                <AlertTriangle size={48} style={{ margin: '0 auto' }} />
+                            </div>
+                            <h3 style={{ margin: '0 0 var(--spacing-sm) 0' }}>Bestellung löschen?</h3>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-lg)' }}>
+                                Möchtest du die Bestellung für <strong>{orderToDelete.productName}</strong> ({orderToDelete.quantity}x) wirklich unwiderruflich löschen?
+                            </p>
+                            <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'center' }}>
+                                <button
+                                    onClick={() => setOrderToDelete(null)}
+                                    style={{
+                                        padding: 'var(--spacing-sm) var(--spacing-lg)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--color-border)',
+                                        backgroundColor: 'transparent',
+                                        cursor: 'pointer',
+                                        fontWeight: 500
+                                    }}
+                                >
+                                    Abbrechen
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        await DataService.deleteOrder(orderToDelete.id);
+                                        setOrderToDelete(null);
+                                        setEditingOrder(null);
+                                        loadOrders();
+                                        setNotification({ message: 'Bestellung erfolgreich gelöscht.', type: 'success' });
+                                    }}
+                                    style={{
+                                        padding: 'var(--spacing-sm) var(--spacing-lg)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: 'none',
+                                        backgroundColor: 'var(--color-danger)',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        fontWeight: 500
+                                    }}
+                                >
+                                    Löschen
+                                </button>
                             </div>
                         </div>
                     </div>
