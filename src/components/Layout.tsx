@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, ShoppingCart, Settings, Users } from 'lucide-react';
+import { Package, ShoppingCart, Settings, Users, BarChart3 } from 'lucide-react';
 import logo from '../assets/logo.png';
 
 interface LayoutProps {
@@ -86,6 +86,26 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                     >
                         <Users size={20} />
                         Lieferanten
+                    </Link>
+
+                    <Link
+                        to="/statistics"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--spacing-sm)',
+                            padding: 'var(--spacing-md)',
+                            border: 'none',
+                            borderRadius: 'var(--radius-md)',
+                            backgroundColor: isActive('/statistics') ? 'var(--color-primary)' : 'transparent',
+                            color: isActive('/statistics') ? 'white' : 'var(--color-text-muted)',
+                            textDecoration: 'none',
+                            fontSize: 'var(--font-size-base)',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        <BarChart3 size={20} />
+                        Statistiken
                     </Link>
 
                     <Link

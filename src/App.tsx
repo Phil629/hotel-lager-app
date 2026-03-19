@@ -4,6 +4,7 @@ import { Products } from './pages/Products';
 import { Orders } from './pages/Orders';
 import { Settings } from './pages/Settings';
 import { Suppliers } from './pages/Suppliers';
+import { Statistics } from './pages/Statistics';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="/products" element={<Products />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/suppliers" element={<Suppliers />} />
+          <Route path="/statistics" element={<Statistics />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>

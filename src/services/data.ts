@@ -42,7 +42,10 @@ const toSupabaseProduct = (p: Product) => ({
     supplier_phone: p.supplierPhone,
     notes: p.notes,
     show_note_on_order: p.showNoteOnOrder,
-    preferred_order_method: p.preferredOrderMethod
+    preferred_order_method: p.preferredOrderMethod,
+    consumption_amount: p.consumptionAmount,
+    consumption_period: p.consumptionPeriod,
+    last_consumption_date: p.lastConsumptionDate
 });
 
 const fromSupabaseProduct = (p: any): Product => ({
@@ -62,7 +65,10 @@ const fromSupabaseProduct = (p: any): Product => ({
     supplierPhone: p.supplier_phone,
     notes: p.notes,
     showNoteOnOrder: p.show_note_on_order,
-    preferredOrderMethod: p.preferred_order_method
+    preferredOrderMethod: p.preferred_order_method,
+    consumptionAmount: p.consumption_amount,
+    consumptionPeriod: p.consumption_period,
+    lastConsumptionDate: p.last_consumption_date
 });
 
 const toSupabaseOrder = (o: Order) => {

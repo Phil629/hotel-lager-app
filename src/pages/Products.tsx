@@ -83,10 +83,51 @@ export const Products: React.FC = () => {
         const init = async () => {
             await loadSuppliers();
             const loadedProducts = await DataService.getProducts();
-            setProducts(loadedProducts);
+            
+            // Auto-consumption logic
+            const now = new Date();
+            let updatedAny = false;
+            const updatedProducts = [...loadedProducts];
 
+            for (let i = 0; i < updatedProducts.length; i++) {
+                const p = updatedProducts[i];
+                if (p.consumptionAmount && p.consumptionPeriod) {
+                    if (!p.lastConsumptionDate) {
+                        p.lastConsumptionDate = now.toISOString();
+                        await DataService.saveProduct(p);
+                        updatedAny = true;
+                    } else {
+                        const lastDate = new Date(p.lastConsumptionDate);
+                        const diffTime = Math.abs(now.getTime() - lastDate.getTime());
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                        
+                        let periodsPassed = 0;
+                        if (p.consumptionPeriod === 'day') {
+                            periodsPassed = diffDays;
+                        } else if (p.consumptionPeriod === 'week') {
+                            periodsPassed = Math.floor(diffDays / 7);
+                        }
 
+                        if (periodsPassed > 0) {
+                            const toDeduct = periodsPassed * p.consumptionAmount;
+                            p.stock = Math.max(0, p.stock - toDeduct);
+                            
+                            const newLastDate = new Date(lastDate);
+                            if (p.consumptionPeriod === 'day') {
+                                newLastDate.setDate(newLastDate.getDate() + periodsPassed);
+                            } else if (p.consumptionPeriod === 'week') {
+                                newLastDate.setDate(newLastDate.getDate() + (periodsPassed * 7));
+                            }
+                            p.lastConsumptionDate = newLastDate.toISOString();
+                            
+                            await DataService.saveProduct(p);
+                            updatedAny = true;
+                        }
+                    }
+                }
+            }
 
+            setProducts(updatedAny ? updatedProducts : loadedProducts);
             // Handle URL Actions (QR Scans)
             const action = searchParams.get('action');
             const id = searchParams.get('id');
@@ -201,8 +242,10 @@ export const Products: React.FC = () => {
             autoOrder: newProduct.autoOrder,
             supplierPhone: newProduct.supplierPhone,
             notes: newProduct.notes,
-            showNoteOnOrder: newProduct.showNoteOnOrder,
-            preferredOrderMethod: newProduct.preferredOrderMethod
+            preferredOrderMethod: newProduct.preferredOrderMethod,
+            consumptionAmount: newProduct.consumptionAmount,
+            consumptionPeriod: newProduct.consumptionPeriod,
+            lastConsumptionDate: newProduct.lastConsumptionDate
         };
 
         setIsLoading(true);
@@ -1514,6 +1557,29 @@ export const Products: React.FC = () => {
                                                         onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })}
                                                         style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                                     />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Erwarteter Verbrauch</label>
+                                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                                        <input
+                                                            type="number"
+                                                            step="1"
+                                                            min="0"
+                                                            value={newProduct.consumptionAmount || ''}
+                                                            onChange={e => setNewProduct({ ...newProduct, consumptionAmount: parseFloat(e.target.value) || undefined })}
+                                                            placeholder="Menge"
+                                                            style={{ width: '50%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                        />
+                                                        <select
+                                                            value={newProduct.consumptionPeriod || ''}
+                                                            onChange={e => setNewProduct({ ...newProduct, consumptionPeriod: e.target.value as 'day' | 'week' | undefined })}
+                                                            style={{ width: '50%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                        >
+                                                            <option value="">-- Zyklus --</option>
+                                                            <option value="day">pro Tag</option>
+                                                            <option value="week">pro Woche</option>
+                                                        </select>
+                                                    </div>
                                                 </div>
                                                 <div>
                                                     <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Preis (Netto €)</label>

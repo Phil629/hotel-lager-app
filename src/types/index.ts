@@ -28,6 +28,9 @@ export interface Product {
   showNoteOnOrder?: boolean;
   preferredOrderMethod?: 'email' | 'link' | 'phone';
   productNumber?: string; // e.g. EAN or internal sku
+  consumptionAmount?: number;
+  consumptionPeriod?: 'day' | 'week';
+  lastConsumptionDate?: string;
 
   // Legacy fields (will be deprecated in favor of Supplier relation, but kept for now)
   emailOrderAddress?: string;
