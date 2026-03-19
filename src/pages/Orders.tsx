@@ -463,7 +463,15 @@ export const Orders: React.FC = () => {
                             </div>
                         )}
                         {(() => {
-                            const supplier = suppliers.find((s: Supplier) => s.name === order.supplierName);
+                            let supplier = suppliers.find((s: Supplier) => s.name === order.supplierName);
+                            // Fallback if supplier name was changed
+                            if (!supplier) {
+                                const prod = products.find((p: Product) => p.name === order.productName);
+                                if (prod && prod.supplierId) {
+                                    supplier = suppliers.find((s: Supplier) => s.id === prod.supplierId);
+                                }
+                            }
+
                             if (supplier && supplier.showNoteOnOrder && supplier.notes) {
                                 return (
                                     <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '8px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--spacing-xs)', marginBottom: 'var(--spacing-xs)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
