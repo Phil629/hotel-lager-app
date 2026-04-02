@@ -1,3 +1,4 @@
+import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
@@ -195,7 +196,7 @@ export const Products: React.FC = () => {
         // Create new supplier if in creation mode
         if (isCreatingSupplier && newSupplier.name) {
             try {
-                const id = crypto.randomUUID();
+                const id = generateId();
                 const supplier: Supplier = {
                     id,
                     name: newSupplier.name || 'Unbekannt',
@@ -223,7 +224,7 @@ export const Products: React.FC = () => {
         }
 
         const productData: Product = {
-            id: editingId || crypto.randomUUID(),
+            id: editingId || generateId(),
             name: newProduct.name,
             category: newProduct.category,
             stock: Number(newProduct.stock) || 0,
@@ -324,7 +325,7 @@ export const Products: React.FC = () => {
             }
 
             const newOrder: Order = {
-                id: crypto.randomUUID(),
+                id: generateId(),
                 date: new Date(orderDate).toISOString(),
                 productName: selectedProductForOrder.name,
                 quantity: orderQuantity,
@@ -1284,7 +1285,7 @@ export const Products: React.FC = () => {
                                                         <button
                                                             type="button"
                                                             onClick={() => {
-                                                                const updated = [...(newSupplier.notes || []), { id: crypto.randomUUID(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
+                                                                const updated = [...(newSupplier.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
                                                                 setNewSupplier({ ...newSupplier, notes: updated });
                                                             }}
                                                             style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)', fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: '8px' }}
@@ -1528,7 +1529,7 @@ export const Products: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            const updated = [...(newProduct.notes || []), { id: crypto.randomUUID(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
+                                            const updated = [...(newProduct.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
                                             setNewProduct({ ...newProduct, notes: updated });
                                         }}
                                         style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 500, cursor: 'pointer', padding: 0 }}

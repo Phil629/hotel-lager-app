@@ -1,3 +1,4 @@
+import { generateId } from "../utils";
 import { StorageService } from './storage';
 import { getSupabaseClient } from './supabase';
 import type { Product, Order, Supplier, Note } from '../types';
@@ -11,7 +12,7 @@ const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: 
         // Fallback to legacy string
     }
     return [{
-        id: crypto.randomUUID(),
+        id: generateId(),
         text: notesStr,
         showOnOrderCreation: !!showNoteOnOrder,
         showOnOpenOrders: !!showNoteOnOrder

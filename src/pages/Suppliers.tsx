@@ -1,3 +1,4 @@
+import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle } from 'lucide-react';
 import type { Supplier } from '../types';
@@ -66,7 +67,7 @@ export const Suppliers: React.FC = () => {
             }
 
             const supplierToSave: Supplier = {
-                id: editingSupplier ? editingSupplier.id : crypto.randomUUID(),
+                id: editingSupplier ? editingSupplier.id : generateId(),
                 name: formData.name,
                 contactName: formData.contactName,
                 email: formData.email,
@@ -371,7 +372,7 @@ export const Suppliers: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        const updated = [...(formData.notes || []), { id: crypto.randomUUID(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
+                                        const updated = [...(formData.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
                                         setFormData({ ...formData, notes: updated });
                                     }}
                                     style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-sm)', fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: '8px' }}

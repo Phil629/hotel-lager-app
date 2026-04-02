@@ -1,3 +1,4 @@
+import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
@@ -33,6 +34,16 @@ export const Orders: React.FC = () => {
 
     // Pagination State
     const [visibleReceivedCount, setVisibleReceivedCount] = useState(10);
+    const [expandedReceivedOrders, setExpandedReceivedOrders] = useState<Set<string>>(new Set());
+
+    const toggleReceivedOrder = (id: string) => {
+        setExpandedReceivedOrders(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     // One-time Order State
     const [oneTimeOrder, setOneTimeOrder] = useState<{
@@ -159,7 +170,7 @@ export const Orders: React.FC = () => {
                 }
                 // 2. Save Order
                 const newOrder: Order = {
-                    id: crypto.randomUUID(),
+                    id: generateId(),
                     date: new Date(orderDate).toISOString(),
                     productName: selectedProduct.name,
                     quantity: quantity,
@@ -181,7 +192,7 @@ export const Orders: React.FC = () => {
                 const oneTimeQty = oneTimeOrder.quantity === '' ? 1 : oneTimeOrder.quantity;
 
                 const newOrder: Order = {
-                    id: crypto.randomUUID(),
+                    id: generateId(),
                     date: new Date(orderDate).toISOString(),
                     productName: oneTimeOrder.name,
                     quantity: oneTimeQty,
@@ -315,10 +326,18 @@ export const Orders: React.FC = () => {
 
     const getOrderBackgroundColor = (order: Order): string => {
         if (order.status === 'received') return 'var(--color-surface)';
-        if (order.expectedDeliveryDate) return 'var(--color-surface)';
+
+        const now = new Date();
+
+        if (order.expectedDeliveryDate) {
+            const deliveryDate = new Date(order.expectedDeliveryDate);
+            const deliveryDaysDiff = Math.floor((now.getTime() - deliveryDate.getTime()) / (1000 * 60 * 60 * 24));
+            
+            if (deliveryDaysDiff > 0) return '#ffe0e0'; // Light red if overdue
+            return 'var(--color-surface)';
+        }
 
         const orderDate = new Date(order.date);
-        const now = new Date();
         const daysDiff = Math.floor((now.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
 
         if (daysDiff > 14) return '#ffe0e0'; // Light red
@@ -400,6 +419,12 @@ export const Orders: React.FC = () => {
     const receivedOrders = orders
         .filter(o => o.status === 'received')
         .sort((a, b) => {
+            const aHasUnresolvedDefect = a.hasDefect && !a.defectResolved;
+            const bHasUnresolvedDefect = b.hasDefect && !b.defectResolved;
+            
+            if (aHasUnresolvedDefect && !bHasUnresolvedDefect) return -1;
+            if (!aHasUnresolvedDefect && bHasUnresolvedDefect) return 1;
+
             const dateA = a.receivedAt || a.date;
             const dateB = b.receivedAt || b.date;
             return new Date(dateB).getTime() - new Date(dateA).getTime();
@@ -780,6 +805,58 @@ export const Orders: React.FC = () => {
             </div>
         </div>
     );
+    const renderReceivedOrderCard = (order: Order) => {
+        const isExpanded = expandedReceivedOrders.has(order.id);
+        
+        if (!isExpanded) {
+            return (
+                <div key={order.id} style={{
+                    backgroundColor: getOrderBackgroundColor(order),
+                    padding: 'var(--spacing-md)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-sm)',
+                    borderLeft: `4px solid ${getOrderBorderColor(order)}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)' }}>
+                            {order.productName}
+                        </div>
+                        <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                            Eingegangen am: {new Date(order.receivedAt || order.date).toLocaleDateString('de-DE')}
+                        </div>
+                    </div>
+                    {order.hasDefect && !order.defectResolved && (
+                        <div style={{ color: '#ff9800', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <AlertTriangle size={14} /> Mangel gemeldet
+                        </div>
+                    )}
+                    <button
+                        onClick={() => toggleReceivedOrder(order.id)}
+                        style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-sm)', padding: 0, marginTop: '4px', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                        Weitere Details
+                    </button>
+                </div>
+            );
+        }
+
+        return (
+            <div key={`expanded-${order.id}`}>
+                {renderOrderCard(order)}
+                <div style={{ marginTop: '8px', textAlign: 'center' }}>
+                    <button
+                        onClick={() => toggleReceivedOrder(order.id)}
+                        style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-sm)', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                        Details ausblenden
+                    </button>
+                </div>
+            </div>
+        );
+    };
 
     const visibleReceivedOrders = receivedOrders.slice(0, visibleReceivedCount);
 
@@ -860,7 +937,7 @@ export const Orders: React.FC = () => {
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {visibleReceivedOrders.map(renderOrderCard)}
+                        {visibleReceivedOrders.map(renderReceivedOrderCard)}
 
                         {visibleReceivedCount < receivedOrders.length && (
                             <button
@@ -1737,6 +1814,42 @@ export const Orders: React.FC = () => {
                                         style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                     />
                                 </div>
+
+                                {editingOrder.hasDefect && (
+                                    <div style={{ marginTop: 'var(--spacing-xs)', padding: 'var(--spacing-sm)', border: '1px solid #ff9800', borderRadius: 'var(--radius-sm)', backgroundColor: '#fff3e0' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#e65100', fontWeight: 500, fontSize: 'var(--font-size-sm)' }}>
+                                                <AlertTriangle size={16} />
+                                                Dieser Bestellung ist ein Mangel zugeordnet.
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    const updated = { ...editingOrder };
+                                                    delete updated.hasDefect;
+                                                    delete updated.defectNotes;
+                                                    delete updated.defectReportedAt;
+                                                    delete updated.defectResolved;
+                                                    setEditingOrder(updated);
+                                                }}
+                                                style={{
+                                                    padding: '6px 12px',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid currentColor',
+                                                    backgroundColor: 'transparent',
+                                                    color: '#d32f2f',
+                                                    cursor: 'pointer',
+                                                    fontSize: 'var(--font-size-sm)',
+                                                    fontWeight: 500,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                }}
+                                            >
+                                                <X size={14} /> Mangel entfernen
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'space-between', marginTop: 'var(--spacing-sm)' }}>
                                     <button
