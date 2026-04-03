@@ -22,8 +22,12 @@ export const Orders: React.FC = () => {
     const [createTab, setCreateTab] = useState<'existing' | 'onetime'>('existing');
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-    const [orderQuantity, setOrderQuantity] = useState<number | ''>(1);
+    const [orderCart, setOrderCart] = useState<{product: Product, quantity: number}[]>([]);
+    
+    // Derived state for legacy compatibility
+    const selectedProduct = orderCart.length > 0 ? orderCart[0].product : null;
+
+    
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
     const [orderNotes, setOrderNotes] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
@@ -94,108 +98,130 @@ export const Orders: React.FC = () => {
         setSuppliers(data);
     };
 
+    
+    const generateEmailTemplate = (cart: {product: Product, quantity: number}[]) => {
+        if (cart.length === 0) return { subject: '', body: '' };
+        const mainProduct = cart[0].product;
+        const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
+        
+        let subject = supplier?.emailSubjectTemplate || mainProduct.emailOrderSubject || `Bestellung: {product_name}`;
+        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nHotel Rezeption`;
+
+        if (cart.length === 1) {
+            subject = subject.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
+            body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
+        } else {
+            const listSubjectInfo = cart.length + " Produkte";
+            const listBodyInfo = '\n' + cart.map(c => `- ${c.quantity}x ${c.product.name} (${c.product.unit || ''})`).join('\n');
+            
+            subject = subject.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listSubjectInfo);
+            body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listBodyInfo);
+        }
+        return { subject, body };
+    };
+
     const handleProductSelect = (product: Product) => {
-        setSelectedProduct(product);
-        setOrderQuantity(1); // Reset quantity locally
+        const initialCart = [{ product, quantity: 1 }];
+        setOrderCart(initialCart);
         setIsOrderEmailExpanded(product.preferredOrderMethod === 'email');
 
-        // Pre-fill email template
-        const supplier = suppliers.find(s => s.id === product.supplierId);
-        let subject = '';
-        let body = '';
-
-        if (supplier) {
-            subject = supplier.emailSubjectTemplate || `Bestellung: ${product.name}`;
-            body = supplier.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nHotel Rezeption`;
-        } else {
-            subject = product.emailOrderSubject || `Bestellung: ${product.name}`;
-            body = product.emailOrderBody || `Guten Tag,\n\nbitte liefern Sie folgende Ware:\n\nProdukt: {product_name}\nMenge: {quantity} {unit}\n\nMit freundlichen Grüßen`;
-        }
-
-        // Initial replacement for display (quantity is 1 initially)
-        subject = subject.replace(/{product_name}/g, product.name)
-            .replace(/{quantity}/g, '1')
-            .replace(/{unit}/g, product.unit);
-
-        body = body.replace(/{product_name}/g, product.name)
-            .replace(/{quantity}/g, '1')
-            .replace(/{unit}/g, product.unit);
-
+        const { subject, body } = generateEmailTemplate(initialCart);
         setEmailSubject(subject);
         setEmailBody(body);
+    };
+
+    const addToCart = (product: Product) => {
+        setOrderCart(prev => {
+            const newCart = [...prev, { product, quantity: 1 }];
+            const { subject, body } = generateEmailTemplate(newCart);
+            setEmailSubject(subject);
+            setEmailBody(body);
+            return newCart;
+        });
+    };
+
+    const updateCartQuantity = (index: number, quantity: number) => {
+        setOrderCart(prev => {
+            const newCart = prev.map((c, i) => i === index ? { ...c, quantity } : c);
+            const { subject, body } = generateEmailTemplate(newCart);
+            setEmailSubject(subject);
+            setEmailBody(body);
+            return newCart;
+        });
+    };
+
+    const removeFromCart = (index: number) => {
+        setOrderCart(prev => {
+            const newCart = prev.filter((_, i) => i !== index);
+            const { subject, body } = generateEmailTemplate(newCart);
+            setEmailSubject(subject);
+            setEmailBody(body);
+            return newCart;
+        });
+    };
+    
+    // setSelectedProduct compatibility wrapper for resetting modal
+    const setSelectedProduct = (val: Product | null) => {
+        if (val === null) setOrderCart([]);
+        else handleProductSelect(val);
     };
 
     const handleCreateOrder = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         try {
-            const quantity = orderQuantity === '' ? 1 : orderQuantity;
-
             if (createTab === 'existing') {
-                if (!selectedProduct) return;
+                if (orderCart.length === 0) return;
+                const mainProduct = orderCart[0].product;
 
                 // 1. Send Email if configured
-                if (selectedProduct.autoOrder && selectedProduct.emailOrderAddress) {
-                    // Check if we have settings for EmailJS
+                if (mainProduct.autoOrder && mainProduct.emailOrderAddress) {
                     const settings = StorageService.getSettings();
-
                     if (settings && settings.serviceId && settings.templateId && settings.publicKey) {
                         try {
-                            const qty = orderQuantity === '' ? 1 : orderQuantity;
+                            const qty = orderCart[0].quantity;
                             const templateParams = {
-                                to_email: selectedProduct.emailOrderAddress,
-                                subject: emailSubject, // Use edited subject
-                                message: emailBody, // Use edited body
-                                product_name: selectedProduct.name,
-                                quantity: qty,
-                                unit: selectedProduct.unit
+                                to_email: mainProduct.emailOrderAddress,
+                                subject: emailSubject,
+                                message: emailBody,
+                                product_name: orderCart.length > 1 ? orderCart.length + " Produkte" : mainProduct.name,
+                                quantity: orderCart.length > 1 ? "" : qty,
+                                unit: orderCart.length > 1 ? "" : mainProduct.unit
                             };
-
-                            await emailjs.send(
-                                settings.serviceId,
-                                settings.templateId,
-                                templateParams,
-                                settings.publicKey
-                            );
-
-                            setNotification({ message: 'Bestellung wurde erstellt und Email versendet!', type: 'success' });
+                            await emailjs.send(settings.serviceId, settings.templateId, templateParams, settings.publicKey);
+                            setNotification({ message: 'Bestellung wurde automatisch per E-Mail versendet!', type: 'success' });
                         } catch (error) {
                             console.error('Email send error:', error);
                             setNotification({ message: 'Bestellung erstellt, aber Email konnte nicht gesendet werden.', type: 'error' });
                         }
-                    } else {
-                        setNotification({ message: 'Bestellung erstellt. Für Auto-Versand bitte Email-Einstellungen prüfen.', type: 'info' });
                     }
-                } else {
-                    setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
                 }
-                // 2. Save Order
-                const newOrder: Order = {
-                    id: generateId(),
-                    date: new Date(orderDate).toISOString(),
-                    productName: selectedProduct.name,
-                    quantity: quantity,
-                    status: 'open',
-                    productImage: selectedProduct.image,
-                    supplierEmail: selectedProduct.emailOrderAddress,
-                    supplierPhone: selectedProduct.supplierPhone,
-                    notes: orderNotes
-                };
-                await DataService.saveOrder(newOrder);
 
+                // 2. Save Orders
+                for (const item of orderCart) {
+                    const newOrder: Order = {
+                        id: generateId(),
+                        date: new Date(orderDate).toISOString(),
+                        productName: item.product.name,
+                        quantity: item.quantity,
+                        status: 'open',
+                        productImage: item.product.image,
+                        supplierEmail: item.product.emailOrderAddress,
+                        supplierPhone: item.product.supplierPhone,
+                        notes: orderNotes
+                    };
+                    await DataService.saveOrder(newOrder);
+                }
             } else {
                 // One-time Order
                 if (!oneTimeOrder.name) {
                     setNotification({ message: 'Bitte geben Sie einen Produktnamen ein.', type: 'error' });
                     return;
                 }
-
-                const oneTimeQty = oneTimeOrder.quantity === '' ? 1 : oneTimeOrder.quantity;
-
                 const newOrder: Order = {
                     id: generateId(),
                     date: new Date(orderDate).toISOString(),
                     productName: oneTimeOrder.name,
-                    quantity: oneTimeQty,
+                    quantity: oneTimeOrder.quantity === '' ? 1 : oneTimeOrder.quantity,
                     status: 'open',
                     supplierName: oneTimeOrder.supplierName,
                     supplierEmail: oneTimeOrder.supplierEmail,
@@ -207,28 +233,14 @@ export const Orders: React.FC = () => {
                 await DataService.saveOrder(newOrder);
             }
 
-            setNotification({ message: 'Bestellung erfolgreich angelegt!', type: 'success' });
+            setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
             setIsCreateModalOpen(false);
-            setSelectedProduct(null);
-            setOrderQuantity(1);
+            setOrderCart([]);
             setOrderNotes('');
-            setOneTimeOrder({
-                name: '',
-                quantity: 1,
-                supplierName: '',
-                supplierId: '',
-                orderNumber: '',
-                price: '',
-                supplierEmail: '',
-                supplierPhone: '',
-                notes: '',
-                orderUrl: ''
-            });
-            setIsDetailsOpen(false);
+            setOneTimeOrder({ name: '', quantity: 1, supplierName: '', supplierId: '', orderNumber: '', price: '', supplierEmail: '', supplierPhone: '', notes: '', orderUrl: '' });
             loadOrders();
-
-        } catch (error: any) {
-            console.error('Error creating order:', error);
+        } catch (error) {
+            console.error('Order Error:', error);
             setNotification({ message: 'Fehler beim Anlegen der Bestellung.', type: 'error' });
         }
     };
@@ -244,6 +256,30 @@ export const Orders: React.FC = () => {
             };
             await DataService.updateOrder(updatedOrder);
             loadOrders();
+        }
+    };
+
+    const handleRepeatOrder = (order: Order) => {
+        const product = products.find(p => p.name === order.productName);
+        if (product) {
+            handleProductSelect(product);
+            setIsCreateModalOpen(true);
+        } else {
+            // One-time order repeating
+            setCreateTab('onetime');
+            setOneTimeOrder({
+                name: order.productName,
+                quantity: order.quantity,
+                supplierName: order.supplierName || '',
+                supplierId: '',
+                orderNumber: order.orderNumber || '',
+                price: order.price || '',
+                supplierEmail: order.supplierEmail || '',
+                supplierPhone: order.supplierPhone || '',
+                notes: order.notes || '',
+                orderUrl: ''
+            });
+            setIsCreateModalOpen(true);
         }
     };
 
@@ -782,24 +818,64 @@ export const Orders: React.FC = () => {
                                 <Edit2 size={16} />
                                 Bearbeiten
                             </button>
+                            <button
+                                onClick={() => handleRepeatOrder(order)}
+                                style={{
+                                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-primary)',
+                                    backgroundColor: 'white',
+                                    color: 'var(--color-primary)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 'var(--spacing-xs)',
+                                    fontSize: 'var(--font-size-sm)',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                <Plus size={16} />
+                                Wiederholen
+                            </button>
                         </>
                     )}
                     {order.status === 'received' && (
-                        <button
-                            onClick={() => toggleOrderStatus(order.id)}
-                            style={{
-                                padding: 'var(--spacing-sm) var(--spacing-md)',
-                                borderRadius: 'var(--radius-md)',
-                                border: '1px solid var(--color-border)',
-                                backgroundColor: 'white',
-                                color: 'var(--color-text-main)',
-                                cursor: 'pointer',
-                                fontSize: 'var(--font-size-sm)',
-                                whiteSpace: 'nowrap'
-                            }}
-                        >
-                            Rückgängig
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                            <button
+                                onClick={() => toggleOrderStatus(order.id)}
+                                style={{
+                                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-border)',
+                                    backgroundColor: 'white',
+                                    color: 'var(--color-text-main)',
+                                    cursor: 'pointer',
+                                    fontSize: 'var(--font-size-sm)',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                Rückgängig
+                            </button>
+                            <button
+                                onClick={() => handleRepeatOrder(order)}
+                                style={{
+                                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-primary)',
+                                    backgroundColor: 'white',
+                                    color: 'var(--color-primary)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 'var(--spacing-xs)',
+                                    fontSize: 'var(--font-size-sm)',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                <Plus size={16} />
+                                Wiederholen
+                            </button>
+                        </div>
                     )}
                 </div>
             </div>
@@ -1106,22 +1182,53 @@ export const Orders: React.FC = () => {
                                             return null;
                                         })()}
 
-                                        {/* Contact Info Display */}
-
-
-                                        <div style={{ marginBottom: 'var(--spacing-md)' }}>
-                                            <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-sm)' }}>Menge</label>
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                value={orderQuantity}
-                                                onChange={e => {
-                                                    const val = e.target.value;
-                                                    setOrderQuantity(val === '' ? '' : parseInt(val));
-                                                }}
-                                                style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                            />
+                                        <div>
+                                            <h5 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-primary)' }}>Bestellübersicht</h5>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 'var(--spacing-md)' }}>
+                                                {orderCart.map((item, index) => (
+                                                    <div key={item.product.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <div style={{ flex: 1, fontWeight: 500, fontSize: 'var(--font-size-md)' }}>{item.product.name} ({item.product.unit})</div>
+                                                        <input 
+                                                            type="number" 
+                                                            min="1" 
+                                                            value={item.quantity} 
+                                                            onChange={e => updateCartQuantity(index, Number(e.target.value))}
+                                                            style={{ width: '60px', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: 'var(--font-size-md)' }} 
+                                                        />
+                                                        {index > 0 && (
+                                                            <button type="button" onClick={() => removeFromCart(index)} style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '4px' }}>
+                                                                <span style={{ fontSize: '18px', fontWeight: 'bold' }}>×</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            
+                                            {(() => {
+                                                const supplierId = selectedProduct?.supplierId;
+                                                if (!supplierId) return null;
+                                                const suggestions = products.filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id));
+                                                if (suggestions.length === 0) return null;
+                                                return (
+                                                    <div style={{ padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                                                        <h6 style={{ margin: '0 0 10px 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Weitere Produkte vom Lieferanten hinzufügen:</h6>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                            {suggestions.map(p => (
+                                                                <button 
+                                                                    key={p.id} 
+                                                                    type="button"
+                                                                    onClick={() => addToCart(p)}
+                                                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', fontSize: 'var(--font-size-xs)', cursor: 'pointer', color: 'var(--color-text-main)' }}
+                                                                >
+                                                                    + {p.name}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
+
                                         <div style={{ marginBottom: 'var(--spacing-md)' }}>
                                             <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-sm)' }}>Bestelldatum</label>
                                             <input
