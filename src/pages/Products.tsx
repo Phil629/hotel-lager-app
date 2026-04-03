@@ -80,70 +80,82 @@ export const Products: React.FC = () => {
     useEffect(() => {
         // Load data and then check params
         const init = async () => {
-            await loadSuppliers();
-            const loadedProducts = await DataService.getProducts();
-            
-            // Auto-consumption logic
-            const now = new Date();
-            let updatedAny = false;
-            const updatedProducts = [...loadedProducts];
+            try {
+                await loadSuppliers().catch(e => console.error('Error loading suppliers:', e));
+                const loadedProducts = await DataService.getProducts();
+                
+                // Immediately set products so the UI renders
+                setProducts(loadedProducts);
 
-            for (let i = 0; i < updatedProducts.length; i++) {
-                const p = updatedProducts[i];
-                if (p.consumptionAmount && p.consumptionPeriod) {
-                    if (!p.lastConsumptionDate) {
-                        p.lastConsumptionDate = now.toISOString();
-                        await DataService.saveProduct(p);
-                        updatedAny = true;
-                    } else {
-                        const lastDate = new Date(p.lastConsumptionDate);
-                        const diffTime = Math.abs(now.getTime() - lastDate.getTime());
-                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                        
-                        let periodsPassed = 0;
-                        if (p.consumptionPeriod === 'day') {
-                            periodsPassed = diffDays;
-                        } else if (p.consumptionPeriod === 'week') {
-                            periodsPassed = Math.floor(diffDays / 7);
+                // Handle URL Actions (QR Scans)
+                const action = searchParams.get('action');
+                const id = searchParams.get('id');
+
+                if (action && id && loadedProducts.length > 0) {
+                    const product = loadedProducts.find(p => p.id === id);
+                    if (product) {
+                        if (action === 'order') handleOrderClick(product);
+                        else if (action === 'stock') {
+                            setStockUpdateProduct(product);
+                            setStockUpdateValue(product.stock);
+                            setIsStockUpdateModalOpen(true);
                         }
+                    }
+                }
 
-                        if (periodsPassed > 0) {
-                            const toDeduct = periodsPassed * p.consumptionAmount;
-                            p.stock = Math.max(0, p.stock - toDeduct);
-                            
-                            const newLastDate = new Date(lastDate);
-                            if (p.consumptionPeriod === 'day') {
-                                newLastDate.setDate(newLastDate.getDate() + periodsPassed);
-                            } else if (p.consumptionPeriod === 'week') {
-                                newLastDate.setDate(newLastDate.getDate() + (periodsPassed * 7));
+                // Auto-consumption logic in the background
+                const runAutoConsumption = async () => {
+                    const now = new Date();
+                    let updatedAny = false;
+                    const updatedProducts = [...loadedProducts];
+
+                    for (let i = 0; i < updatedProducts.length; i++) {
+                        const p = updatedProducts[i];
+                        if (p.consumptionAmount && p.consumptionPeriod) {
+                            try {
+                                if (!p.lastConsumptionDate) {
+                                    p.lastConsumptionDate = now.toISOString();
+                                    await DataService.saveProduct(p);
+                                    updatedAny = true;
+                                } else {
+                                    const lastDate = new Date(p.lastConsumptionDate);
+                                    if (isNaN(lastDate.getTime())) continue;
+                                    
+                                    const diffTime = Math.abs(now.getTime() - lastDate.getTime());
+                                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                                    
+                                    let periodsPassed = 0;
+                                    if (p.consumptionPeriod === 'day') periodsPassed = diffDays;
+                                    else if (p.consumptionPeriod === 'week') periodsPassed = Math.floor(diffDays / 7);
+
+                                    if (periodsPassed > 0) {
+                                        const toDeduct = periodsPassed * p.consumptionAmount;
+                                        p.stock = Math.max(0, p.stock - toDeduct);
+                                        
+                                        const newLastDate = new Date(lastDate);
+                                        if (p.consumptionPeriod === 'day') newLastDate.setDate(newLastDate.getDate() + periodsPassed);
+                                        else if (p.consumptionPeriod === 'week') newLastDate.setDate(newLastDate.getDate() + (periodsPassed * 7));
+                                        
+                                        p.lastConsumptionDate = newLastDate.toISOString();
+                                        await DataService.saveProduct(p);
+                                        updatedAny = true;
+                                    }
+                                }
+                            } catch (err) {
+                                console.error('Failed to auto-consume product', p.id, err);
                             }
-                            p.lastConsumptionDate = newLastDate.toISOString();
-                            
-                            await DataService.saveProduct(p);
-                            updatedAny = true;
                         }
                     }
-                }
-            }
 
-            setProducts(updatedAny ? updatedProducts : loadedProducts);
-            // Handle URL Actions (QR Scans)
-            const action = searchParams.get('action');
-            const id = searchParams.get('id');
-
-            if (action && id && loadedProducts.length > 0) {
-                const product = loadedProducts.find(p => p.id === id);
-                if (product) {
-                    if (action === 'order') {
-                        handleOrderClick(product);
-                    } else if (action === 'stock') {
-                        setStockUpdateProduct(product);
-                        setStockUpdateValue(product.stock);
-                        setIsStockUpdateModalOpen(true);
-                    }
-                }
+                    if (updatedAny) setProducts(updatedProducts);
+                };
+                
+                runAutoConsumption();
+            } catch (error) {
+                console.error('Fatal init error:', error);
             }
         };
+        
         init();
     }, [searchParams]); // Re-run if params change (though mostly on mount)
 
