@@ -806,7 +806,8 @@ export const Orders: React.FC = () => {
         </div>
     );
     const renderReceivedOrderCard = (order: Order) => {
-        const isExpanded = expandedReceivedOrders.has(order.id);
+        const hasUnresolvedDefect = order.hasDefect && !order.defectResolved;
+        const isExpanded = expandedReceivedOrders.has(order.id) || hasUnresolvedDefect;
         
         if (!isExpanded) {
             return (
@@ -828,7 +829,7 @@ export const Orders: React.FC = () => {
                             Eingegangen am: {new Date(order.receivedAt || order.date).toLocaleDateString('de-DE')}
                         </div>
                     </div>
-                    {order.hasDefect && !order.defectResolved && (
+                    {hasUnresolvedDefect && (
                         <div style={{ color: '#ff9800', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <AlertTriangle size={14} /> Mangel gemeldet
                         </div>
@@ -846,14 +847,16 @@ export const Orders: React.FC = () => {
         return (
             <div key={`expanded-${order.id}`}>
                 {renderOrderCard(order)}
-                <div style={{ marginTop: '8px', textAlign: 'center' }}>
-                    <button
-                        onClick={() => toggleReceivedOrder(order.id)}
-                        style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-sm)', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                        Details ausblenden
-                    </button>
-                </div>
+                {!hasUnresolvedDefect && (
+                    <div style={{ marginTop: '8px', textAlign: 'center' }}>
+                        <button
+                            onClick={() => toggleReceivedOrder(order.id)}
+                            style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-sm)', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                            Details ausblenden
+                        </button>
+                    </div>
+                )}
             </div>
         );
     };
