@@ -47,8 +47,7 @@ export const Products: React.FC = () => {
     const [isEmailTemplateOpen, setIsEmailTemplateOpen] = useState(false);
 
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-    const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
-    const [orderQuantity, setOrderQuantity] = useState(1);
+    const [orderCart, setOrderCart] = useState<{product: Product, quantity: number}[]>([]);
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
     const [orderNotes, setOrderNotes] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
@@ -268,90 +267,114 @@ export const Products: React.FC = () => {
         }
     };
 
+    const generateEmailTemplate = (cart: {product: Product, quantity: number}[]) => {
+        if (cart.length === 0) return { subject: '', body: '' };
+        const mainProduct = cart[0].product;
+        const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
+        
+        let subject = supplier?.emailSubjectTemplate || mainProduct.emailOrderSubject || `Bestellung: {product_name}`;
+        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nHotel Rezeption`;
+
+        if (cart.length === 1) {
+            subject = subject.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
+            body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
+        } else {
+            const listSubjectInfo = cart.length + " Produkte";
+            const listBodyInfo = '\n' + cart.map(c => `- ${c.quantity}x ${c.product.name} (${c.product.unit || ''})`).join('\n');
+            
+            subject = subject.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listSubjectInfo);
+            body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listBodyInfo);
+        }
+        return { subject, body };
+    };
+
     const handleOrderClick = (product: Product) => {
-        setSelectedProductForOrder(product);
-        setOrderQuantity(1);
+        const initialCart = [{ product, quantity: 1 }];
+        setOrderCart(initialCart);
         setOrderDate(new Date().toISOString().split('T')[0]);
         setOrderNotes('');
 
-        // Pre-fill email template
-        const supplier = suppliers.find(s => s.id === product.supplierId);
-        let subject = '';
-        let body = '';
-
-        if (supplier) {
-            subject = supplier.emailSubjectTemplate || `Bestellung: ${product.name}`;
-            body = supplier.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nHotel Rezeption`;
-        } else {
-            subject = product.emailOrderSubject || `Bestellung: ${product.name}`;
-            body = product.emailOrderBody || `Guten Tag,\n\nbitte liefern Sie folgende Ware:\n\nProdukt: {product_name}\nMenge: {quantity} {unit}\n\nMit freundlichen Grüßen`;
-        }
-
-        // Initial replacement for display (quantity is 1 initially)
-        subject = subject.replace(/{product_name}/g, product.name)
-            .replace(/{quantity}/g, '1')
-            .replace(/{unit}/g, product.unit);
-
-        body = body.replace(/{product_name}/g, product.name)
-            .replace(/{quantity}/g, '1')
-            .replace(/{unit}/g, product.unit);
-
+        const { subject, body } = generateEmailTemplate(initialCart);
         setEmailSubject(subject);
         setEmailBody(body);
         setIsOrderEmailExpanded(product.preferredOrderMethod === 'email');
         setIsOrderModalOpen(true);
     };
 
+    const addToCart = (product: Product) => {
+        setOrderCart(prev => {
+            const newCart = [...prev, { product, quantity: 1 }];
+            const { subject, body } = generateEmailTemplate(newCart);
+            setEmailSubject(subject);
+            setEmailBody(body);
+            return newCart;
+        });
+    };
+
+    const updateCartQuantity = (index: number, quantity: number) => {
+        setOrderCart(prev => {
+            const newCart = prev.map((c, i) => i === index ? { ...c, quantity } : c);
+            const { subject, body } = generateEmailTemplate(newCart);
+            setEmailSubject(subject);
+            setEmailBody(body);
+            return newCart;
+        });
+    };
+
+    const removeFromCart = (index: number) => {
+        setOrderCart(prev => {
+            const newCart = prev.filter((_, i) => i !== index);
+            const { subject, body } = generateEmailTemplate(newCart);
+            setEmailSubject(subject);
+            setEmailBody(body);
+            return newCart;
+        });
+    };
+
     const handleCreateOrder = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedProductForOrder) return;
+        if (orderCart.length === 0) return;
 
         setIsLoading(true);
         try {
-            // Check for automated order
-            if (selectedProductForOrder.autoOrder && selectedProductForOrder.emailOrderAddress) {
+            const mainProduct = orderCart[0].product;
+            if (mainProduct.autoOrder && mainProduct.emailOrderAddress) {
                 const settings = StorageService.getSettings();
-
                 if (!settings.serviceId || !settings.templateId || !settings.publicKey) {
-                    setNotification({ message: 'Fehler: EmailJS ist nicht konfiguriert. Bitte prüfen Sie die Einstellungen.', type: 'error' });
+                    setNotification({ message: 'Fehler: EmailJS ist nicht konfiguriert.', type: 'error' });
+                    setIsLoading(false);
                     return;
                 }
-
                 const templateParams = {
-                    to_email: selectedProductForOrder.emailOrderAddress,
+                    to_email: mainProduct.emailOrderAddress,
                     subject: emailSubject,
                     message: emailBody,
-                    product_name: selectedProductForOrder.name,
-                    quantity: orderQuantity,
-                    unit: selectedProductForOrder.unit
+                    product_name: orderCart.length > 1 ? orderCart.length + " Produkte" : mainProduct.name,
+                    quantity: orderCart.length > 1 ? "" : orderCart[0].quantity,
+                    unit: orderCart.length > 1 ? "" : mainProduct.unit
                 };
-
-                await emailjs.send(
-                    settings.serviceId,
-                    settings.templateId,
-                    templateParams,
-                    settings.publicKey
-                );
-
+                await emailjs.send(settings.serviceId, settings.templateId, templateParams, settings.publicKey);
                 setNotification({ message: 'Bestellung wurde automatisch per E-Mail versendet!', type: 'success' });
             }
 
-            const newOrder: Order = {
-                id: generateId(),
-                date: new Date(orderDate).toISOString(),
-                productName: selectedProductForOrder.name,
-                quantity: orderQuantity,
-                status: 'open',
-                productImage: selectedProductForOrder.image,
-                supplierEmail: selectedProductForOrder.emailOrderAddress,
-                supplierPhone: selectedProductForOrder.supplierPhone,
-                notes: orderNotes
-            };
+            for (const item of orderCart) {
+                const newOrder: Order = {
+                    id: generateId(),
+                    date: new Date(orderDate).toISOString(),
+                    productName: item.product.name,
+                    quantity: item.quantity,
+                    status: 'open',
+                    productImage: item.product.image,
+                    supplierEmail: item.product.emailOrderAddress,
+                    supplierPhone: item.product.supplierPhone,
+                    notes: orderNotes
+                };
+                await DataService.saveOrder(newOrder);
+            }
 
-            await DataService.saveOrder(newOrder);
             setIsOrderModalOpen(false);
-            setSelectedProductForOrder(null);
-            if (!selectedProductForOrder.autoOrder) {
+            setOrderCart([]);
+            if (!mainProduct.autoOrder) {
                 setNotification({ message: 'Bestellung erfolgreich angelegt!', type: 'success' });
             }
         } catch (error) {
@@ -410,15 +433,16 @@ export const Products: React.FC = () => {
     };
 
     const prepareEmailLink = (type: 'mailto' | 'gmail') => {
-        if (!selectedProductForOrder?.emailOrderAddress) return;
+        if (orderCart.length === 0 || !orderCart[0].product.emailOrderAddress) return;
 
+        const mainProduct = orderCart[0].product;
         const encodedSubject = encodeURIComponent(emailSubject);
         const encodedBody = encodeURIComponent(emailBody);
 
         if (type === 'gmail') {
-            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedProductForOrder.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
+            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${mainProduct.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
         } else {
-            window.location.href = `mailto:${selectedProductForOrder.emailOrderAddress}?subject=${encodedSubject}&body=${encodedBody}`;
+            window.location.href = `mailto:${mainProduct.emailOrderAddress}?subject=${encodedSubject}&body=${encodedBody}`;
         }
     };
 
@@ -1794,7 +1818,7 @@ export const Products: React.FC = () => {
             }
 
             {
-                isOrderModalOpen && selectedProductForOrder && (
+                isOrderModalOpen && orderCart.length > 0 && ((selectedProductForOrder) => (
                     <div style={{
                         position: 'fixed',
                         top: 0,
@@ -1826,29 +1850,50 @@ export const Products: React.FC = () => {
 
                             <form onSubmit={handleCreateOrder} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                 <div>
-                                    <p style={{ margin: '0 0 var(--spacing-sm) 0', fontWeight: 500 }}>Produkt: {selectedProductForOrder.name}</p>
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Menge ({selectedProductForOrder.unit})</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        required
-                                        value={orderQuantity}
-                                        onChange={e => {
-                                            const newQty = Number(e.target.value);
-                                            setOrderQuantity(newQty);
-
-                                            // Update body placeholder dynamically if needed, 
-                                            // but since we allow manual edits, maybe we shouldn't overwrite automatically 
-                                            // unless the user hasn't edited it? 
-                                            // For simplicity, we won't auto-update text after initial load to avoid overwriting user edits.
-                                            // But we could re-run the replacement if we want strictly template behavior.
-                                            // Better strategy: Simple replacement on load, then manual.
-                                        }}
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
+                                    <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-primary)' }}>Bestellübersicht</h4>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 'var(--spacing-md)' }}>
+                                        {orderCart.map((item, index) => (
+                                            <div key={item.product.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div style={{ flex: 1, fontWeight: 500, fontSize: 'var(--font-size-md)' }}>{item.product.name} ({item.product.unit})</div>
+                                                <input 
+                                                    type="number" 
+                                                    min="1" 
+                                                    value={item.quantity} 
+                                                    onChange={e => updateCartQuantity(index, Number(e.target.value))}
+                                                    style={{ width: '60px', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: 'var(--font-size-md)' }} 
+                                                />
+                                                {index > 0 && (
+                                                    <button type="button" onClick={() => removeFromCart(index)} style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '4px' }}>
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    {(() => {
+                                        const supplierId = selectedProductForOrder.supplierId;
+                                        if (!supplierId) return null;
+                                        const suggestions = products.filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id));
+                                        if (suggestions.length === 0) return null;
+                                        return (
+                                            <div style={{ padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                                                <h5 style={{ margin: '0 0 10px 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Weitere Produkte vom Lieferanten hinzufügen:</h5>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                    {suggestions.map(p => (
+                                                        <button 
+                                                            key={p.id} 
+                                                            type="button"
+                                                            onClick={() => addToCart(p)}
+                                                            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', fontSize: 'var(--font-size-xs)', cursor: 'pointer', color: 'var(--color-text-main)' }}
+                                                        >
+                                                            <Plus size={14} /> {p.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 <div>
@@ -2164,7 +2209,7 @@ export const Products: React.FC = () => {
                             </form>
                         </div>
                     </div>
-                )
+                ))(orderCart[0].product)
             }
             {/* IoT / QR Code Modal with Tabs */}
             {showIoTLink && (
