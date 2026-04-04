@@ -711,7 +711,7 @@ export const Orders: React.FC = () => {
                         {order.trackingLink && (
                             <div style={{ marginTop: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: 'var(--font-size-sm)' }}>
                                 <ExternalLink size={14} />
-                                <a href={order.trackingLink} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}>
+                                <a href={/^https?:\/\//i.test(order.trackingLink) ? order.trackingLink : `https://${order.trackingLink}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}>
                                     Sendungsverfolgung
                                 </a>
                             </div>
