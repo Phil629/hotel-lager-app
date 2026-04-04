@@ -254,7 +254,9 @@ export const Products: React.FC = () => {
             preferredOrderMethod: newProduct.preferredOrderMethod,
             consumptionAmount: newProduct.consumptionAmount,
             consumptionPeriod: newProduct.consumptionPeriod,
-            lastConsumptionDate: newProduct.lastConsumptionDate
+            lastConsumptionDate: newProduct.lastConsumptionDate,
+            targetStock: newProduct.targetStock ? Number(newProduct.targetStock) : undefined,
+            ignoreOrderProposals: newProduct.ignoreOrderProposals || false
         };
 
         setIsLoading(true);
@@ -387,7 +389,7 @@ export const Products: React.FC = () => {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, price: 0, autoOrder: false, notes: [], preferredOrderMethod: 'email' });
+        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, targetStock: undefined, ignoreOrderProposals: false, price: 0, autoOrder: false, notes: [], preferredOrderMethod: 'email' });
         setEditingId(null);
         // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
@@ -1675,13 +1677,33 @@ export const Products: React.FC = () => {
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mindestbestand</label>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mindestbestand (Meldebestand)</label>
                                                     <input
                                                         type="number"
                                                         value={newProduct.minStock || 0}
                                                         onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })}
                                                         style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                                     />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Soll-Bestand (Auffüllen bis)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={newProduct.targetStock || ''}
+                                                        onChange={e => setNewProduct({ ...newProduct, targetStock: e.target.value ? Number(e.target.value) : undefined })}
+                                                        placeholder="Menge (Optional)"
+                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                    />
+                                                </div>
+                                                <div style={{ gridColumn: '1 / -1', marginTop: 'var(--spacing-sm)' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={newProduct.ignoreOrderProposals || false}
+                                                            onChange={e => setNewProduct({ ...newProduct, ignoreOrderProposals: e.target.checked })}
+                                                        />
+                                                        Diesen Artikel vom Bestell-Autopiloten (Vorschläge) ausschließen
+                                                    </label>
                                                 </div>
                                                 <div>
                                                     <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Erwarteter Verbrauch</label>

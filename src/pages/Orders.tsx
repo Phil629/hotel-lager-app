@@ -23,6 +23,8 @@ export const Orders: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [orderCart, setOrderCart] = useState<{product: Product, quantity: number}[]>([]);
+    const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
+    const [modalProposals, setModalProposals] = useState<{product: Product, supplierName: string, supplierId: string, quantity: number, openQty: number, selected: boolean}[]>([]);
     
     // Derived state for legacy compatibility
     const selectedProduct = orderCart.length > 0 ? orderCart[0].product : null;
@@ -385,6 +387,87 @@ export const Orders: React.FC = () => {
         if (order.hasDefect && !order.defectResolved) return '#ff9800';
         if (order.status === 'received') return '#4caf50';
         return '#2196f3';
+    };
+
+    const orderProposals = React.useMemo(() => {
+        const proposals: {product: Product, supplierName: string, supplierId: string, quantity: number, openQty: number, selected: boolean}[] = [];
+        for (const product of products) {
+            if (product.ignoreOrderProposals) continue;
+            
+            const min = product.minStock || 0;
+            if (product.stock <= min) {
+                const target = product.targetStock && product.targetStock > 0 ? product.targetStock : (min > 0 ? min * 2 : 1);
+                
+                const openOrdersForProduct = orders.filter(o => o.status === 'open' && o.productName === product.name);
+                const openQuantity = openOrdersForProduct.reduce((sum, o) => sum + (o.quantity || 0), 0);
+                
+                const needed = target - product.stock - openQuantity;
+                if (needed > 0) {
+                    const supplier = suppliers.find(s => s.id === product.supplierId);
+                    proposals.push({
+                        product,
+                        supplierName: supplier ? supplier.name : 'Kein Lieferant',
+                        supplierId: product.supplierId || 'unassigned',
+                        quantity: needed,
+                        openQty: openQuantity,
+                        selected: true
+                    });
+                }
+            }
+        }
+        return proposals;
+    }, [products, orders, suppliers]);
+
+    const handleOpenProposals = () => {
+        setModalProposals(orderProposals);
+        setIsProposalModalOpen(true);
+    };
+
+    const handleGenerateProposals = async () => {
+        const selected = modalProposals.filter(p => p.selected && p.quantity > 0);
+        if (selected.length === 0) return;
+        
+        try {
+            const nowIso = new Date().toISOString();
+            for (const prop of selected) {
+                 const newOrder: Order = {
+                    id: generateId(),
+                    date: nowIso,
+                    productName: prop.product.name,
+                    quantity: prop.quantity,
+                    status: 'open',
+                    productImage: prop.product.image,
+                    supplierEmail: prop.product.emailOrderAddress,
+                    supplierPhone: prop.product.supplierPhone,
+                    notes: 'Automatisch generierter Bestellvorschlag'
+                };
+                await DataService.saveOrder(newOrder);
+            }
+            setNotification({ message: `${selected.length} Bestellungen generiert!`, type: 'success' });
+            setIsProposalModalOpen(false);
+            loadOrders();
+        } catch(e) {
+             console.error('Order Proposal Error:', e);
+             setNotification({ message: 'Fehler beim Generieren', type: 'error' });
+        }
+    };
+
+    const handleIgnorePermanently = async (productId: string) => {
+        const prod = products.find(p => p.id === productId);
+        if (prod) {
+             const updated = { ...prod, ignoreOrderProposals: true };
+             await DataService.updateProduct(updated);
+             loadProducts();
+             setModalProposals(prev => prev.filter(p => p.product.id !== productId));
+        }
+    };
+
+    const updateProposalQuantity = (index: number, quantity: number) => {
+        setModalProposals(prev => prev.map((p, i) => i === index ? { ...p, quantity } : p));
+    };
+    
+    const toggleProposalSelection = (index: number, selected: boolean) => {
+        setModalProposals(prev => prev.map((p, i) => i === index ? { ...p, selected } : p));
     };
 
     const openOrders = orders
@@ -943,8 +1026,51 @@ export const Orders: React.FC = () => {
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
                 <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0 }}>Bestellungen</h2>
-                <button
-                    onClick={() => setIsCreateModalOpen(true)}
+                <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+
+                    {orderProposals.length > 0 && (
+
+                        <button
+
+                            onClick={handleOpenProposals}
+
+                            style={{
+
+                                backgroundColor: '#FF9800',
+
+                                color: 'white',
+
+                                border: 'none',
+
+                                padding: '10px 20px',
+
+                                borderRadius: 'var(--radius-md)',
+
+                                cursor: 'pointer',
+
+                                display: 'flex',
+
+                                alignItems: 'center',
+
+                                gap: '8px',
+
+                                fontWeight: 600,
+
+                                boxShadow: 'var(--shadow-md)'
+
+                            }}
+
+                        >
+
+                            ✨ Bestellvorschläge ({orderProposals.length})
+
+                        </button>
+
+                    )}
+
+                    <button
+
+                        onClick={() => setIsCreateModalOpen(true)}
                     style={{
                         backgroundColor: 'var(--color-primary)',
                         color: 'white',
@@ -960,8 +1086,12 @@ export const Orders: React.FC = () => {
                     }}
                 >
                     <Plus size={20} /> Neue Bestellung
-                </button>
-            </div>
+
+                        </button>
+
+                    </div>
+
+                    </div>
 
             <div style={{ marginBottom: 'var(--spacing-2xl)' }}>
                 <h3 style={{
@@ -2077,6 +2207,171 @@ export const Orders: React.FC = () => {
             }
 
             {
+
+
+                isProposalModalOpen && (
+
+
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: 'var(--spacing-md)' }}>
+
+
+                        <div style={{ backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)' }}>
+
+
+                            <div style={{ padding: 'var(--spacing-lg)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+
+
+                                <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>✨ Bestell-Autopilot</h2>
+
+
+                                <button onClick={() => setIsProposalModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
+
+
+                            </div>
+
+
+                            <div style={{ padding: 'var(--spacing-lg)', overflowY: 'auto', flex: 1 }}>
+
+
+                                <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-lg)', marginTop: 0 }}>Folgende Produkte liegen unter dem Mindestbestand und sollten nachbestellt werden:</p>
+
+
+                                {Array.from(new Set(modalProposals.map(p => p.supplierName))).map(supplierName => {
+
+
+                                    const supplierProposals = modalProposals.filter(p => p.supplierName === supplierName);
+
+
+                                    if (supplierProposals.length === 0) return null;
+
+
+                                    return (
+
+
+                                        <div key={supplierName} style={{ marginBottom: 'var(--spacing-xl)' }}>
+
+
+                                            <h3 style={{ borderBottom: '2px solid var(--color-primary)', paddingBottom: '4px', marginBottom: 'var(--spacing-md)' }}>{supplierName}</h3>
+
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+
+
+                                                {supplierProposals.map(prop => {
+
+
+                                                    const originalIndex = modalProposals.findIndex(p => p.product.id === prop.product.id);
+
+
+                                                    return (
+
+
+                                                        <div key={prop.product.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', padding: 'var(--spacing-sm)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+
+
+                                                            <input type="checkbox" checked={prop.selected} onChange={e => toggleProposalSelection(originalIndex, e.target.checked)} style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
+
+
+                                                            <div style={{ flex: 1 }}>
+
+
+                                                                <div style={{ fontWeight: 500 }}>{prop.product.name}</div>
+
+
+                                                                <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+
+
+                                                                    <span>Bestand: {prop.product.stock} / Min: {prop.product.minStock || 0}</span>
+
+
+                                                                    {prop.openQty > 0 && <span style={{ color: '#FF9800' }}>({prop.openQty} offen)</span>}
+
+
+                                                                    <span>•</span>
+
+
+                                                                    <button onClick={() => handleIgnorePermanently(prop.product.id)} style={{ border: 'none', background: 'none', color: 'var(--color-danger)', fontSize: 'inherit', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}>Nie vorschlagen</button>
+
+
+                                                                </div>
+
+
+                                                            </div>
+
+
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+
+                                                                <span style={{ fontSize: 'var(--font-size-sm)' }}>Menge:</span>
+
+
+                                                                <input type="number" min="1" value={prop.quantity || 1} onChange={e => updateProposalQuantity(originalIndex, Number(e.target.value))} style={{ width: '60px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)' }} disabled={!prop.selected} />
+
+
+                                                                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', width: '30px' }}>{prop.product.unit || 'Stk'}</span>
+
+
+                                                            </div>
+
+
+                                                        </div>
+
+
+                                                    );
+
+
+                                                })}
+
+
+                                            </div>
+
+
+                                        </div>
+
+
+                                    );
+
+
+                                })}
+
+
+                            </div>
+
+
+                            <div style={{ padding: 'var(--spacing-lg)', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)' }}>
+
+
+                                <button onClick={() => setIsProposalModalOpen(false)} style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'transparent', cursor: 'pointer' }}>Abbrechen</button>
+
+
+                                <button onClick={handleGenerateProposals} disabled={modalProposals.filter(p => p.selected).length === 0} style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, opacity: modalProposals.filter(p => p.selected).length === 0 ? 0.5 : 1 }}>
+
+
+                                    {modalProposals.filter(p => p.selected).length} Bestellungen generieren
+
+
+                                </button>
+
+
+                            </div>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                )
+
+
+            }
+
+
+
+            {
+
+
                 notification && (
                     <Notification
                         message={notification.message}
