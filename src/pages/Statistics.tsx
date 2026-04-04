@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Product, Order } from '../types';
 import { DataService } from '../services/data';
-import { BarChart3, TrendingDown, Package, LayoutGrid } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart3, TrendingDown, Package, LayoutGrid, Info } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export const Statistics: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
@@ -40,17 +40,25 @@ export const Statistics: React.FC = () => {
 
             // Calculate suggested consumption
             let suggestedWeekly = 0;
+            let consumptionBaseDays = 0;
+            let consumptionBaseQuantity = 0;
+
             if (firstOrderDate && lastOrderDate && productOrders.length > 1) {
                 const diffTime = Math.abs(lastOrderDate.getTime() - firstOrderDate.getTime());
-                const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                 
-                if (diffDays > 0) {
-                    const daily = totalOrdered / diffDays;
+                if (diffDays >= 1) {
+                    let consumedQuantity = 0;
+                    for (let i = 0; i < productOrders.length - 1; i++) {
+                        consumedQuantity += productOrders[i].quantity;
+                    }
+
+                    const daily = consumedQuantity / diffDays;
                     suggestedWeekly = Number((daily * 7).toFixed(1));
+                    
+                    consumptionBaseDays = diffDays;
+                    consumptionBaseQuantity = consumedQuantity;
                 }
-            } else if (productOrders.length === 1) {
-                // If only one order, we can't really guess a rate without current stock knowledge over time
-                suggestedWeekly = 0;
             }
 
             // Chart data
@@ -70,6 +78,8 @@ export const Statistics: React.FC = () => {
                 orderCount: productOrders.length,
                 totalOrdered,
                 suggestedWeekly,
+                consumptionBaseDays,
+                consumptionBaseQuantity,
                 chartData,
                 productOrders
             };
@@ -160,7 +170,7 @@ export const Statistics: React.FC = () => {
                                 <div style={{ fontWeight: 600 }}>{stat.name}</div>
                                 <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
                                     <span>{stat.totalOrdered} {stat.unit} bestellt</span>
-                                    {stat.suggestedWeekly > 0 && stat.orderCount >= 3 && <span style={{ color: 'var(--color-primary)' }}>Ø {stat.suggestedWeekly} / Woche</span>}
+                                    {stat.suggestedWeekly > 0 && stat.orderCount >= 2 && <span style={{ color: 'var(--color-primary)' }}>Ø {stat.suggestedWeekly} / Woche</span>}
                                 </div>
                             </div>
                         ))}
@@ -184,12 +194,16 @@ export const Statistics: React.FC = () => {
                                     </div>
                                 </div>
                                 
-                                {selectedProductData.suggestedWeekly > 0 && selectedProductData.orderCount >= 3 ? (
+                                {selectedProductData.suggestedWeekly > 0 && selectedProductData.orderCount >= 2 ? (
                                     <div style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--color-primary)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                        <TrendingDown size={24} />
+                                        <TrendingDown size={24} style={{ flexShrink: 0 }} />
                                         <div>
-                                            <div style={{ fontSize: 'var(--font-size-xs)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>Erwarteter Verbrauch</div>
+                                            <div style={{ fontSize: 'var(--font-size-xs)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>Erwarteter Vorratsschwund</div>
                                             <div style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>~ {selectedProductData.suggestedWeekly} {selectedProductData.unit} / Woche</div>
+                                            <div style={{ marginTop: '4px', fontSize: '11px', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <Info size={12} />
+                                                Basis: {selectedProductData.consumptionBaseQuantity} {selectedProductData.unit} verbraucht über {selectedProductData.consumptionBaseDays} Tage
+                                            </div>
                                             <button 
                                                 onClick={() => handleAdoptSuggestion(selectedProductData, selectedProductData.suggestedWeekly)}
                                                 disabled={isSaving}
@@ -213,7 +227,7 @@ export const Statistics: React.FC = () => {
                                 ) : (
                                     <div style={{ backgroundColor: 'var(--color-surface)', border: '1px dashed var(--color-border)', color: 'var(--color-text-muted)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--font-size-sm)' }}>
                                         <TrendingDown size={18} />
-                                        <span>Erwarteter Verbrauch: <br/>(möglich ab 3 Bestellungen)</span>
+                                        <span>Erwarteter Verbrauch: <br/>(möglich ab 2 Bestellungen)</span>
                                     </div>
                                 )}
                             </div>
@@ -221,16 +235,16 @@ export const Statistics: React.FC = () => {
                             <div style={{ height: '300px', width: '100%', marginTop: 'var(--spacing-xl)' }}>
                                 {selectedProductData.chartData.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={selectedProductData.chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                                        <BarChart data={selectedProductData.chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
                                             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
                                             <Tooltip 
-                                                cursor={{ stroke: '#e5e7eb', strokeWidth: 2 }}
+                                                cursor={{ fill: 'rgba(229, 231, 235, 0.4)' }}
                                                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
                                             />
-                                            <Line type="monotone" dataKey="menge" name="Bestellmenge" stroke="var(--color-primary)" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                                        </LineChart>
+                                            <Bar dataKey="menge" name="Bestellmenge" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
                                     </ResponsiveContainer>
                                 ) : (
                                     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)' }}>
