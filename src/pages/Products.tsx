@@ -507,9 +507,7 @@ export const Products: React.FC = () => {
                         background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', 
                         padding: 'var(--spacing-lg)', 
                         borderRadius: 'var(--radius-xl)', 
-                        border: '1px solid var(--color-border)', 
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)', 
-                        cursor: 'pointer',
+                        border: !showLowStockOnly ? '2px solid var(--color-primary)' : '1px solid var(--color-border)', boxShadow: !showLowStockOnly ? '0 0 0 3px rgba(37,99,235,0.1)' : '0 4px 6px -1px rgb(0 0 0 / 0.05)', cursor: 'pointer',
                         transition: 'transform 0.2s, box-shadow 0.2s',
                     }}
                     onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05)'; }}
@@ -530,8 +528,7 @@ export const Products: React.FC = () => {
                         background: lowStockCount > 0 ? 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)' : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
                         padding: 'var(--spacing-lg)',
                         borderRadius: 'var(--radius-xl)',
-                        border: lowStockCount > 0 ? '1px solid #fca5a5' : '1px solid var(--color-border)',
-                        boxShadow: lowStockCount > 0 ? '0 4px 6px -1px rgb(220 38 38 / 0.1), 0 2px 4px -2px rgb(220 38 38 / 0.1)' : '0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)',
+                        border: showLowStockOnly ? '2px solid #ef4444' : (lowStockCount > 0 ? '1px solid #fca5a5' : '1px solid var(--color-border)'), boxShadow: showLowStockOnly ? '0 0 0 3px rgba(239,68,68,0.2)' : (lowStockCount > 0 ? '0 4px 6px -1px rgb(220 38 38 / 0.1)' : '0 4px 6px -1px rgb(0 0 0 / 0.05)'),
                         cursor: 'pointer',
                         transition: 'transform 0.2s, box-shadow 0.2s',
                     }}
@@ -613,7 +610,7 @@ export const Products: React.FC = () => {
                     onMouseOut={e => { if(!showLowStockOnly) Object.assign(e.currentTarget.style, { backgroundColor: 'white', borderColor: 'var(--color-border)' }) }}
                 >
                     <AlertTriangle size={18} color={showLowStockOnly ? '#ef4444' : '#64748b'} />
-                    {showLowStockOnly ? '🚫 Filter aufheben' : '⚠️ Kritischer Bestand'}
+                    {showLowStockOnly ? 'Filter aufheben' : 'Kritischer Bestand'}
                 </button>
             </div>
 
@@ -696,7 +693,7 @@ export const Products: React.FC = () => {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)' }}>
                                 <tr>
-                                    <th style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bild</th>
+                                    <th style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
                                     <th
                                         onClick={() => handleSort('name')}
                                         style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
@@ -943,7 +940,7 @@ export const Products: React.FC = () => {
                         padding: 'var(--spacing-md)'
                     }}>
                         <div style={{
-                            backgroundColor: 'var(--color-bg)',
+                            backgroundColor: 'var(--color-surface)',
                             borderRadius: 'var(--radius-lg)',
                             width: '100%',
                             maxWidth: '650px',
@@ -954,7 +951,7 @@ export const Products: React.FC = () => {
                         }}>
                             {/* Modal Header */}
                             <div style={{ padding: 'var(--spacing-lg)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{editingId ? '✏️ Produkt bearbeiten' : '📦 Neues Produkt anlegen'}</h2>
+                                <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{editingId ? '✏️ Produkt bearbeiten' : '✨ Neues Produkt anlegen'}</h2>
                                 <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
                                     <X size={24} color="var(--color-text-muted)" />
                                 </button>
