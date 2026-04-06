@@ -49,7 +49,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         Bestellungen
                     </Link>
 
-                    {StorageService.getSettings().inventoryMode && (
+                    {StorageService.getSettings().inventoryMode && location.pathname !== '/inventory' && (
                         <Link
                             to="/inventory"
                             style={{

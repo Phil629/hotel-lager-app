@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DataService } from '../services/data';
 import type { Product } from '../types';
-import { Plus, Minus, Trash2, CheckCircle2, Circle, Search, ArrowDownToLine } from 'lucide-react';
+import { Plus, Minus, CheckCircle2, Circle, Search, ArrowDownToLine } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 
 export const Inventory: React.FC = () => {
@@ -43,19 +43,6 @@ export const Inventory: React.FC = () => {
 
     const handleToggleChecked = (id: string) => {
         setCheckedMap(prev => ({ ...prev, [id]: !prev[id] }));
-    };
-
-    const handleDelete = async (product: Product) => {
-        if (!window.confirm(`Möchtest du "${product.name}" wirklich aus dem Inventar löschen?`)) return;
-        
-        try {
-            await DataService.deleteProduct(product.id);
-            setProducts(prev => prev.filter(p => p.id !== product.id));
-            setNotification({ message: 'Produkt gelöscht.', type: 'success' });
-        } catch (e) {
-            console.error(e);
-            setNotification({ message: 'Löschen fehlgeschlagen', type: 'error' });
-        }
     };
 
     // Derived data
@@ -139,32 +126,26 @@ export const Inventory: React.FC = () => {
                                             transition: 'all 0.2s ease', gap: '16px', flexWrap: 'wrap'
                                         }}>
                                             
-                                            {/* Left: Checkmark & Info */}
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: '1 1 200px' }}>
-                                                <button 
-                                                    onClick={() => handleToggleChecked(product.id)}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: isChecked ? '#22c55e' : '#cbd5e1' }}
-                                                >
-                                                    {isChecked ? <CheckCircle2 size={28} /> : <Circle size={28} />}
-                                                </button>
-                                                
-                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                    <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text-main)', lineHeight: 1.2 }}>{product.name}</span>
-                                                    {product.productNumber && (
-                                                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>Art: {product.productNumber}</span>
-                                                    )}
-                                                </div>
+                                            {/* Left: Info */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 200px' }}>
+                                                <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text-main)', lineHeight: 1.2 }}>{product.name}</span>
+                                                {product.productNumber && (
+                                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>Art: {product.productNumber}</span>
+                                                )}
+                                                <span style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Einheit: {product.unit}</span>
                                             </div>
 
-                                            {/* Right: Controls */}
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginLeft: 'auto' }}>
+                                            {/* Right: Controls & Checkmark */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
                                                 
-                                                <div style={{ backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '4px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #e2e8f0' }}>
+                                                {/* Quantity Controls */}
+                                                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'white' }}>
                                                     <button 
+                                                        type="button"
                                                         onClick={() => handleUpdateStock(product, product.stock - 1)}
-                                                        style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', border: 'none', backgroundColor: 'white', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', color: '#ef4444' }}
+                                                        style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', borderRight: '1px solid #cbd5e1', color: '#1e293b' }}
                                                     >
-                                                        <Minus size={20} />
+                                                        <Minus size={22} color="#1e293b" />
                                                     </button>
                                                     
                                                     <input 
@@ -175,32 +156,30 @@ export const Inventory: React.FC = () => {
                                                             handleUpdateStock(product, val);
                                                         }}
                                                         style={{ 
-                                                            width: '70px', height: '40px', textAlign: 'center', fontSize: '18px', fontWeight: 700, 
+                                                            width: '60px', height: '44px', textAlign: 'center', fontSize: '18px', fontWeight: 700, 
                                                             border: 'none', backgroundColor: 'transparent', outline: 'none', color: 'var(--color-text-main)',
                                                             appearance: 'none', MozAppearance: 'textfield'
                                                         }}
                                                     />
 
                                                     <button 
+                                                        type="button"
                                                         onClick={() => handleUpdateStock(product, product.stock + 1)}
-                                                        style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', border: 'none', backgroundColor: 'white', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', color: '#22c55e' }}
+                                                        style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', borderLeft: '1px solid #cbd5e1', color: '#1e293b' }}
                                                     >
-                                                        <Plus size={20} />
+                                                        <Plus size={22} color="#1e293b" />
                                                     </button>
                                                 </div>
 
-                                                <span style={{ fontSize: '14px', color: '#64748b', minWidth: '40px' }}>{product.unit}</span>
+                                                <div style={{ width: '1px', height: '30px', backgroundColor: '#e2e8f0', margin: '0 8px' }}></div>
 
-                                                <div style={{ width: '1px', height: '30px', backgroundColor: '#e2e8f0' }}></div>
-
+                                                {/* Checkmark Button */}
                                                 <button 
-                                                    onClick={() => handleDelete(product)}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fca5a5', padding: '8px', transition: 'color 0.2s' }}
-                                                    onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
-                                                    onMouseOut={e => e.currentTarget.style.color = '#fca5a5'}
-                                                    title="Produkt löschen"
+                                                    type="button"
+                                                    onClick={() => handleToggleChecked(product.id)}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: isChecked ? '#22c55e' : '#94a3b8' }}
                                                 >
-                                                    <Trash2 size={20} />
+                                                    {isChecked ? <CheckCircle2 size={32} /> : <Circle size={32} />}
                                                 </button>
                                             </div>
                                         </div>
