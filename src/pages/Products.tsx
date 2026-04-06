@@ -1145,7 +1145,7 @@ export const Products: React.FC = () => {
                                             <div>
                                                 <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Automatischer System-Verbrauch</label>
                                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <input type="number" step="1" min="0" value={newProduct.consumptionAmount || ''} onChange={e => setNewProduct({ ...newProduct, consumptionAmount: parseFloat(e.target.value) || undefined })} placeholder="Menge abziehen..." style={{ width: '50%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                    <input type="number" step="0.01" min="0" value={newProduct.consumptionAmount || ''} onChange={e => setNewProduct({ ...newProduct, consumptionAmount: parseFloat(e.target.value) || undefined })} placeholder="Menge abziehen..." style={{ width: '50%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
                                                     <select value={newProduct.consumptionPeriod || ''} onChange={e => setNewProduct({ ...newProduct, consumptionPeriod: e.target.value as 'day' | 'week' | undefined })} style={{ width: '50%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'white' }}>
                                                         <option value="">-- Zyklus --</option>
                                                         <option value="day">pro Tag</option>
