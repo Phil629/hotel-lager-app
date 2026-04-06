@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
-import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Square, Wifi, Settings, Phone, MessageSquare, Search, AlertTriangle, Euro, QrCode, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, QrCode, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 import QRCode from "react-qr-code";
@@ -15,6 +15,7 @@ export const Products: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [activeModalTab, setActiveModalTab] = useState<'basic' | 'inventory' | 'order'>('basic');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newProduct, setNewProduct] = useState<Partial<Product>>({
         category: '',
@@ -27,8 +28,7 @@ export const Products: React.FC = () => {
         preferredOrderMethod: 'email'
     });
     const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
-    const [showSupplierDetails, setShowSupplierDetails] = useState(false);
-    const [newSupplier, setNewSupplier] = useState<Partial<Supplier>>({
+        const [newSupplier, setNewSupplier] = useState<Partial<Supplier>>({
         name: '',
         email: '',
         phone: '',
@@ -43,9 +43,7 @@ export const Products: React.FC = () => {
     const [qrTab, setQrTab] = useState<'api' | 'order' | 'stock'>('api');
     const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
     const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
-    const [isInventoryDetailsOpen, setIsInventoryDetailsOpen] = useState(false);
-    const [isEmailTemplateOpen, setIsEmailTemplateOpen] = useState(false);
-
+        
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
     const [orderCart, setOrderCart] = useState<{product: Product, quantity: number}[]>([]);
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
@@ -393,8 +391,7 @@ export const Products: React.FC = () => {
         setEditingId(null);
         // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
-        setIsInventoryDetailsOpen(false);
-        setIsEmailTemplateOpen(false);
+        setActiveModalTab('basic');
     };
 
     const getIoTLink = (product: Product) => {
@@ -1106,680 +1103,326 @@ export const Products: React.FC = () => {
                         justifyContent: 'center',
                         alignItems: 'center',
                         zIndex: 1000,
-                        overflowY: 'auto'
+                        padding: 'var(--spacing-md)'
                     }}>
                         <div style={{
-                            backgroundColor: 'var(--color-surface)',
-                            padding: 'var(--spacing-xl)',
+                            backgroundColor: 'var(--color-bg)',
                             borderRadius: 'var(--radius-lg)',
                             width: '100%',
-                            maxWidth: '500px',
-                            boxShadow: 'var(--shadow-lg)',
+                            maxWidth: '650px',
                             maxHeight: '90vh',
-                            overflowY: 'auto'
+                            display: 'flex',
+                            flexDirection: 'column',
+                            boxShadow: 'var(--shadow-lg)'
                         }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-                                <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>{editingId ? 'Produkt bearbeiten' : 'Neues Produkt anlegen'}</h3>
-                                <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                    <X size={24} />
+                            {/* Modal Header */}
+                            <div style={{ padding: 'var(--spacing-lg)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{editingId ? '✏️ Produkt bearbeiten' : '📦 Neues Produkt anlegen'}</h2>
+                                <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+                                    <X size={24} color="var(--color-text-muted)" />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Name</label>
-                                    <input
-                                        required
-                                        value={newProduct.name || ''}
-                                        onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
-                                        style={{
-                                            width: '100%',
-                                            padding: 'var(--spacing-sm)',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: !newProduct.name ? '1px solid var(--color-error)' : '1px solid var(--color-border)'
-                                        }}
-                                    />
-                                </div>
+                            {/* Tabs Header */}
+                            <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', padding: '0 var(--spacing-lg)' }}>
+                                <button 
+                                    onClick={() => setActiveModalTab('basic')}
+                                    style={{
+                                        padding: 'var(--spacing-md) var(--spacing-sm)',
+                                        border: 'none',
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: activeModalTab === 'basic' ? 600 : 400,
+                                        color: activeModalTab === 'basic' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                        borderBottom: activeModalTab === 'basic' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                        marginRight: 'var(--spacing-md)'
+                                    }}>
+                                    📝 Grunddaten
+                                </button>
+                                <button 
+                                    onClick={() => setActiveModalTab('inventory')}
+                                    style={{
+                                        padding: 'var(--spacing-md) var(--spacing-sm)',
+                                        border: 'none',
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: activeModalTab === 'inventory' ? 600 : 400,
+                                        color: activeModalTab === 'inventory' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                        borderBottom: activeModalTab === 'inventory' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                        marginRight: 'var(--spacing-md)'
+                                    }}>
+                                    📊 Bestand & Logistik
+                                </button>
+                                <button 
+                                    onClick={() => setActiveModalTab('order')}
+                                    style={{
+                                        padding: 'var(--spacing-md) var(--spacing-sm)',
+                                        border: 'none',
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: activeModalTab === 'order' ? 600 : 400,
+                                        color: activeModalTab === 'order' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                        borderBottom: activeModalTab === 'order' ? '2px solid var(--color-primary)' : '2px solid transparent'
+                                    }}>
+                                    🛒 Beschaffung
+                                </button>
+                            </div>
 
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Produktnummer</label>
-                                    <input
-                                        value={newProduct.productNumber || ''}
-                                        onChange={e => setNewProduct({ ...newProduct, productNumber: e.target.value })}
-                                        placeholder="z.B. 12345-AB"
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
-                                </div>
-
-
-
-
-
-                                <div>
-                                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                                        Lieferant
-                                        {isCreatingSupplier && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsCreatingSupplier(false)}
-                                                style={{ border: 'none', background: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 'var(--font-size-xs)' }}
-                                            >
-                                                Abbrechen
-                                            </button>
-                                        )}
-                                    </label>
-
-                                    {!isCreatingSupplier ? (
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <select
-                                                value={newProduct.supplierId || ''}
-                                                onChange={e => {
-                                                    const supplierId = e.target.value;
-                                                    const supplier = suppliers.find(s => s.id === supplierId);
-                                                    setNewProduct({
-                                                        ...newProduct,
-                                                        supplierId: supplierId || undefined,
-                                                        emailOrderAddress: supplier ? supplier.email : '',
-                                                        supplierPhone: supplier ? (supplier.phone || '') : ''
-                                                    });
-                                                }}
-                                                style={{ flex: 1, padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                            >
-                                                <option value="">-- Kein Lieferant ausgewählt --</option>
-                                                {suppliers.map(s => (
-                                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                                ))}
-                                            </select>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setIsCreatingSupplier(true);
-                                                    setNewSupplier({ name: '', email: '', phone: '' });
-                                                }}
-                                                title="Neuen Lieferanten anlegen"
-                                                style={{
-                                                    padding: '0 12px',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid var(--color-primary)',
-                                                    backgroundColor: 'var(--color-primary)',
-                                                    color: 'white',
-                                                    cursor: 'pointer',
-                                                    fontSize: '18px',
-                                                    fontWeight: 'bold'
-                                                }}
-                                            >
-                                                +
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div style={{ padding: 'var(--spacing-md)', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)', backgroundColor: 'rgba(37, 99, 235, 0.05)' }}>
-                                            <div style={{ marginBottom: '8px' }}>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Name des Lieferanten *"
-                                                    value={newSupplier.name}
-                                                    onChange={e => setNewSupplier({ ...newSupplier, name: e.target.value })}
-                                                    style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                />
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                                                <input
-                                                    type="email"
-                                                    placeholder="Email"
-                                                    value={newSupplier.email}
-                                                    onChange={e => setNewSupplier({ ...newSupplier, email: e.target.value })}
-                                                    style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                />
-                                                <input
-                                                    type="tel"
-                                                    placeholder="Telefon (optional)"
-                                                    value={newSupplier.phone}
-                                                    onChange={e => setNewSupplier({ ...newSupplier, phone: e.target.value })}
-                                                    style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                />
-                                            </div>
-
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowSupplierDetails(!showSupplierDetails)}
-                                                style={{ border: 'none', background: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 'var(--font-size-xs)', marginBottom: '8px', padding: 0, textDecoration: 'underline' }}
-                                            >
-                                                {showSupplierDetails ? 'Weniger Details' : 'Mehr Details (Ansprechpartner, Web, Textvorlagen...)'}
-                                            </button>
-
-                                            {showSupplierDetails && (
-                                                <div style={{ marginTop: '8px', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '8px' }}>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Ansprechpartner"
-                                                            value={newSupplier.contactName || ''}
-                                                            onChange={e => setNewSupplier({ ...newSupplier, contactName: e.target.value })}
-                                                            style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                        />
-                                                        <input
-                                                            type="url"
-                                                            placeholder="Webseite (URL)"
-                                                            value={newSupplier.url || ''}
-                                                            onChange={e => setNewSupplier({ ...newSupplier, url: e.target.value })}
-                                                            style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>Notizen zum Lieferanten</label>
-                                                        {(newSupplier.notes || []).map((note, idx) => (
-                                                            <div key={note.id} style={{ marginBottom: '8px', padding: '8px', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-background)' }}>
-                                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                                                                    <textarea
-                                                                        rows={2}
-                                                                        value={note.text}
-                                                                        onChange={e => {
-                                                                            const updated = [...(newSupplier.notes || [])];
-                                                                            updated[idx].text = e.target.value;
-                                                                            setNewSupplier({ ...newSupplier, notes: updated });
-                                                                        }}
-                                                                        placeholder="Notiz eingeben..."
-                                                                        style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                                                    />
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            const updated = (newSupplier.notes || []).filter((_, i) => i !== idx);
-                                                                            setNewSupplier({ ...newSupplier, notes: updated });
-                                                                        }}
-                                                                        style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '4px' }}
-                                                                    >
-                                                                        <X size={14} />
-                                                                    </button>
-                                                                </div>
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={note.showOnOrderCreation}
-                                                                            onChange={e => {
-                                                                                const updated = [...(newSupplier.notes || [])];
-                                                                                updated[idx].showOnOrderCreation = e.target.checked;
-                                                                                setNewSupplier({ ...newSupplier, notes: updated });
-                                                                            }}
-                                                                        />
-                                                                        <span style={{ fontSize: 'var(--font-size-xs)' }}>Beim Anlegen einer Bestellung anzeigen</span>
-                                                                    </label>
-                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={note.showOnOpenOrders}
-                                                                            onChange={e => {
-                                                                                const updated = [...(newSupplier.notes || [])];
-                                                                                updated[idx].showOnOpenOrders = e.target.checked;
-                                                                                setNewSupplier({ ...newSupplier, notes: updated });
-                                                                            }}
-                                                                        />
-                                                                        <span style={{ fontSize: 'var(--font-size-xs)' }}>Bei offenen Bestellungen anzeigen</span>
-                                                                    </label>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                const updated = [...(newSupplier.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
-                                                                setNewSupplier({ ...newSupplier, notes: updated });
-                                                            }}
-                                                            style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)', fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: '8px' }}
-                                                        >
-                                                            + Weitere Notiz
-                                                        </button>
-                                                    </div>
-                                                    <div style={{ marginBottom: '8px' }}>
-                                                        <label style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>Standard Email-Textvorlage</label>
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Betreff Vorlage"
-                                                            value={newSupplier.emailSubjectTemplate || ''}
-                                                            onChange={e => setNewSupplier({ ...newSupplier, emailSubjectTemplate: e.target.value })}
-                                                            style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', marginBottom: '4px' }}
-                                                        />
-                                                        <textarea
-                                                            placeholder="Nachricht Vorlage (Platzhalter: {product_name}, {quantity}, {unit})"
-                                                            rows={3}
-                                                            value={newSupplier.emailBodyTemplate || ''}
-                                                            onChange={e => setNewSupplier({ ...newSupplier, emailBodyTemplate: e.target.value })}
-                                                            style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit', marginBottom: '8px' }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                                                Lieferant wird beim Speichern des Produkts automatisch neu angelegt.
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                                        {(newProduct.supplierId || isCreatingSupplier) ? 'Abweichende Bestell-Email (opt.)' : 'Email-Adresse'}
-                                    </label>
-                                    <input
-                                        type="email"
-                                        placeholder={isCreatingSupplier ? "Leer lassen für Lieferanten-Email" : "bestellung@lieferant.de"}
-                                        value={newProduct.emailOrderAddress || ''}
-                                        onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })}
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
-
-                                    <div style={{ marginTop: 'var(--spacing-sm)' }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsEmailTemplateOpen(!isEmailTemplateOpen)}
-                                            style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                padding: 0,
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                fontSize: 'var(--font-size-sm)',
-                                                color: 'var(--color-primary)',
-                                                fontWeight: 500
-                                            }}
-                                        >
-                                            Standardbestelltext hinzufügen
-                                            <span style={{ transform: isEmailTemplateOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', marginLeft: '4px' }}>▼</span>
-                                        </button>
-
-                                        {isEmailTemplateOpen && (
-                                            <div style={{ marginTop: 'var(--spacing-sm)', paddingLeft: 'var(--spacing-md)', borderLeft: '2px solid var(--color-border)' }}>
-                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
-                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Standard Betreff</label>
+                            {/* Scrollable Content */}
+                            <div style={{ padding: 'var(--spacing-lg)', overflowY: 'auto', flex: 1, backgroundColor: 'var(--color-background)' }}>
+                                <form id="product-form" onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                    
+                                    {/* TAB: BASIC */}
+                                    {activeModalTab === 'basic' && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--spacing-md)' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Name *</label>
                                                     <input
-                                                        type="text"
-                                                        value={newProduct.emailOrderSubject || ''}
-                                                        onChange={e => setNewProduct({ ...newProduct, emailOrderSubject: e.target.value })}
-                                                        placeholder=""
-                                                        style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                        required
+                                                        value={newProduct.name || ''}
+                                                        onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
+                                                        style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: !newProduct.name ? '1px solid var(--color-danger)' : '1px solid var(--color-border)' }}
                                                     />
                                                 </div>
-                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
-                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Standard Nachricht</label>
-                                                    <textarea
-                                                        value={newProduct.emailOrderBody || ''}
-                                                        onChange={e => setNewProduct({ ...newProduct, emailOrderBody: e.target.value })}
-                                                        rows={4}
-                                                        placeholder=""
-                                                        style={{ width: '100%', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                                    />
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-sm)' }}>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
-                                                        style={{
-                                                            background: 'none',
-                                                            border: 'none',
-                                                            padding: 0,
-                                                            cursor: 'pointer',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            color: newProduct.autoOrder ? 'var(--color-primary)' : 'var(--color-text-muted)'
-                                                        }}
-                                                    >
-                                                        {newProduct.autoOrder ? <CheckSquare size={20} /> : <Square size={20} />}
-                                                    </button>
-                                                    <label
-                                                        onClick={() => setNewProduct({ ...newProduct, autoOrder: !newProduct.autoOrder })}
-                                                        style={{ cursor: 'pointer', fontWeight: 500, fontSize: 'var(--font-size-sm)' }}
-                                                    >
-                                                        Automatische Bestellung (via EmailJS)
-                                                    </label>
-                                                </div>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
 
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Shop-Link / Bestell-URL</label>
-                                    <input
-                                        type="url"
-                                        value={newProduct.orderUrl || ''}
-                                        onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })}
-                                        onBlur={e => {
-                                            const val = e.target.value;
-                                            if (val && !/^https?:\/\//i.test(val)) {
-                                                setNewProduct({ ...newProduct, orderUrl: `https://${val}` });
-                                            }
-                                        }}
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bild URL (optional)</label>
-                                    <input
-                                        type="url"
-                                        value={newProduct.image || ''}
-                                        onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
-                                        onBlur={e => {
-                                            const val = e.target.value;
-                                            if (val && !/^https?:\/\//i.test(val)) {
-                                                setNewProduct({ ...newProduct, image: `https://${val}` });
-                                            }
-                                        }}
-                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Standard Bestellweg</label>
-                                    <div style={{ display: 'flex', gap: 'var(--spacing-lg)' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
-                                            <input
-                                                type="radio"
-                                                name="preferredOrderMethod"
-                                                value="email"
-                                                checked={newProduct.preferredOrderMethod === 'email'}
-                                                onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'email' })}
-                                            />
-                                            Email
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
-                                            <input
-                                                type="radio"
-                                                name="preferredOrderMethod"
-                                                value="link"
-                                                checked={newProduct.preferredOrderMethod === 'link'}
-                                                onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'link' })}
-                                            />
-                                            Link / Shop
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
-                                            <input
-                                                type="radio"
-                                                name="preferredOrderMethod"
-                                                value="phone"
-                                                checked={newProduct.preferredOrderMethod === 'phone'}
-                                                onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'phone' })}
-                                            />
-                                            Telefon
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Notizen</label>
-                                    {(newProduct.notes || []).map((note, idx) => (
-                                        <div key={note.id} style={{ marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-sm)', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-background)' }}>
-                                            <div style={{ display: 'flex', position: 'relative' }}>
-                                                <MessageSquare size={16} style={{ position: 'absolute', top: '10px', left: '10px', color: 'var(--color-text-muted)' }} />
-                                                <textarea
-                                                    rows={2}
-                                                    value={note.text}
-                                                    onChange={e => {
-                                                        const updated = [...(newProduct.notes || [])];
-                                                        updated[idx].text = e.target.value;
-                                                        setNewProduct({ ...newProduct, notes: updated });
-                                                    }}
-                                                    placeholder="Notiz eingeben..."
-                                                    style={{ width: '100%', padding: 'var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) 36px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const updated = (newProduct.notes || []).filter((_, i) => i !== idx);
-                                                        setNewProduct({ ...newProduct, notes: updated });
-                                                    }}
-                                                    style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '0 0 0 8px', alignSelf: 'flex-start', marginTop: '4px' }}
-                                                >
-                                                    <X size={16} />
-                                                </button>
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={note.showOnOrderCreation}
-                                                        onChange={e => {
-                                                            const updated = [...(newProduct.notes || [])];
-                                                            updated[idx].showOnOrderCreation = e.target.checked;
-                                                            setNewProduct({ ...newProduct, notes: updated });
-                                                        }}
-                                                    />
-                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}>Beim Anlegen einer Bestellung anzeigen</span>
-                                                </label>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={note.showOnOpenOrders}
-                                                        onChange={e => {
-                                                            const updated = [...(newProduct.notes || [])];
-                                                            updated[idx].showOnOpenOrders = e.target.checked;
-                                                            setNewProduct({ ...newProduct, notes: updated });
-                                                        }}
-                                                    />
-                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}>Bei offenen Bestellungen anzeigen</span>
-                                                </label>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const updated = [...(newProduct.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }];
-                                            setNewProduct({ ...newProduct, notes: updated });
-                                        }}
-                                        style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 500, cursor: 'pointer', padding: 0 }}
-                                    >
-                                        <Plus size={16} /> Weitere Notiz hinzufügen
-                                    </button>
-                                </div>
-
-
-
-                                <div style={{
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: 'var(--radius-md)',
-                                    overflow: 'hidden'
-                                }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsInventoryDetailsOpen(!isInventoryDetailsOpen)}
-                                        style={{
-                                            width: '100%',
-                                            padding: 'var(--spacing-md)',
-                                            background: 'var(--color-background)',
-                                            border: 'none',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            cursor: 'pointer',
-                                            fontWeight: 500
-                                        }}
-                                    >
-                                        Lager & Details
-                                        <span style={{ transform: isInventoryDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
-                                    </button>
-
-                                    {isInventoryDetailsOpen && (
-                                        <div style={{ padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
                                                 <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Kategorie</label>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Kategorie</label>
                                                     {isCustomCategoryMode ? (
                                                         <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
                                                             <input
                                                                 value={newProduct.category || ''}
                                                                 onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
-                                                                placeholder="Kategorie eingeben..."
+                                                                placeholder="Eigene..."
                                                                 autoFocus
-                                                                style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                                style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
                                                             />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setIsCustomCategoryMode(false);
-                                                                    setNewProduct({ ...newProduct, category: '' });
-                                                                }}
-                                                                style={{
-                                                                    background: 'var(--color-background)',
-                                                                    border: '1px solid var(--color-border)',
-                                                                    borderRadius: 'var(--radius-sm)',
-                                                                    cursor: 'pointer',
-                                                                    padding: '0 var(--spacing-sm)'
-                                                                }}
-                                                                title="Zurück zur Auswahl"
-                                                            >
-                                                                <X size={18} />
-                                                            </button>
+                                                            <button type="button" onClick={() => { setIsCustomCategoryMode(false); setNewProduct({ ...newProduct, category: '' }); }} style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: '0 10px' }}><X size={18} /></button>
                                                         </div>
                                                     ) : (
                                                         <select
                                                             value={newProduct.category || ''}
                                                             onChange={e => {
-                                                                if (e.target.value === 'custom') {
-                                                                    setIsCustomCategoryMode(true);
-                                                                    setNewProduct({ ...newProduct, category: '' });
-                                                                } else {
-                                                                    setNewProduct({ ...newProduct, category: e.target.value });
-                                                                }
+                                                                if (e.target.value === 'custom') { setIsCustomCategoryMode(true); setNewProduct({ ...newProduct, category: '' }); } 
+                                                                else { setNewProduct({ ...newProduct, category: e.target.value }); }
                                                             }}
-                                                            style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                            style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'white' }}
                                                         >
                                                             <option value="">-- Leer --</option>
-                                                            {CATEGORIES.map(cat => (
-                                                                <option key={cat} value={cat}>{cat}</option>
-                                                            ))}
+                                                            {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                                             <option value="custom">Eigene eingeben...</option>
                                                         </select>
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Einheit</label>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Produktnummer</label>
                                                     <input
-                                                        value={newProduct.unit || ''}
-                                                        onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })}
-                                                        placeholder="z.B. Stück"
-                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                                                        value={newProduct.productNumber || ''}
+                                                        onChange={e => setNewProduct({ ...newProduct, productNumber: e.target.value })}
+                                                        placeholder="z.B. 12345-AB"
+                                                        style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
                                                     />
                                                 </div>
                                             </div>
 
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Bild URL (optional)</label>
+                                                <input
+                                                    type="url"
+                                                    value={newProduct.image || ''}
+                                                    onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
+                                                    onBlur={e => { const val = e.target.value; if (val && !/^https?:\/\//i.test(val)) setNewProduct({ ...newProduct, image: 'https://' + val }); }}
+                                                    style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Produkt-Notizen</label>
+                                                {(newProduct.notes || []).map((note, idx) => (
+                                                    <div key={note.id} style={{ marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', backgroundColor: 'white' }}>
+                                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                            <textarea
+                                                                rows={2}
+                                                                value={note.text}
+                                                                onChange={e => { const updated = [...(newProduct.notes || [])]; updated[idx].text = e.target.value; setNewProduct({ ...newProduct, notes: updated }); }}
+                                                                placeholder="Notiz eingeben..."
+                                                                style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                            />
+                                                            <button type="button" onClick={() => { const updated = (newProduct.notes || []).filter((_, i) => i !== idx); setNewProduct({ ...newProduct, notes: updated }); }} style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer' }}><X size={18} /></button>
+                                                        </div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                                                                <input type="checkbox" checked={note.showOnOrderCreation} onChange={e => { const updated = [...(newProduct.notes || [])]; updated[idx].showOnOrderCreation = e.target.checked; setNewProduct({ ...newProduct, notes: updated }); }} />
+                                                                Beim Anlegen einer Bestellung anzeigen
+                                                            </label>
+                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                                                                <input type="checkbox" checked={note.showOnOpenOrders} onChange={e => { const updated = [...(newProduct.notes || [])]; updated[idx].showOnOpenOrders = e.target.checked; setNewProduct({ ...newProduct, notes: updated }); }} />
+                                                                Bei offenen Bestellungen anzeigen
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                <button type="button" onClick={() => { const updated = [...(newProduct.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }]; setNewProduct({ ...newProduct, notes: updated }); }} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+                                                    <Plus size={16} /> Weitere Notiz hinzufügen
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* TAB: INVENTORY */}
+                                    {activeModalTab === 'inventory' && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--spacing-md)' }}>
                                                 <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Bestand</label>
-                                                    <input
-                                                        type="number"
-                                                        value={newProduct.stock || 0}
-                                                        onChange={e => setNewProduct({ ...newProduct, stock: Number(e.target.value) })}
-                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                    />
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Bestand</label>
+                                                    <input type="number" value={newProduct.stock || 0} onChange={e => setNewProduct({ ...newProduct, stock: Number(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
                                                 </div>
                                                 <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mindestbestand (Meldebestand)</label>
-                                                    <input
-                                                        type="number"
-                                                        value={newProduct.minStock || 0}
-                                                        onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })}
-                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                    />
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Einheit</label>
+                                                    <input value={newProduct.unit || ''} onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })} placeholder="Stück, Liter..." style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
                                                 </div>
                                                 <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Soll-Bestand (Auffüllen bis)</label>
-                                                    <input
-                                                        type="number"
-                                                        value={newProduct.targetStock || ''}
-                                                        onChange={e => setNewProduct({ ...newProduct, targetStock: e.target.value ? Number(e.target.value) : undefined })}
-                                                        placeholder="Menge (Optional)"
-                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                    />
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Preis (Netto €)</label>
+                                                    <input type="number" step="0.01" value={newProduct.price || ''} onChange={e => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) || 0 })} placeholder="0.00" style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
                                                 </div>
-                                                <div style={{ gridColumn: '1 / -1', marginTop: 'var(--spacing-sm)' }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={newProduct.ignoreOrderProposals || false}
-                                                            onChange={e => setNewProduct({ ...newProduct, ignoreOrderProposals: e.target.checked })}
-                                                        />
-                                                        Diesen Artikel vom Bestell-Autopiloten (Vorschläge) ausschließen
-                                                    </label>
-                                                </div>
-                                                <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Erwarteter Verbrauch</label>
-                                                    <div style={{ display: 'flex', gap: '4px' }}>
-                                                        <input
-                                                            type="number"
-                                                            step="1"
-                                                            min="0"
-                                                            value={newProduct.consumptionAmount || ''}
-                                                            onChange={e => setNewProduct({ ...newProduct, consumptionAmount: parseFloat(e.target.value) || undefined })}
-                                                            placeholder="Menge"
-                                                            style={{ width: '50%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                        />
-                                                        <select
-                                                            value={newProduct.consumptionPeriod || ''}
-                                                            onChange={e => setNewProduct({ ...newProduct, consumptionPeriod: e.target.value as 'day' | 'week' | undefined })}
-                                                            style={{ width: '50%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                        >
-                                                            <option value="">-- Zyklus --</option>
-                                                            <option value="day">pro Tag</option>
-                                                            <option value="week">pro Woche</option>
-                                                        </select>
+                                            </div>
+
+                                            <div style={{ padding: 'var(--spacing-md)', backgroundColor: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+                                                <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-primary)' }}>Bestell-Logistik (Autopilot)</h4>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-md)' }}>
+                                                    <div>
+                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Meldebestand (Untergrenze)</label>
+                                                        <input type="number" value={newProduct.minStock || 0} onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Ab hier schlägt der Autopilot an.</span>
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Soll-Bestand (Auffüllen bis)</label>
+                                                        <input type="number" value={newProduct.targetStock || ''} onChange={e => setNewProduct({ ...newProduct, targetStock: e.target.value ? Number(e.target.value) : undefined })} placeholder="Optional" style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
                                                     </div>
                                                 </div>
-                                                <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Preis (Netto €)</label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={newProduct.price || ''}
-                                                        onChange={e => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) || 0 })}
-                                                        placeholder="0.00"
-                                                        style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                                                    />
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                                                    <input type="checkbox" checked={newProduct.ignoreOrderProposals || false} onChange={e => setNewProduct({ ...newProduct, ignoreOrderProposals: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+                                                    <span>📉 <strong>Artikel komplett vom Bestell-Autopiloten ausschließen</strong> (keine Vorschläge generieren).</span>
+                                                </label>
+                                            </div>
+
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Automatischer System-Verbrauch</label>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <input type="number" step="1" min="0" value={newProduct.consumptionAmount || ''} onChange={e => setNewProduct({ ...newProduct, consumptionAmount: parseFloat(e.target.value) || undefined })} placeholder="Menge abziehen..." style={{ width: '50%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                    <select value={newProduct.consumptionPeriod || ''} onChange={e => setNewProduct({ ...newProduct, consumptionPeriod: e.target.value as 'day' | 'week' | undefined })} style={{ width: '50%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'white' }}>
+                                                        <option value="">-- Zyklus --</option>
+                                                        <option value="day">pro Tag</option>
+                                                        <option value="week">pro Woche</option>
+                                                    </select>
                                                 </div>
                                             </div>
                                         </div>
                                     )}
-                                </div>
 
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
-                                    <button
-                                        type="button"
-                                        onClick={closeModal}
-                                        style={{
-                                            padding: 'var(--spacing-sm) var(--spacing-md)',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--color-border)',
-                                            backgroundColor: 'transparent',
-                                            color: 'var(--color-text-main)'
-                                        }}
-                                    >
-                                        Abbrechen
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        style={{
-                                            padding: 'var(--spacing-sm) var(--spacing-md)',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: 'none',
-                                            backgroundColor: 'var(--color-primary)',
-                                            color: 'white'
-                                        }}
-                                    >
-                                        {isLoading ? 'Speichert...' : 'Speichern'}
-                                    </button>
-                                </div>
-                            </form>
+                                    {/* TAB: ORDER */}
+                                    {activeModalTab === 'order' && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                            
+                                            {/* Supplier Selection or Creation */}
+                                            <div style={{ padding: 'var(--spacing-md)', backgroundColor: isCreatingSupplier ? '#f0f9ff' : 'white', borderRadius: 'var(--radius-lg)', border: isCreatingSupplier ? '1px solid var(--color-primary)' : '1px solid var(--color-border)', transition: 'all 0.3s' }}>
+                                                <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                    Lieferant
+                                                </label>
+
+                                                {!isCreatingSupplier ? (
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <select
+                                                            value={newProduct.supplierId || ''}
+                                                            onChange={e => {
+                                                                const sId = e.target.value; const s = suppliers.find(su => su.id === sId);
+                                                                setNewProduct({ ...newProduct, supplierId: sId || undefined, emailOrderAddress: s?.email || '', supplierPhone: s?.phone || '' });
+                                                            }}
+                                                            style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'white', fontWeight: 500 }}
+                                                        >
+                                                            <option value="">-- Keiner --</option>
+                                                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                        </select>
+                                                        <button type="button" onClick={() => { setIsCreatingSupplier(true); setNewSupplier({ name: '', email: '', phone: '' }); }} style={{ padding: '0 16px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Neu</button>
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '14px' }}>✨ Neuen Lieferanten anlegen</span>
+                                                            <button type="button" onClick={() => setIsCreatingSupplier(false)} style={{ border: 'none', background: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Abbrechen</button>
+                                                        </div>
+                                                        <input type="text" placeholder="Firmenname *" value={newSupplier.name} onChange={e => setNewSupplier({ ...newSupplier, name: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-sm)' }}>
+                                                            <input type="email" placeholder="Bestell-Email" value={newSupplier.email} onChange={e => setNewSupplier({ ...newSupplier, email: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                            <input type="tel" placeholder="Telefon (opt.)" value={newSupplier.phone} onChange={e => setNewSupplier({ ...newSupplier, phone: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                        </div>
+                                                        <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>Der Lieferant wird bim Speichern dieses Produktes dauerhaft im System gespeichert.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Präferierter Bestellweg (bei Klick auf Bestellen)</label>
+                                                <div style={{ display: 'flex', gap: 'var(--spacing-md)', backgroundColor: 'white', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="email" checked={newProduct.preferredOrderMethod === 'email'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'email' })} /> <Mail size={16}/> Email</label>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="link" checked={newProduct.preferredOrderMethod === 'link'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'link' })} /> <ExternalLink size={16}/> Webshop (Link)</label>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="phone" checked={newProduct.preferredOrderMethod === 'phone'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'phone' })} /> <Phone size={16}/> Telefon</label>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--spacing-md)' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Webshop / Bestell-URL</label>
+                                                    <input type="url" value={newProduct.orderUrl || ''} onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })} onBlur={e => { const val = e.target.value; if (val && !/^https?:\/\//i.test(val)) setNewProduct({ ...newProduct, orderUrl: 'https://' + val }); }} placeholder="https://..." style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Abweichende E-Mail-Adresse (Nur für dieses Produkt)</label>
+                                                    <input type="email" placeholder="Wenn leer, wird die Lieferanten-Email verwendet" value={newProduct.emailOrderAddress || ''} onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                </div>
+                                            </div>
+
+                                            <div style={{ padding: 'var(--spacing-md)', backgroundColor: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+                                                <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-primary)' }}>E-Mail Layout & Automatisierung</h4>
+                                                
+                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Standard Betreff</label>
+                                                    <input type="text" value={newProduct.emailOrderSubject || ''} onChange={e => setNewProduct({ ...newProduct, emailOrderSubject: e.target.value })} style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />
+                                                </div>
+                                                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>Standard Nachrichtentext</label>
+                                                    <textarea value={newProduct.emailOrderBody || ''} onChange={e => setNewProduct({ ...newProduct, emailOrderBody: e.target.value })} rows={3} style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }} />
+                                                </div>
+
+                                                <div style={{ marginTop: 'var(--spacing-md)', padding: '12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, color: '#166534' }}>
+                                                        <input type="checkbox" checked={newProduct.autoOrder || false} onChange={e => setNewProduct({ ...newProduct, autoOrder: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+                                                        Auto-Order (Vollautomatischer Versand via EmailJS) aktivieren
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    )}
+                                </form>
+                            </div>
+
+                            {/* Modal Footer (Sticky) */}
+                            <div style={{ padding: 'var(--spacing-lg)', borderTop: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', borderBottomLeftRadius: 'var(--radius-lg)', borderBottomRightRadius: 'var(--radius-lg)' }}>
+                                <button type="button" onClick={closeModal} style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'transparent', color: 'var(--color-text-main)', cursor: 'pointer', fontWeight: 500 }}>
+                                    Abbrechen
+                                </button>
+                                <button form="product-form" type="submit" disabled={isLoading} style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, opacity: isLoading ? 0.7 : 1 }}>
+                                    {isLoading ? 'Speichert...' : '💾 ' + (editingId ? 'Änderungen speichern' : 'Produkt anlegen')}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )
             }
 
-            {/* Delete Confirmation Modal */}
-            {
-                deleteConfirmId && (
+            { deleteConfirmId && (
                     <div style={{
                         position: 'fixed',
                         top: 0,
