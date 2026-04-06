@@ -40,8 +40,24 @@ export const Inventory: React.FC = () => {
         }
     };
 
-    const handleToggleChecked = (id: string) => {
-        setCheckedMap(prev => ({ ...prev, [id]: !prev[id] }));
+    const handleToggleChecked = async (id: string) => {
+        const product = products.find(p => p.id === id);
+        if (!product) return;
+        
+        const isCurrentlyChecked = checkedMap[id];
+        
+        if (!isCurrentlyChecked) {
+            const updatedProduct = { ...product, lastCountedAt: new Date().toISOString() };
+            setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p));
+            setCheckedMap(prev => ({ ...prev, [id]: true }));
+            try {
+                await DataService.saveProduct(updatedProduct);
+            } catch (e) {
+                console.error('Failed to save timestamp on check', e);
+            }
+        } else {
+            setCheckedMap(prev => ({ ...prev, [id]: false }));
+        }
     };
 
     // Derived data
