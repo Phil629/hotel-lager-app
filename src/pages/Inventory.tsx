@@ -19,7 +19,7 @@ export const Inventory: React.FC = () => {
         return () => {
             // Flush any pending saves immediately when navigating away
             Object.values(pendingSavesRef.current).forEach(p => {
-                DataService.updateProduct(p).catch(console.error);
+                DataService.saveProduct(p).catch(console.error);
             });
         };
     }, []);
@@ -51,8 +51,9 @@ export const Inventory: React.FC = () => {
         
         saveTimeoutsRef.current[product.id] = setTimeout(async () => {
             try {
-                await DataService.updateProduct(updatedProduct);
+                await DataService.saveProduct(updatedProduct);
                 delete pendingSavesRef.current[product.id]; // Remove from pending queue
+                setNotification({ message: 'Erfolgreich gespeichert: ' + updatedProduct.stock, type: 'success' });
             } catch (e) {
                 console.error('Save failed', e);
                 setNotification({ message: 'Speichern fehlgeschlagen', type: 'error' });
