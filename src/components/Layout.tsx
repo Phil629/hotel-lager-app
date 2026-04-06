@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, ShoppingCart, Settings, Users, BarChart3 } from 'lucide-react';
+import { Package, ShoppingCart, Settings, Users, BarChart3, ClipboardList } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { StorageService } from '../services/storage';
 
@@ -48,6 +48,29 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         <ShoppingCart size={20} />
                         Bestellungen
                     </Link>
+
+                    {StorageService.getSettings().inventoryMode && (
+                        <Link
+                            to="/inventory"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 'var(--spacing-sm)',
+                                padding: 'var(--spacing-md)',
+                                border: 'none',
+                                borderRadius: 'var(--radius-md)',
+                                backgroundColor: isActive('/inventory') ? 'var(--color-primary)' : 'transparent',
+                                color: isActive('/inventory') ? 'white' : 'var(--color-text-muted)',
+                                textDecoration: 'none',
+                                fontSize: 'var(--font-size-base)',
+                                transition: 'all 0.2s',
+                                fontWeight: 600
+                            }}
+                        >
+                            <ClipboardList size={20} />
+                            Inventur
+                        </Link>
+                    )}
 
                     <Link
                         to="/products"
