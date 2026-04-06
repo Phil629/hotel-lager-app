@@ -178,6 +178,46 @@ export const Settings: React.FC = () => {
                             </span>
                         </label>
                     </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'var(--spacing-md)', paddingTop: 'var(--spacing-md)', borderTop: '1px solid var(--color-border)' }}>
+                        <div>
+                            <div style={{ fontWeight: 500, marginBottom: '4px', color: '#ea580c', display: 'flex', alignItems: 'center', gap: '6px' }}>🚨 Zähl-Assistent (Inventur-Modus)</div>
+                            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                                Pausiert automatisch den System-Verbrauch im Hintergrund, um Zählergebnisse während einer Inventur nicht zu verfälschen.
+                            </div>
+                        </div>
+                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <input
+                                type="checkbox"
+                                checked={settings.inventoryMode}
+                                onChange={e => setSettings({ ...settings, inventoryMode: e.target.checked })}
+                                style={{ opacity: 0, width: 0, height: 0 }}
+                            />
+                            <span style={{
+                                position: 'absolute',
+                                cursor: 'pointer',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                backgroundColor: settings.inventoryMode ? '#ea580c' : '#ccc',
+                                transition: '.4s',
+                                borderRadius: '24px'
+                            }}>
+                                <span style={{
+                                    position: 'absolute',
+                                    content: '""',
+                                    height: '18px',
+                                    width: '18px',
+                                    left: settings.inventoryMode ? '26px' : '4px',
+                                    bottom: '3px',
+                                    backgroundColor: 'white',
+                                    transition: '.4s',
+                                    borderRadius: '50%'
+                                }}></span>
+                            </span>
+                        </label>
+                    </div>
                 </div>
 
                 {/* Supabase Section */}
