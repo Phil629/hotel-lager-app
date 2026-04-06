@@ -29,6 +29,29 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
 
                 <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                    {StorageService.getSettings().inventoryMode && (
+                        <Link
+                            to="/inventory"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 'var(--spacing-sm)',
+                                padding: 'var(--spacing-md)',
+                                border: 'none',
+                                borderRadius: 'var(--radius-md)',
+                                backgroundColor: isActive('/inventory') ? '#f97316' : '#fff7ed',
+                                color: isActive('/inventory') ? 'white' : '#ea580c',
+                                textDecoration: 'none',
+                                fontSize: 'var(--font-size-base)',
+                                transition: 'all 0.2s',
+                                fontWeight: 600
+                            }}
+                        >
+                            <ClipboardList size={20} />
+                            Inventur
+                        </Link>
+                    )}
+
                     <Link
                         to="/orders"
                         style={{
@@ -48,29 +71,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         <ShoppingCart size={20} />
                         Bestellungen
                     </Link>
+                    
 
-                    {StorageService.getSettings().inventoryMode && (
-                        <Link
-                            to="/inventory"
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 'var(--spacing-sm)',
-                                padding: 'var(--spacing-md)',
-                                border: 'none',
-                                borderRadius: 'var(--radius-md)',
-                                backgroundColor: isActive('/inventory') ? 'var(--color-primary)' : 'transparent',
-                                color: isActive('/inventory') ? 'white' : 'var(--color-text-muted)',
-                                textDecoration: 'none',
-                                fontSize: 'var(--font-size-base)',
-                                transition: 'all 0.2s',
-                                fontWeight: 600
-                            }}
-                        >
-                            <ClipboardList size={20} />
-                            Inventur
-                        </Link>
-                    )}
+                    
 
                     <Link
                         to="/products"

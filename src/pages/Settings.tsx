@@ -220,6 +220,12 @@ export const Settings: React.FC = () => {
                     </div>
                 </div>
 
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-10px', marginBottom: '24px' }}>
+                    <button type="submit" style={{ backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+                        <Save size={18} /> Einstellungen speichern
+                    </button>
+                </div>
+
                 {/* Supabase Section */}
                 <div style={{
                     backgroundColor: 'var(--color-surface)',
