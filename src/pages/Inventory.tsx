@@ -27,7 +27,7 @@ export const Inventory: React.FC = () => {
         if (newStock < 0) newStock = 0;
         
         // Optimistic UI Update immediately
-        const updatedProduct = { ...product, stock: newStock };
+        const updatedProduct = { ...product, stock: newStock, lastCountedAt: new Date().toISOString() };
         setProducts(prev => prev.map(p => p.id === product.id ? updatedProduct : p));
         setCheckedMap(prev => ({ ...prev, [product.id]: true }));
 
@@ -132,6 +132,11 @@ export const Inventory: React.FC = () => {
                                                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>Art: {product.productNumber}</span>
                                                 )}
                                                 <span style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Einheit: {product.unit}</span>
+                                                {product.lastCountedAt && (
+                                                    <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+                                                        Gezählt: {new Date(product.lastCountedAt).toLocaleDateString('de-DE')} um {new Date(product.lastCountedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+                                                    </span>
+                                                )}
                                             </div>
 
                                             {/* Right: Controls & Checkmark */}

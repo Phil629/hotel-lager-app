@@ -38,6 +38,7 @@ export interface Product {
   lastConsumptionDate?: string;
   targetStock?: number; // Target stock level for order proposals
   ignoreOrderProposals?: boolean; // Exclude from order proposals
+  lastCountedAt?: string;
 
   // Legacy fields (will be deprecated in favor of Supplier relation, but kept for now)
   emailOrderAddress?: string;
