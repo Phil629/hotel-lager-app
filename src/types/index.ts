@@ -75,4 +75,5 @@ export interface EmailSettings {
   supabaseUrl?: string;
   supabaseKey?: string;
   enableStockManagement?: boolean;
+  inventoryMode?: boolean; // New: Inventory Mode (pauses auto-consumption)
 }

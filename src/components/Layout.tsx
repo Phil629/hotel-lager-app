@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Package, ShoppingCart, Settings, Users, BarChart3 } from 'lucide-react';
 import logo from '../assets/logo.png';
+import { StorageService } from '../services/storage';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -132,8 +133,19 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
             {/* Main Content */}
             <main style={{ flex: 1, padding: 'var(--spacing-xl)', overflowY: 'auto' }}>
+                
                 <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+                    {StorageService.getSettings().inventoryMode && (
+                        <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fdba74', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                            <div style={{ fontSize: '24px', flexShrink: 0 }}>🚨</div>
+                            <div>
+                                <div style={{ color: '#c2410c', fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>Zähl-Assistent (Inventur-Modus) aktiv</div>
+                                <div style={{ color: '#ea580c', fontSize: '14px' }}>Der automatische System-Verbrauch ist temporär angehalten, um das Zählergebnis nicht zu verfälschen. Vergiss nicht, ihn nach der Inventur wieder zu deaktivieren!</div>
+                            </div>
+                        </div>
+                    )}
                     {children}
+
                 </div>
             </main>
         </div>

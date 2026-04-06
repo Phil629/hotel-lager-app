@@ -102,6 +102,11 @@ export const Products: React.FC = () => {
 
                 // Auto-consumption logic in the background
                 const runAutoConsumption = async () => {
+                    const settings = StorageService.getSettings();
+                    if (settings.inventoryMode) {
+                        console.log('Inventur-Modus aktiv: Automatischer Verbrauch pausiert.');
+                        return;
+                    }
                     const now = new Date();
                     let updatedAny = false;
                     const updatedProducts = [...loadedProducts];

@@ -12,7 +12,8 @@ export const Settings: React.FC = () => {
         publicKey: '',
         supabaseUrl: '',
         supabaseKey: '',
-        enableStockManagement: true
+        enableStockManagement: true,
+        inventoryMode: false
     });
     const [isMigrating, setIsMigrating] = useState(false);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
@@ -25,7 +26,8 @@ export const Settings: React.FC = () => {
             publicKey: stored.publicKey,
             supabaseUrl: stored.supabaseUrl || '',
             supabaseKey: stored.supabaseKey || '',
-            enableStockManagement: stored.enableStockManagement ?? true
+            enableStockManagement: stored.enableStockManagement ?? true,
+            inventoryMode: stored.inventoryMode ?? false
         });
     }, []);
 
