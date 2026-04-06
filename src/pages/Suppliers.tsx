@@ -354,6 +354,37 @@ export const Suppliers: React.FC = () => {
 
                                 <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
 
+                                
+                                {/* Zusatz-Infos / Notizen */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                    <h3 style={{ margin: '0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em' }}>Zusatz-Infos & Notizen</h3>
+                                    
+                                    <div>
+                                        <button type="button" onClick={() => setFormData({ ...formData, notes: [...(formData.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }] })} style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', color: 'var(--color-primary)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', padding: '10px', borderRadius: '8px', width: '100%' }}>+ Notiz hinzufügen</button>
+                                        
+                                        {(formData.notes || []).map((note, idx) => (
+                                            <div key={note.id} style={{ marginTop: '12px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                    <textarea rows={2} value={note.text} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].text = e.target.value; setFormData({ ...formData, notes: updated }); }} placeholder="Wichtig zu wissen..." style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontFamily: 'inherit' }} />
+                                                    <button type="button" onClick={() => setFormData({ ...formData, notes: (formData.notes || []).filter((_, i) => i !== idx) })} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><X size={18} /></button>
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px', padding: '12px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                        <input type="checkbox" checked={note.showOnOrderCreation} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].showOnOrderCreation = e.target.checked; setFormData({ ...formData, notes: updated }); }} />
+                                                        <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>Beim Anlegen einer Bestellung anzeigen</span>
+                                                    </label>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                        <input type="checkbox" checked={note.showOnOpenOrders} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].showOnOpenOrders = e.target.checked; setFormData({ ...formData, notes: updated }); }} />
+                                                        <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>Bei offenen Bestellungen anzeigen</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
+
                                 {/* Produkt Zuweisung Section */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                     <div>
@@ -418,25 +449,6 @@ export const Suppliers: React.FC = () => {
                                                 )}
                                             </div>
                                         )}
-                                    </div>
-                                </div>
-                                
-                                {/* Notizen & Docs (Keep existing logic visually cleaner) */}
-                                <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    <h3 style={{ margin: '0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em' }}>Zusatz-Infos</h3>
-                                    
-                                    <div>
-                                        <button type="button" onClick={() => setFormData({ ...formData, notes: [...(formData.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }] })} style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', color: 'var(--color-primary)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', padding: '10px', borderRadius: '8px', width: '100%' }}>+ Notiz hinzufügen</button>
-                                        
-                                        {(formData.notes || []).map((note, idx) => (
-                                            <div key={note.id} style={{ marginTop: '12px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
-                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                                                    <textarea rows={2} value={note.text} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].text = e.target.value; setFormData({ ...formData, notes: updated }); }} placeholder="Wichtig zu wissen..." style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontFamily: 'inherit' }} />
-                                                    <button type="button" onClick={() => setFormData({ ...formData, notes: (formData.notes || []).filter((_, i) => i !== idx) })} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><X size={18} /></button>
-                                                </div>
-                                            </div>
-                                        ))}
                                     </div>
                                 </div>
                             </form>
