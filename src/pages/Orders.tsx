@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2 } from 'lucide-react';
+import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2 } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 import emailjs from '@emailjs/browser';
 
@@ -2315,18 +2315,73 @@ export const Orders: React.FC = () => {
                                     </>
                                 )}
 
+                                
                                 {sessionGeneratedOrderIds.length > 0 && (
                                     <div style={{ marginTop: 'var(--spacing-2xl)', borderTop: '2px solid var(--color-border)', paddingTop: 'var(--spacing-xl)' }}>
                                         <h3 style={{ color: 'var(--color-success)', marginBottom: 'var(--spacing-lg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <CheckCircle size={20} />
-                                            Gerade angelegte Bestellungen
+                                            Gerade angelegt
                                         </h3>
-                                        <div style={{ display: 'grid', gap: 'var(--spacing-md)' }}>
-                                            {orders.filter(o => sessionGeneratedOrderIds.includes(o.id)).map(renderOrderCard)}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {orders.filter(o => sessionGeneratedOrderIds.includes(o.id)).map(order => (
+                                                <div key={order.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', padding: 'var(--spacing-sm) var(--spacing-md)', backgroundColor: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+                                                    <div style={{ flex: 1, fontWeight: 600, fontSize: '15px', color: 'var(--color-text-main)' }}>{order.productName}</div>
+                                                    
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Menge:</span>
+                                                        <input 
+                                                            type="number" 
+                                                            min="1"
+                                                            value={order.quantity} 
+                                                            onChange={async (e) => {
+                                                                const newQty = Number(e.target.value);
+                                                                if (newQty < 1) return;
+                                                                const updated = { ...order, quantity: newQty };
+                                                                setOrders(prev => prev.map(o => o.id === order.id ? updated : o));
+                                                                await DataService.updateOrder(updated);
+                                                            }}
+                                                            style={{ width: '60px', padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontWeight: 600 }}
+                                                        />
+                                                    </div>
+
+                                                    <input 
+                                                        type="text"
+                                                        placeholder="Notiz hinzufügen..."
+                                                        value={order.notes || ''}
+                                                        onChange={(e) => {
+                                                            const updated = { ...order, notes: e.target.value };
+                                                            setOrders(prev => prev.map(o => o.id === order.id ? updated : o));
+                                                        }}
+                                                        onBlur={async (e) => {
+                                                            const updated = { ...order, notes: e.target.value };
+                                                            await DataService.updateOrder(updated);
+                                                        }}
+                                                        style={{ width: '180px', padding: '6px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                                                    />
+
+                                                    <button 
+                                                        onClick={async () => {
+                                                            await DataService.deleteOrder(order.id);
+                                                            setSessionGeneratedOrderIds(prev => prev.filter(id => id !== order.id));
+                                                            loadOrders();
+                                                        }}
+                                                        style={{ padding: '6px', background: 'none', border: '1px solid #fecaca', borderRadius: '4px', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fef2f2' }}
+                                                        title="Löschen"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
 
+
+                            </div>
+                            <div style={{ padding: 'var(--spacing-lg) var(--spacing-xl)', borderTop: '1px solid var(--color-border)', backgroundColor: '#f8fafc', borderBottomLeftRadius: 'var(--radius-xl)', borderBottomRightRadius: 'var(--radius-xl)', display: 'flex', justifyContent: 'flex-end' }}>
+                                 <button onClick={() => { setIsProposalModalOpen(false); setSessionGeneratedOrderIds([]); }} style={{ padding: '10px 32px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', fontSize: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                                     Fertig
+                                 </button>
                             </div>
                         </div>
                     </div>
