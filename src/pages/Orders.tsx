@@ -24,6 +24,7 @@ export const Orders: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [orderCart, setOrderCart] = useState<{product: Product, quantity: number}[]>([]);
     const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
+    const [sessionGeneratedOrderIds, setSessionGeneratedOrderIds] = React.useState<string[]>([]);
     const [modalProposals, setModalProposals] = useState<{product: Product, supplierName: string, supplierId: string, quantity: number, openQty: number, selected: boolean}[]>([]);
     
     // Derived state for legacy compatibility
@@ -212,6 +213,7 @@ export const Orders: React.FC = () => {
                         notes: orderNotes
                     };
                     await DataService.saveOrder(newOrder);
+            setSessionGeneratedOrderIds(prev => [...prev, newOrder.id]);
                 }
             } else {
                 // One-time Order
@@ -420,6 +422,7 @@ export const Orders: React.FC = () => {
 
     const handleOpenProposals = () => {
         setModalProposals(orderProposals);
+        setSessionGeneratedOrderIds([]);
         setIsProposalModalOpen(true);
     };
 
@@ -2311,10 +2314,24 @@ export const Orders: React.FC = () => {
                                         })}
                                     </>
                                 )}
+
+                                {sessionGeneratedOrderIds.length > 0 && (
+                                    <div style={{ marginTop: 'var(--spacing-2xl)', borderTop: '2px solid var(--color-border)', paddingTop: 'var(--spacing-xl)' }}>
+                                        <h3 style={{ color: 'var(--color-success)', marginBottom: 'var(--spacing-lg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <CheckCircle size={20} />
+                                            Gerade angelegte Bestellungen
+                                        </h3>
+                                        <div style={{ display: 'grid', gap: 'var(--spacing-md)' }}>
+                                            {orders.filter(o => sessionGeneratedOrderIds.includes(o.id)).map(renderOrderCard)}
+                                        </div>
+                                    </div>
+                                )}
+
                             </div>
                         </div>
                     </div>
                 )}
+
             {
                 notification && (
                     <Notification
