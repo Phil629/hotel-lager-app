@@ -49,7 +49,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         Bestellungen
                     </Link>
 
-                    {StorageService.getSettings().inventoryMode && location.pathname !== '/inventory' && (
+                    {StorageService.getSettings().inventoryMode && (
                         <Link
                             to="/inventory"
                             style={{
@@ -158,7 +158,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <main style={{ flex: 1, padding: 'var(--spacing-xl)', overflowY: 'auto' }}>
                 
                 <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-                    {StorageService.getSettings().inventoryMode && (
+                    {StorageService.getSettings().inventoryMode && location.pathname !== '/inventory' && (
                         <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fdba74', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                             <div style={{ fontSize: '24px', flexShrink: 0 }}>🚨</div>
                             <div>
