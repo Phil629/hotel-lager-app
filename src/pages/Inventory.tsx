@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DataService } from '../services/data';
 import type { Product } from '../types';
 import { Plus, Minus, CheckCircle2, Circle, Search, ArrowDownToLine } from 'lucide-react';
@@ -9,9 +9,19 @@ export const Inventory: React.FC = () => {
     const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
     const [searchTerm, setSearchTerm] = useState('');
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
+    
+    const pendingSavesRef = useRef<Record<string, Product>>({});
+    const saveTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
     useEffect(() => {
         loadProducts();
+        
+        return () => {
+            // Flush any pending saves immediately when navigating away
+            Object.values(pendingSavesRef.current).forEach(p => {
+                DataService.updateProduct(p).catch(console.error);
+            });
+        };
     }, []);
 
     const loadProducts = async () => {
@@ -23,22 +33,31 @@ export const Inventory: React.FC = () => {
         }
     };
 
-    const handleUpdateStock = async (product: Product, newStock: number) => {
+    const handleUpdateStock = (product: Product, newStock: number) => {
         if (newStock < 0) newStock = 0;
         
-        // Optimistic UI Update
+        // Optimistic UI Update immediately
         const updatedProduct = { ...product, stock: newStock };
         setProducts(prev => prev.map(p => p.id === product.id ? updatedProduct : p));
         setCheckedMap(prev => ({ ...prev, [product.id]: true }));
 
-        // Background save
-        try {
-            await DataService.updateProduct(updatedProduct);
-        } catch (e) {
-            console.error('Save failed', e);
-            setNotification({ message: 'Speichern fehlgeschlagen', type: 'error' });
-            loadProducts(); // Revert on failure
+        // Store for unmount flushing
+        pendingSavesRef.current[product.id] = updatedProduct;
+
+        // Clear existing timeout for this product and set new one (Debounce)
+        if (saveTimeoutsRef.current[product.id]) {
+            clearTimeout(saveTimeoutsRef.current[product.id]);
         }
+        
+        saveTimeoutsRef.current[product.id] = setTimeout(async () => {
+            try {
+                await DataService.updateProduct(updatedProduct);
+                delete pendingSavesRef.current[product.id]; // Remove from pending queue
+            } catch (e) {
+                console.error('Save failed', e);
+                setNotification({ message: 'Speichern fehlgeschlagen', type: 'error' });
+            }
+        }, 600); // 600ms latency to allow fast typing before saving
     };
 
     const handleToggleChecked = (id: string) => {
