@@ -213,7 +213,6 @@ export const Orders: React.FC = () => {
                         notes: orderNotes
                     };
                     await DataService.saveOrder(newOrder);
-            setSessionGeneratedOrderIds(prev => [...prev, newOrder.id]);
                 }
             } else {
                 // One-time Order
@@ -443,6 +442,7 @@ export const Orders: React.FC = () => {
             };
             
             await DataService.saveOrder(newOrder);
+            setSessionGeneratedOrderIds(prev => [...prev, newOrder.id]);
 
             const { subject, body } = generateEmailTemplate([{ product: proposal.product, quantity: proposal.quantity }]);
             
