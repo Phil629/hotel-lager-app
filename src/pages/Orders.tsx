@@ -2356,7 +2356,7 @@ export const Orders: React.FC = () => {
                                                             const updated = { ...order, notes: e.target.value };
                                                             await DataService.updateOrder(updated);
                                                         }}
-                                                        style={{ width: '180px', padding: '6px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                                                        style={{ width: '180px', padding: '6px 8px', borderRadius: '4px', border: '1px solid #fde68a', backgroundColor: '#fef3c7', color: '#92400e', fontSize: '13px' }}
                                                     />
 
                                                     <button 
