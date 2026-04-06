@@ -423,32 +423,58 @@ export const Orders: React.FC = () => {
         setIsProposalModalOpen(true);
     };
 
-    const handleGenerateProposals = async () => {
-        const selected = modalProposals.filter(p => p.selected && p.quantity > 0);
-        if (selected.length === 0) return;
-        
+    
+    const handleExecuteProposal = async (proposal: {product: Product, quantity: number}) => {
         try {
             const nowIso = new Date().toISOString();
-            for (const prop of selected) {
-                 const newOrder: Order = {
-                    id: generateId(),
-                    date: nowIso,
-                    productName: prop.product.name,
-                    quantity: prop.quantity,
-                    status: 'open',
-                    productImage: prop.product.image,
-                    supplierEmail: prop.product.emailOrderAddress,
-                    supplierPhone: prop.product.supplierPhone,
-                    notes: 'Automatisch generierter Bestellvorschlag'
-                };
-                await DataService.saveOrder(newOrder);
+            const newOrder: import('../types').Order = {
+                 id: generateId(),
+                 date: nowIso,
+                 productName: proposal.product.name,
+                 quantity: proposal.quantity,
+                 status: 'open',
+                 productImage: proposal.product.image,
+                 supplierEmail: proposal.product.emailOrderAddress,
+                 supplierPhone: proposal.product.supplierPhone,
+                 notes: 'Aus Bestellvorschlägen generiert'
+            };
+            
+            await DataService.saveOrder(newOrder);
+
+            const { subject, body } = generateEmailTemplate([{ product: proposal.product, quantity: proposal.quantity }]);
+            
+            if (proposal.product.autoOrder && proposal.product.emailOrderAddress) {
+                const settings = StorageService.getSettings();
+                if (settings.serviceId && settings.templateId && settings.publicKey) {
+                     const templateParams = {
+                         to_email: proposal.product.emailOrderAddress,
+                         subject: subject,
+                         message: body,
+                         product_name: proposal.product.name,
+                         quantity: proposal.quantity,
+                         unit: proposal.product.unit || ''
+                     };
+                     await emailjs.send(settings.serviceId, settings.templateId, templateParams, settings.publicKey);
+                     setNotification({ message: 'Bestellung erfasst & Mail versendet!', type: 'success' });
+                } else {
+                     setNotification({ message: 'Bestellung erfasst, aber EmailJS Fehler!', type: 'error' });
+                }
+            } else if (proposal.product.preferredOrderMethod === 'link' && proposal.product.orderUrl) {
+                window.open(proposal.product.orderUrl, '_blank');
+                setNotification({ message: 'Bestellung erfasst! Shop geöffnet.', type: 'success' });
+            } else if (proposal.product.preferredOrderMethod === 'email' || proposal.product.emailOrderAddress) {
+                 const mailto = `mailto:${proposal.product.emailOrderAddress || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                 window.location.href = mailto;
+                 setNotification({ message: 'Bestellung erfasst! E-Mail geöffnet.', type: 'success' });
+            } else {
+                 setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
             }
-            setNotification({ message: `${selected.length} Bestellungen generiert!`, type: 'success' });
-            setIsProposalModalOpen(false);
+
+            setModalProposals(prev => prev.filter(p => p.product.id !== proposal.product.id));
             loadOrders();
         } catch(e) {
              console.error('Order Proposal Error:', e);
-             setNotification({ message: 'Fehler beim Generieren', type: 'error' });
+             setNotification({ message: 'Fehler beim Ausführen', type: 'error' });
         }
     };
 
@@ -466,10 +492,7 @@ export const Orders: React.FC = () => {
         setModalProposals(prev => prev.map((p, i) => i === index ? { ...p, quantity } : p));
     };
     
-    const toggleProposalSelection = (index: number, selected: boolean) => {
-        setModalProposals(prev => prev.map((p, i) => i === index ? { ...p, selected } : p));
-    };
-
+    
     const openOrders = orders
         .filter(o => o.status === 'open')
         .sort((a, b) => {
@@ -2210,168 +2233,89 @@ export const Orders: React.FC = () => {
 
 
                 isProposalModalOpen && (
-
-
                     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: 'var(--spacing-md)' }}>
-
-
-                        <div style={{ backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)' }}>
-
-
-                            <div style={{ padding: 'var(--spacing-lg)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-
-
-                                <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>✨ Bestell-Autopilot</h2>
-
-
-                                <button onClick={() => setIsProposalModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
-
-
+                        <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' }}>
+                            <div style={{ padding: 'var(--spacing-lg) var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderTopLeftRadius: 'var(--radius-xl)', borderTopRightRadius: 'var(--radius-xl)' }}>
+                                <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--font-size-xl)' }}>✨ Bestell-Assistent</h2>
+                                <button onClick={() => setIsProposalModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#64748b" /></button>
                             </div>
 
+                            <div style={{ padding: 'var(--spacing-xl)', overflowY: 'auto', flex: 1, backgroundColor: 'white' }}>
+                                {modalProposals.length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--spacing-2xl) 0' }}>Keine offenen Vorschläge mehr! 🎉</div>
+                                ) : (
+                                    <>
+                                        <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xl)', marginTop: 0, fontSize: 'var(--font-size-md)' }}>Diese Produkte liegen unter dem Mindestbestand. Klicke auf Bestellen, um das Ticket anzulegen und optional die Bestellung beim Lieferanten manuell oder per Auto-Mail zu platzieren.</p>
+                                        
+                                        {Array.from(new Set(modalProposals.map(p => p.supplierName))).map(supplierName => {
+                                            const supplierProposals = modalProposals.filter(p => p.supplierName === supplierName);
+                                            if (supplierProposals.length === 0) return null;
+                                            
+                                            return (
+                                                <div key={supplierName} style={{ marginBottom: 'var(--spacing-2xl)' }}>
+                                                    <h3 style={{ paddingBottom: '8px', marginBottom: 'var(--spacing-md)', fontSize: '18px', color: 'var(--color-text-main)' }}>{supplierName}</h3>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                                        {supplierProposals.map(prop => {
+                                                            const originalIndex = modalProposals.findIndex(p => p.product.id === prop.product.id);
+                                                            
+                                                            let btnText = "Bedarf merken";
+                                                            const prod = prop.product;
+                                                            if (prod.autoOrder && prod.emailOrderAddress) btnText = "🤖 Auto-Mail senden";
+                                                            else if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) btnText = "🔗 Im Tab bestellen";
+                                                            else if (prod.preferredOrderMethod === 'email' || prod.emailOrderAddress) btnText = "📧 E-Mail öffnen";
 
-                            <div style={{ padding: 'var(--spacing-lg)', overflowY: 'auto', flex: 1 }}>
-
-
-                                <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-lg)', marginTop: 0 }}>Folgende Produkte liegen unter dem Mindestbestand und sollten nachbestellt werden:</p>
-
-
-                                {Array.from(new Set(modalProposals.map(p => p.supplierName))).map(supplierName => {
-
-
-                                    const supplierProposals = modalProposals.filter(p => p.supplierName === supplierName);
-
-
-                                    if (supplierProposals.length === 0) return null;
-
-
-                                    return (
-
-
-                                        <div key={supplierName} style={{ marginBottom: 'var(--spacing-xl)' }}>
-
-
-                                            <h3 style={{ borderBottom: '2px solid var(--color-primary)', paddingBottom: '4px', marginBottom: 'var(--spacing-md)' }}>{supplierName}</h3>
-
-
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-
-
-                                                {supplierProposals.map(prop => {
-
-
-                                                    const originalIndex = modalProposals.findIndex(p => p.product.id === prop.product.id);
-
-
-                                                    return (
-
-
-                                                        <div key={prop.product.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', padding: 'var(--spacing-sm)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-
-
-                                                            <input type="checkbox" checked={prop.selected} onChange={e => toggleProposalSelection(originalIndex, e.target.checked)} style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
-
-
-                                                            <div style={{ flex: 1 }}>
-
-
-                                                                <div style={{ fontWeight: 500 }}>{prop.product.name}</div>
-
-
-                                                                <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-
-
-                                                                    <span>Bestand: {prop.product.stock} / Min: {prop.product.minStock || 0}</span>
-
-
-                                                                    {prop.openQty > 0 && <span style={{ color: '#FF9800' }}>({prop.openQty} offen)</span>}
-
-
-                                                                    <span>•</span>
-
-
-                                                                    <button onClick={() => handleIgnorePermanently(prop.product.id)} style={{ border: 'none', background: 'none', color: 'var(--color-danger)', fontSize: 'inherit', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}>Nie vorschlagen</button>
-
-
+                                                            return (
+                                                                <div key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', flexWrap: 'wrap' }}>
+                                                                    <div style={{ flex: '1 1 200px' }}>
+                                                                        <div style={{ fontWeight: 600, fontSize: '16px', color: 'var(--color-text-main)', marginBottom: '4px' }}>{prod.name}</div>
+                                                                        <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                            <span>Bestand: {prod.stock} / Min: {prod.minStock || 0}</span>
+                                                                            {prop.openQty > 0 && <span style={{ color: '#d97706', fontWeight: 500 }}>({prop.openQty} ausstehend)</span>}
+                                                                            <button onClick={() => handleIgnorePermanently(prod.id)} style={{ border: 'none', background: 'none', color: '#ef4444', fontSize: '12px', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}>Dauerhaft ignorieren</button>
+                                                                        </div>
+                                                                    </div>
+                                                                    
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f1f5f9', padding: '6px', borderRadius: 'var(--radius-md)' }}>
+                                                                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569', paddingLeft: '4px' }}>BESTELLEN:</span>
+                                                                            <input type="number" min="1" value={prop.quantity || 1} onChange={e => updateProposalQuantity(originalIndex, Number(e.target.value))} style={{ width: '60px', padding: '6px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontWeight: 700, fontSize: '15px' }} />
+                                                                            <span style={{ fontSize: '13px', color: '#475569', width: '30px', fontWeight: 500 }}>{prod.unit || 'Stk'}</span>
+                                                                        </div>
+                                                                        
+                                                                        <button 
+                                                                            onClick={() => handleExecuteProposal(prop)}
+                                                                            style={{ 
+                                                                                padding: '10px 16px', 
+                                                                                borderRadius: 'var(--radius-md)', 
+                                                                                border: 'none', 
+                                                                                backgroundColor: 'var(--color-primary)', 
+                                                                                color: 'white', 
+                                                                                cursor: 'pointer', 
+                                                                                fontWeight: 600, 
+                                                                                boxShadow: '0 1px 2px 0 rgba(37, 99, 235, 0.3)',
+                                                                                whiteSpace: 'nowrap',
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '6px'
+                                                                            }}
+                                                                        >
+                                                                            {btnText}
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-
-
-                                                            </div>
-
-
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-
-                                                                <span style={{ fontSize: 'var(--font-size-sm)' }}>Menge:</span>
-
-
-                                                                <input type="number" min="1" value={prop.quantity || 1} onChange={e => updateProposalQuantity(originalIndex, Number(e.target.value))} style={{ width: '60px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)' }} disabled={!prop.selected} />
-
-
-                                                                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', width: '30px' }}>{prop.product.unit || 'Stk'}</span>
-
-
-                                                            </div>
-
-
-                                                        </div>
-
-
-                                                    );
-
-
-                                                })}
-
-
-                                            </div>
-
-
-                                        </div>
-
-
-                                    );
-
-
-                                })}
-
-
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </>
+                                )}
                             </div>
-
-
-                            <div style={{ padding: 'var(--spacing-lg)', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)' }}>
-
-
-                                <button onClick={() => setIsProposalModalOpen(false)} style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'transparent', cursor: 'pointer' }}>Abbrechen</button>
-
-
-                                <button onClick={handleGenerateProposals} disabled={modalProposals.filter(p => p.selected).length === 0} style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, opacity: modalProposals.filter(p => p.selected).length === 0 ? 0.5 : 1 }}>
-
-
-                                    {modalProposals.filter(p => p.selected).length} Bestellungen generieren
-
-
-                                </button>
-
-
-                            </div>
-
-
                         </div>
-
-
                     </div>
-
-
-                )
-
-
-            }
-
-
-
+                )}
             {
-
-
                 notification && (
                     <Notification
                         message={notification.message}
