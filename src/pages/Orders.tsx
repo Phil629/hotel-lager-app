@@ -427,29 +427,7 @@ export const Orders: React.FC = () => {
         }
     };
 
-    const handleExecuteProposal = (proposal: {product: Product, quantity: number}, mode: 'mailto' | 'gmail' | 'link' | 'none' = 'none') => {
-        const prod = proposal.product;
-        const supplier = suppliers.find(s => s.id === prod.supplierId);
-        
-        if (mode === 'link') {
-            const url = prod.orderUrl || (supplier?.url || supplier?.loginUrl || '');
-            if (url) window.open(url, '_blank');
-        } else if (mode === 'gmail' || mode === 'mailto') {
-            const emailAddr = prod.emailOrderAddress || supplier?.email || '';
-            const { subject, body } = generateEmailTemplate([{ product: prod, quantity: proposal.quantity }]);
-            
-            if (mode === 'gmail') {
-                const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddr}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                window.open(url, '_blank');
-            } else {
-                const url = `mailto:${emailAddr}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                window.location.href = url;
-            }
-        }
-        
-        // Save async after opening the window synchronously
-        executeProposalDbSave(proposal);
-    };
+
 
     const handleIgnorePermanently = async (productId: string) => {
         const prod = products.find(p => p.id === productId);
@@ -2256,25 +2234,53 @@ export const Orders: React.FC = () => {
                                                                             <span style={{ fontSize: '13px', color: '#475569', width: '30px', fontWeight: 500 }}>{prod.unit || 'Stk'}</span>
                                                                         </div>
                                                                         
-                                                                        <button 
-                                                                            onClick={() => handleExecuteProposal(prop)}
-                                                                            style={{ 
-                                                                                padding: '10px 16px', 
-                                                                                borderRadius: 'var(--radius-md)', 
-                                                                                border: 'none', 
-                                                                                backgroundColor: 'var(--color-primary)', 
-                                                                                color: 'white', 
-                                                                                cursor: 'pointer', 
-                                                                                fontWeight: 600, 
-                                                                                boxShadow: '0 1px 2px 0 rgba(37, 99, 235, 0.3)',
-                                                                                whiteSpace: 'nowrap',
-                                                                                display: 'flex',
-                                                                                alignItems: 'center',
-                                                                                gap: '6px'
-                                                                            }}
-                                                                        >
-                                                                            {btnText}
-                                                                        </button>
+                                                                        {(() => {
+                                                                            const _emailAddr = prod.emailOrderAddress || suppliers.find(s => s.id === prod.supplierId)?.email || '';
+                                                                            const { subject, body } = generateEmailTemplate([{ product: prod, quantity: prop.quantity }]);
+                                                                            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${_emailAddr}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                                                            const mailtoUrl = `mailto:${_emailAddr}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                                                            const webshopUrl = prod.orderUrl || suppliers.find(s => s.id === prod.supplierId)?.url || suppliers.find(s => s.id === prod.supplierId)?.loginUrl || '';
+
+                                                                            if (btnText === '📧 E-Mail öffnen') {
+                                                                                return (
+                                                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                                                        <a 
+                                                                                            href={gmailUrl}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            onClick={() => executeProposalDbSave(prop)}
+                                                                                            style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+                                                                                            📧 Gmail
+                                                                                        </a>
+                                                                                        <a 
+                                                                                            href={mailtoUrl}
+                                                                                            onClick={() => executeProposalDbSave(prop)}
+                                                                                            style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+                                                                                            📧 Mail-App
+                                                                                        </a>
+                                                                                    </div>
+                                                                                );
+                                                                            } else if (btnText === '🔗 Im Tab bestellen') {
+                                                                                return (
+                                                                                    <a 
+                                                                                        href={webshopUrl}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        onClick={() => executeProposalDbSave(prop)}
+                                                                                        style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                        {btnText}
+                                                                                    </a>
+                                                                                );
+                                                                            } else {
+                                                                                return (
+                                                                                    <button 
+                                                                                        onClick={() => executeProposalDbSave(prop)}
+                                                                                        style={{ padding: '10px 16px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                        {btnText}
+                                                                                    </button>
+                                                                                );
+                                                                            }
+                                                                        })()}
                                                                     </div>
                                                                 </div>
                                                             );
