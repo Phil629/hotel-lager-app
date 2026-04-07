@@ -22,17 +22,31 @@ function App() {
       return;
     }
     
+        const checkBanStatus = async (currentSession: any) => {
+      if (!currentSession) {
+        setSession(null);
+        return;
+      }
+      const { data } = await supabase!.from('profiles').select('is_banned').eq('id', currentSession.user.id).single();
+      if (data?.is_banned) {
+        await supabase!.auth.signOut();
+        setSession(null);
+        alert("Dein Account wurde gesperrt. Bitte wende dich an den Support.");
+      } else {
+        setSession(currentSession);
+      }
+    };
+
     // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
+    supabase!.auth.getSession().then(({ data: { session } }) => {
+      checkBanStatus(session).then(() => setLoading(false));
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    } = supabase!.auth.onAuthStateChange((_event, session) => {
+      checkBanStatus(session);
     });
 
     return () => subscription.unsubscribe();
