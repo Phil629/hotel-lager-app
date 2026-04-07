@@ -1141,8 +1141,8 @@ export const Products: React.FC = () => {
                                                         <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Ab hier schlägt der Autopilot an.</span>
                                                     </div>
                                                     <div>
-                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Standard Bestellmenge (Stück)</label>
-                                                        <input type="number" value={newProduct.standardOrderQuantity || ''} onChange={e => setNewProduct({ ...newProduct, standardOrderQuantity: e.target.value ? Number(e.target.value) : undefined })} placeholder="z.B. 10" style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Standard Bestellmenge</label>
+                                                        <input type="number" value={newProduct.standardOrderQuantity || ''} onChange={e => setNewProduct({ ...newProduct, standardOrderQuantity: e.target.value ? Number(e.target.value) : undefined })} placeholder="Optional" style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
                                                     </div>
                                                 </div>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>

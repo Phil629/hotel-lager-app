@@ -426,7 +426,7 @@ export const Orders: React.FC = () => {
     };
 
     
-    const handleExecuteProposal = async (proposal: {product: Product, quantity: number}) => {
+    const handleExecuteProposal = async (proposal: {product: Product, quantity: number}, emailProvider: 'mailto' | 'gmail' = 'mailto') => {
         try {
             const nowIso = new Date().toISOString();
             const newOrder: import('../types').Order = {
@@ -470,8 +470,11 @@ export const Orders: React.FC = () => {
                  const emailAddress = supplier?.email || proposal.product.emailOrderAddress || '';
                  
                  if (proposal.product.preferredOrderMethod === 'email' || emailAddress) {
-                     const mailto = `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                     window.location.href = mailto;
+                     if (emailProvider === 'gmail') {
+                          window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddress}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+                     } else {
+                          window.location.href = `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                     }
                      setNotification({ message: 'Bestellung erfasst! E-Mail geöffnet.', type: 'success' });
                  } else {
                      setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
@@ -2266,11 +2269,13 @@ export const Orders: React.FC = () => {
                                                         {supplierProposals.map(prop => {
                                                             const originalIndex = modalProposals.findIndex(p => p.product.id === prop.product.id);
                                                             
-                                                            let btnText = "Bedarf merken";
                                                             const prod = prop.product;
-                                                            if (prod.autoOrder && prod.emailOrderAddress) btnText = "🤖 Auto-Mail senden";
+                                                            const supp = suppliers.find(s => s.id === prod.supplierId);
+                                                            const emailAddr = supp?.email || prod.emailOrderAddress || '';
+                                                            let btnText = "Bedarf merken";
+                                                            if (prod.autoOrder && emailAddr) btnText = "🤖 Auto-Mail senden";
                                                             else if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) btnText = "🔗 Im Tab bestellen";
-                                                            else if (prod.preferredOrderMethod === 'email' || prod.emailOrderAddress) btnText = "📧 E-Mail öffnen";
+                                                            else if (prod.preferredOrderMethod === 'email' || emailAddr) btnText = "📧 E-Mail öffnen";
 
                                                             return (
                                                                 <div key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', flexWrap: 'wrap' }}>

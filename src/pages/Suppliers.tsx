@@ -344,12 +344,12 @@ export const Suppliers: React.FC = () => {
 
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
                                         <div>
-                                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Email Adresse (Bestellung) *</label>
-                                            <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} required />
+                                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Email Adresse (Bestellung)</label>
+                                            <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} />
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Webseite / Login-Portal URL</label>
-                                            <input type="url" value={formData.url || ''} onChange={e => setFormData({ ...formData, url: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="https://" />
+                                            <input type="text" value={formData.url || ''} onChange={e => setFormData({ ...formData, url: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="www.beispiel.de" />
                                         </div>
                                     </div>
                                 </div>
@@ -362,9 +362,7 @@ export const Suppliers: React.FC = () => {
                                         <Key size={16} /> Kunden-Login / Portal
                                     </h3>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                        <div style={{ gridColumn: '1 / -1' }}>
-                                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Portal / Shop Webadresse (Optional)</label>
-                                            <input type="url" value={formData.loginUrl || ''} onChange={e => setFormData({ ...formData, loginUrl: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="https://shop.lieferant.de/login" />
+                                        <div style={{ display: 'none' }}>
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Benutzername / Kundennummer</label>
