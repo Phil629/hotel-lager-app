@@ -2,10 +2,8 @@ import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
-import { StorageService } from '../services/storage';
 import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2 } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
-import emailjs from '@emailjs/browser';
 
 export const Orders: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([]);
@@ -402,20 +400,9 @@ export const Orders: React.FC = () => {
     };
 
     
-    const handleExecuteProposal = async (proposal: {product: Product, quantity: number}, emailProvider: 'mailto' | 'gmail' = 'mailto') => {
+    const executeProposalDbSave = async (proposal: {product: Product, quantity: number}) => {
         try {
             const prod = proposal.product;
-            const supplier = suppliers.find(s => s.id === prod.supplierId);
-            const emailAddress = supplier?.email || prod.emailOrderAddress || '';
-            const { subject, body } = generateEmailTemplate([{ product: prod, quantity: proposal.quantity }]);
-
-            let popup: Window | null = null;
-            if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) {
-                popup = window.open('about:blank', '_blank');
-            } else if ((prod.preferredOrderMethod === 'email' || emailAddress) && emailProvider === 'gmail') {
-                popup = window.open('about:blank', '_blank');
-            }
-
             const nowIso = new Date().toISOString();
             const newOrder: import('../types').Order = {
                  id: generateId(),
@@ -431,29 +418,37 @@ export const Orders: React.FC = () => {
             
             await DataService.saveOrder(newOrder);
             setSessionGeneratedOrderIds(prev => [...prev, newOrder.id]);
-
-            if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) {
-                const url = prod.orderUrl || (supplier?.url || supplier?.loginUrl || '');
-                if (popup) popup.location.href = url || 'about:blank';
-                setNotification({ message: 'Bestellung erfasst! Shop geöffnet.', type: 'success' });
-            } else if (prod.preferredOrderMethod === 'email' || emailAddress) {
-                if (emailProvider === 'gmail') {
-                     const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddress}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                     if (popup) popup.location.href = url;
-                } else {
-                     window.location.href = `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                }
-                setNotification({ message: 'Bestellung erfasst! E-Mail geöffnet.', type: 'success' });
-            } else {
-                setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
-            }
-
             setModalProposals(prev => prev.filter(p => p.product.id !== prod.id));
             loadOrders();
+            setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
         } catch(e) {
-             console.error('Order Proposal Error:', e);
-             setNotification({ message: 'Fehler beim Ausführen', type: 'error' });
+            console.error('Order Proposal Error:', e);
+            setNotification({ message: 'Fehler beim Speichern', type: 'error' });
         }
+    };
+
+    const handleExecuteProposal = (proposal: {product: Product, quantity: number}, mode: 'mailto' | 'gmail' | 'link' | 'none' = 'none') => {
+        const prod = proposal.product;
+        const supplier = suppliers.find(s => s.id === prod.supplierId);
+        
+        if (mode === 'link') {
+            const url = prod.orderUrl || (supplier?.url || supplier?.loginUrl || '');
+            if (url) window.open(url, '_blank');
+        } else if (mode === 'gmail' || mode === 'mailto') {
+            const emailAddr = prod.emailOrderAddress || supplier?.email || '';
+            const { subject, body } = generateEmailTemplate([{ product: prod, quantity: proposal.quantity }]);
+            
+            if (mode === 'gmail') {
+                const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddr}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                window.open(url, '_blank');
+            } else {
+                const url = `mailto:${emailAddr}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                window.location.href = url;
+            }
+        }
+        
+        // Save async after opening the window synchronously
+        executeProposalDbSave(proposal);
     };
 
     const handleIgnorePermanently = async (productId: string) => {
