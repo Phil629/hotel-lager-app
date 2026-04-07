@@ -69,12 +69,19 @@ export interface Order {
   notes?: string; // New: Notes for the order
 }
 
-export interface EmailSettings {
-  serviceId: string;
-  templateId: string;
-  publicKey: string;
-  supabaseUrl?: string;
-  supabaseKey?: string;
+export interface AppSettings {
+  serviceId: string; // Deprecated
+  templateId: string; // Deprecated
+  publicKey: string; // Deprecated
+  supabaseUrl?: string; // Hidden developer option
+  supabaseKey?: string; // Hidden developer option
   enableStockManagement?: boolean;
   inventoryMode?: boolean; // New: Inventory Mode (pauses auto-consumption)
+  
+  // SaaS & Personalization Settings
+  hotelName?: string;
+  logoUrl?: string;
+  currency?: string; // 'EUR', 'CHF', etc.
+  currentPlan?: 'basic' | 'standard' | 'pro';
+  developerMode?: boolean; // Toggle to show advanced settings
 }

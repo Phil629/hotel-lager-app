@@ -302,7 +302,7 @@ export const DataService = {
         }
     },
 
-    async uploadFile(file: File): Promise<string | null> {
+    async uploadFile(file: File, bucketName: string = 'supplier-documents'): Promise<string | null> {
         const supabase = getSupabaseClient();
         if (!supabase) return null;
 
@@ -312,7 +312,7 @@ export const DataService = {
         const filePath = `${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-            .from('supplier-documents')
+            .from(bucketName)
             .upload(filePath, file);
 
         if (uploadError) {
@@ -321,7 +321,7 @@ export const DataService = {
         }
 
         const { data } = supabase.storage
-            .from('supplier-documents')
+            .from(bucketName)
             .getPublicUrl(filePath);
 
         return data.publicUrl;

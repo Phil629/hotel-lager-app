@@ -11,6 +11,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const location = useLocation();
     const isActive = (path: string) => location.pathname === path;
 
+    const settings = StorageService.getSettings();
+    const displayLogo = settings.logoUrl || logo;
+    const displayHotelName = settings.hotelName || 'Hotel';
+
     return (
         <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--color-background)' }}>
             {/* Sidebar */}
@@ -24,8 +28,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 gap: 'var(--spacing-xl)'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', color: 'var(--color-primary)' }}>
-                    <img src={logo} alt="Hotel Logo" style={{ height: '40px', objectFit: 'contain' }} />
-                    <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Hotel</h1>
+                    <img src={displayLogo} alt="Hotel Logo" style={{ height: '40px', maxWidth: '100px', objectFit: 'contain', borderRadius: '4px' }} />
+                    <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{displayHotelName}</h1>
                 </div>
 
                 <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>

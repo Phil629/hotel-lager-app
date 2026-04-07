@@ -1,4 +1,4 @@
-import type { Product, Order, EmailSettings, Supplier } from '../types';
+import type { Product, Order, AppSettings, Supplier } from '../types';
 
 const STORAGE_KEYS = {
     PRODUCTS: 'hotel_inventory_products',
@@ -86,12 +86,22 @@ export const StorageService = {
         localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     },
 
-    getSettings: (): EmailSettings => {
+    getSettings: (): AppSettings => {
         const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-        return stored ? JSON.parse(stored) : { serviceId: '', templateId: '', publicKey: '', enableStockManagement: true, inventoryMode: false };
+        return stored ? JSON.parse(stored) : { 
+            serviceId: '', 
+            templateId: '', 
+            publicKey: '', 
+            enableStockManagement: true, 
+            inventoryMode: false,
+            hotelName: 'Mein Hotel',
+            currency: 'EUR',
+            currentPlan: 'pro',
+            developerMode: false
+        };
     },
 
-    saveSettings: (settings: EmailSettings) => {
+    saveSettings: (settings: AppSettings) => {
         localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     },
 
