@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StorageService } from '../services/storage';
+import { supabase } from '../services/supabase';
 import { DataService } from '../services/data';
 import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
@@ -72,28 +73,28 @@ export const Settings: React.FC = () => {
         setIsUploading(true);
 
         try {
-            // First try uploading to Supabase (using existing supplier-documents bucket for now to avoid RLS/Bucket missing errors)
-            const publicUrl = await DataService.uploadFile(file, 'supplier-documents');
-            if (publicUrl) {
-                setSettings({ ...settings, logoUrl: publicUrl });
-                setNotification({ message: 'Logo erfolgreich hochgeladen.', type: 'success' });
-                return;
-            }
+            if (!supabase) throw new Error("No Database");
+            const fileExt = file.name.split('.').pop();
+            const fileName = `logo_${Math.random().toString(36).substring(2)}.${fileExt}`;
+            
+            const { error: uploadError } = await supabase.storage.from('product_images').upload(fileName, file);
+            if (uploadError) throw uploadError;
+            
+            const { data: { publicUrl } } = supabase.storage.from('product_images').getPublicUrl(fileName);
+            setSettings({ ...settings, logoUrl: publicUrl });
+            setNotification({ message: 'Logo erfolgreich hochgeladen.', type: 'success' });
         } catch (uploadError) {
             console.log("Supabase upload failed, falling back to local base64", uploadError);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64Url = reader.result as string;
+                setSettings({ ...settings, logoUrl: base64Url });
+                setNotification({ message: 'Logo lokal gespeichert (Fallback)!', type: 'success' });
+            };
+            reader.readAsDataURL(file);
         } finally {
             setIsUploading(false);
         }
-
-        // Fallback to Base64 if no Supabase or bucket missing
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64String = reader.result as string;
-            setSettings({ ...settings, logoUrl: base64String });
-            setIsUploading(false);
-            setNotification({ message: 'Logo lokal gespeichert.', type: 'success' });
-        };
-        reader.readAsDataURL(file);
     };
 
     const triggerDevMode = () => {
@@ -219,6 +220,16 @@ export const Settings: React.FC = () => {
                     <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
                         <Building2 size={22} color="var(--color-primary)" /> Unternehmensprofil
                     </h3>
+
+                    <div style={{ padding: 'var(--spacing-md)', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1', marginBottom: 'var(--spacing-lg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <strong style={{ display: 'block', color: 'var(--color-text-main)', fontSize: '15px' }}>Aktuelles Abonnement</strong>
+                            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Ihre Features sind basierend auf diesem Plan freigeschaltet. Wenden Sie sich an den Support, um Ihren Plan zu ändern.</span>
+                        </div>
+                        <div style={{ backgroundColor: 'var(--color-primary)', color: 'white', padding: '6px 12px', borderRadius: 'var(--radius-full)', fontWeight: 600, fontSize: '14px', textTransform: 'uppercase' }}>
+                            {settings.currentPlan || 'BASIC'}
+                        </div>
+                    </div>
                     
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--spacing-xl)', marginTop: 'var(--spacing-lg)' }}>
                         <div>
@@ -422,7 +433,7 @@ export const Settings: React.FC = () => {
                 </div>
 
                 {/* 4. Developer Options (Hidden globally unless unlocked) */}
-                {settings.developerMode && (
+                {false && (
                     <div style={{
                         backgroundColor: '#1e293b',
                         padding: 'var(--spacing-xl)',

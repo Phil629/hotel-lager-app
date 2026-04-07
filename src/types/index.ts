@@ -6,6 +6,7 @@ export interface Note {
 }
 
 export interface Supplier {
+  user_id?: string;
   id: string;
   name: string;
   contactName?: string;
@@ -22,6 +23,7 @@ export interface Supplier {
 }
 
 export interface Product {
+  user_id?: string;
   id: string;
   name: string;
   category?: string;
@@ -51,6 +53,7 @@ export interface Product {
 }
 
 export interface Order {
+  user_id?: string;
   id: string;
   date: string; // ISO string
   productName: string;

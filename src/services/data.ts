@@ -1,5 +1,4 @@
 import { generateId } from "../utils";
-import { StorageService } from './storage';
 import { getSupabaseClient } from './supabase';
 import type { Product, Order, Supplier, Note } from '../types';
 
@@ -9,7 +8,6 @@ const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: 
         const parsed = JSON.parse(notesStr);
         if (Array.isArray(parsed)) return parsed;
     } catch (e) {
-        // Fallback to legacy string
     }
     return [{
         id: generateId(),
@@ -19,7 +17,6 @@ const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: 
     }];
 };
 
-// Helper to map App Model (camelCase) -> DB Model (snake_case)
 const toSupabaseSupplier = (s: Supplier) => ({
     id: s.id,
     name: s.name,
@@ -112,7 +109,6 @@ const toSupabaseOrder = (o: Order) => {
         date: o.date
     };
 
-    // Only add optional fields if they exist
     if (o.productImage) base.product_image = o.productImage;
     if (o.hasDefect !== undefined) base.has_defect = o.hasDefect;
     if (o.defectNotes) base.defect_notes = o.defectNotes;
@@ -152,45 +148,27 @@ const fromSupabaseOrder = (o: any): Order => ({
 });
 
 export const DataService = {
-    // Export helpers for migration tool
     toSupabaseProduct,
     toSupabaseOrder,
     toSupabaseSupplier,
 
     async getProducts(): Promise<Product[]> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const { data, error } = await supabase
-                .from('products')
-                .select('*')
-                .order('name');
-
-            if (error) {
-                console.error('Supabase error:', error);
-                return StorageService.getProducts();
-            }
-            return (data || []).map(fromSupabaseProduct);
+        if (!supabase) return [];
+        const { data, error } = await supabase.from('products').select('*').order('name');
+        if (error) {
+            console.error('Supabase error:', error);
+            throw error;
         }
-        return StorageService.getProducts();
+        return (data || []).map(fromSupabaseProduct);
     },
 
     async saveProduct(product: Product): Promise<void> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const dbProduct = toSupabaseProduct(product);
-            const { error } = await supabase.from('products').upsert(dbProduct);
-            if (error) throw error;
-        } else {
-            const products = StorageService.getProducts();
-            const index = products.findIndex(p => p.id === product.id);
-            let updated;
-            if (index >= 0) {
-                updated = products.map(p => p.id === product.id ? product : p);
-            } else {
-                updated = [...products, product];
-            }
-            StorageService.saveProducts(updated);
-        }
+        if (!supabase) return;
+        const dbProduct = toSupabaseProduct(product);
+        const { error } = await supabase.from('products').upsert(dbProduct);
+        if (error) throw error;
     },
 
     async updateProduct(product: Product): Promise<void> {
@@ -199,137 +177,68 @@ export const DataService = {
 
     async deleteProduct(id: string): Promise<void> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const { error } = await supabase.from('products').delete().eq('id', id);
-            if (error) throw error;
-        } else {
-            const products = StorageService.getProducts().filter(p => p.id !== id);
-            StorageService.saveProducts(products);
-        }
+        if (!supabase) return;
+        const { error } = await supabase.from('products').delete().eq('id', id);
+        if (error) throw error;
     },
 
     async getOrders(): Promise<Order[]> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const { data, error } = await supabase
-                .from('orders')
-                .select('*')
-                .order('date', { ascending: false });
-
-            if (error) {
-                console.error('Supabase error:', error);
-                return StorageService.getOrders();
-            }
-            return (data || []).map(fromSupabaseOrder);
+        if (!supabase) return [];
+        const { data, error } = await supabase.from('orders').select('*').order('date', { ascending: false });
+        if (error) {
+            console.error('Supabase error:', error);
+            throw error;
         }
-        return StorageService.getOrders();
+        return (data || []).map(fromSupabaseOrder);
     },
 
     async saveOrder(order: Order): Promise<void> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const dbOrder = toSupabaseOrder(order);
-            const { error } = await supabase.from('orders').insert(dbOrder);
-            if (error) throw error;
-        } else {
-            const orders = StorageService.getOrders();
-            StorageService.saveOrders([...orders, order]);
-        }
+        if (!supabase) return;
+        const dbOrder = toSupabaseOrder(order);
+        const { error } = await supabase.from('orders').insert(dbOrder);
+        if (error) throw error;
     },
 
     async updateOrder(order: Order): Promise<void> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const dbOrder = toSupabaseOrder(order);
-            const { error } = await supabase.from('orders').upsert(dbOrder);
-            if (error) throw error;
-        } else {
-            const orders = StorageService.getOrders();
-            const updated = orders.map(o => o.id === order.id ? order : o);
-            StorageService.saveOrders(updated);
-        }
+        if (!supabase) return;
+        const dbOrder = toSupabaseOrder(order);
+        const { error } = await supabase.from('orders').upsert(dbOrder);
+        if (error) throw error;
     },
 
     async deleteOrder(id: string): Promise<void> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const { error } = await supabase.from('orders').delete().eq('id', id);
-            if (error) throw error;
-        } else {
-            const orders = StorageService.getOrders().filter(o => o.id !== id);
-            StorageService.saveOrders(orders);
-        }
+        if (!supabase) return;
+        const { error } = await supabase.from('orders').delete().eq('id', id);
+        if (error) throw error;
     },
 
     async getSuppliers(): Promise<Supplier[]> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const { data, error } = await supabase
-                .from('suppliers')
-                .select('*')
-                .order('name');
-
-            if (error) {
-                console.error('Supabase error:', error);
-                return StorageService.getSuppliers();
-            }
-            return (data || []).map(fromSupabaseSupplier);
+        if (!supabase) return [];
+        const { data, error } = await supabase.from('suppliers').select('*').order('name');
+        if (error) {
+            console.error('Supabase error:', error);
+            throw error;
         }
-        return StorageService.getSuppliers();
+        return (data || []).map(fromSupabaseSupplier);
     },
 
     async saveSupplier(supplier: Supplier): Promise<void> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const dbSupplier = toSupabaseSupplier(supplier);
-            const { error } = await supabase.from('suppliers').upsert(dbSupplier);
-            if (error) throw error;
-        } else {
-            const suppliers = StorageService.getSuppliers();
-            const index = suppliers.findIndex(s => s.id === supplier.id);
-            let updated;
-            if (index >= 0) {
-                updated = suppliers.map(s => s.id === supplier.id ? supplier : s);
-            } else {
-                updated = [...suppliers, supplier];
-            }
-            StorageService.saveSuppliers(updated);
-        }
+        if (!supabase) return;
+        const dbSupplier = toSupabaseSupplier(supplier);
+        const { error } = await supabase.from('suppliers').upsert(dbSupplier);
+        if (error) throw error;
     },
 
     async deleteSupplier(id: string): Promise<void> {
         const supabase = getSupabaseClient();
-        if (supabase) {
-            const { error } = await supabase.from('suppliers').delete().eq('id', id);
-            if (error) throw error;
-        } else {
-            const suppliers = StorageService.getSuppliers().filter(s => s.id !== id);
-            StorageService.saveSuppliers(suppliers);
-        }
-    },
-
-    async uploadFile(file: File, bucketName: string = 'supplier-documents'): Promise<string | null> {
-        const supabase = getSupabaseClient();
-        if (!supabase) return null;
-
-        const timestamp = new Date().getTime();
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${timestamp}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-            .from(bucketName)
-            .upload(filePath, file);
-
-        if (uploadError) {
-            console.error('Error uploading file:', uploadError);
-            throw uploadError;
-        }
-
-        const { data } = supabase.storage
-            .from(bucketName)
-            .getPublicUrl(filePath);
-
-        return data.publicUrl;
+        if (!supabase) return;
+        const { error } = await supabase.from('suppliers').delete().eq('id', id);
+        if (error) throw error;
     }
 };

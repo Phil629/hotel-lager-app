@@ -1,15 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
-import { StorageService } from './storage';
 
-// We need to create the client dynamically because the URL and Key come from localStorage
-// and might change at runtime.
+// SaaS Supabase Client (Zentralisiert)
+// Die URL und der Key müssen nun zentral über Environment Variables (z.B. in Netlify oder .env) geladen werden!
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const getSupabaseClient = () => {
-    const settings = StorageService.getSettings();
+// Singleton-Instanz für die Cloud-Datenbank
+export const supabase = (supabaseUrl && supabaseKey) 
+    ? createClient(supabaseUrl, supabaseKey) 
+    : null;
 
-    if (settings.supabaseUrl && settings.supabaseKey) {
-        return createClient(settings.supabaseUrl, settings.supabaseKey);
-    }
-
-    return null;
-};
+// Helper für Rückwärtskompatibilität, falls Dateien getSupabaseClient() nutzen
+export const getSupabaseClient = () => supabase;

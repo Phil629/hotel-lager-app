@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
+import { supabase } from '../services/supabase';
 import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -1071,14 +1072,57 @@ export const Products: React.FC = () => {
                                             </div>
 
                                             <div>
-                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Bild URL (optional)</label>
-                                                <input
-                                                    type="url"
-                                                    value={newProduct.image || ''}
-                                                    onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
-                                                    onBlur={e => { const val = e.target.value; if (val && !/^https?:\/\//i.test(val)) setNewProduct({ ...newProduct, image: 'https://' + val }); }}
-                                                    style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
-                                                />
+                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Produktbild</label>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                    <input
+                                                        type="url"
+                                                        placeholder="https://... (URL einfügen)"
+                                                        value={newProduct.image || ''}
+                                                        onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
+                                                        style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
+                                                    />
+                                                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>oder</span>
+                                                    <label style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '10px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                                        Datei hochladen
+                                                        <input 
+                                                            type="file" 
+                                                            accept="image/*"
+                                                            style={{ display: 'none' }}
+                                                            onChange={async (e) => {
+                                                                const file = e.target.files?.[0];
+                                                                if (!file) return;
+                                                                if (file.size > 5 * 1024 * 1024) {
+                                                                    setNotification({ message: 'Das Bild darf maximal 5MB groß sein.', type: 'error' });
+                                                                    return;
+                                                                }
+                                                                // Upload to Supabase Storage
+                                                                const fileExt = file.name.split('.').pop();
+                                                                const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+                                                                const filePath = `${fileName}`;
+                                                                
+                                                                try {
+                                                                    setNotification({ message: 'Lade Bild hoch...', type: 'info' });
+                                                                    if (!supabase) throw new Error("No database");
+                                                                    const { error: uploadError } = await supabase.storage.from("product_images").upload(filePath, file);
+                                                                    if (uploadError) throw uploadError;
+                                                                    
+                                                                    const { data: { publicUrl } } = supabase.storage.from('product_images').getPublicUrl(filePath);
+                                                                    setNewProduct(prev => ({ ...prev, image: publicUrl }));
+                                                                    setNotification({ message: 'Bild erfolgreich hochgeladen', type: 'success' });
+                                                                } catch (err) {
+                                                                    console.error('Upload Error:', err);
+                                                                    setNotification({ message: 'Fehler beim Bild-Upload. Wahrscheinlich blockiert (RLS).', type: 'error' });
+                                                                }
+                                                            }}
+                                                        />
+                                                    </label>
+                                                </div>
+                                                {newProduct.image && (
+                                                    <div style={{ marginTop: '8px' }}>
+                                                        <img src={newProduct.image} alt="Vorschau" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div>
