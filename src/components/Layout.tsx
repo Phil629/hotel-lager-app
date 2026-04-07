@@ -2,6 +2,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { Package, ShoppingCart, Settings, Users, BarChart3, ClipboardList } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { StorageService } from '../services/storage';
+import { supabase } from '../services/supabase';
+import { useState, useEffect } from 'react';
+import { ShieldAlert } from 'lucide-react';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -12,6 +15,20 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const isActive = (path: string) => location.pathname === path;
 
     const settings = StorageService.getSettings();
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    useEffect(() => {
+        const checkAdmin = async () => {
+            if (!supabase) return;
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+                if (data?.role === 'admin') setIsAdmin(true);
+            }
+        };
+        checkAdmin();
+    }, []);
+
     const displayLogo = settings.logoUrl || logo;
     const displayHotelName = settings.hotelName || 'Hotel';
 
@@ -158,6 +175,31 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         <Settings size={20} />
                         Einstellungen
                     </Link>
+                
+                    {isAdmin && (
+                        <div style={{ marginTop: 'auto', paddingTop: 'var(--spacing-xl)', borderTop: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
+                            <Link
+                                to="/admin"
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 'var(--spacing-sm)',
+                                    padding: 'var(--spacing-md)',
+                                    border: 'none',
+                                    borderRadius: 'var(--radius-md)',
+                                    backgroundColor: isActive('/admin') ? '#be123c' : '#fff1f2',
+                                    color: isActive('/admin') ? 'white' : '#be123c',
+                                    textDecoration: 'none',
+                                    fontSize: 'var(--font-size-base)',
+                                    transition: 'all 0.2s',
+                                    fontWeight: 600
+                                }}
+                            >
+                                <ShieldAlert size={20} />
+                                SaaS Admin
+                            </Link>
+                        </div>
+                    )}
                 </nav>
             </aside>
 

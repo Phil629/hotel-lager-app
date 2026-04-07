@@ -8,6 +8,7 @@ import { Suppliers } from './pages/Suppliers';
 import { Statistics } from './pages/Statistics';
 import { Inventory } from './pages/Inventory';
 import { Auth } from './pages/Auth';
+import { Admin } from './pages/Admin';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { supabase } from './services/supabase';
 
@@ -57,6 +58,7 @@ function App() {
             <Route path="/suppliers" element={<ProtectedRoute session={session}><Suppliers /></ProtectedRoute>} />
             <Route path="/inventory" element={<ProtectedRoute session={session}><Inventory /></ProtectedRoute>} />
             <Route path="/statistics" element={<ProtectedRoute session={session}><Statistics /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute session={session}><Admin /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute session={session}><Settings /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/products" replace />} />
           </Routes>
