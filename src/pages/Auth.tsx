@@ -74,6 +74,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                         <input
                             type="email"
                             required
+                            autoComplete={isLogin ? "username" : "email"}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
@@ -86,6 +87,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                         <input
                             type="password"
                             required
+                            autoComplete={isLogin ? "current-password" : "new-password"}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}

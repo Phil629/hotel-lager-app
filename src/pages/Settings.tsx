@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
 import { DataService } from '../services/data';
-import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check } from 'lucide-react';
+import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check , LogOut} from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import type { AppSettings } from '../types';
@@ -421,6 +421,28 @@ export const Settings: React.FC = () => {
                         </p>
                     </div>
                 </SectionCard>
+
+                
+                {/* Logout Zone */}
+                <div style={{ marginTop: 'var(--spacing-2xl)', padding: 'var(--spacing-lg)', backgroundColor: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 'var(--radius-lg)' }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#be123c', marginTop: 0 }}>
+                        <LogOut size={20} /> Abmelden
+                    </h3>
+                    <p style={{ color: '#9f1239', fontSize: '14px', marginBottom: 'var(--spacing-md)' }}>
+                        Sie können sich jederzeit wieder einloggen. Ihre Daten bleiben sicher gespeichert.
+                    </p>
+                    <button 
+                        type="button" 
+                        onClick={async () => {
+                            if (window.confirm('Möchten Sie sich wirklich abmelden?')) {
+                                await supabase?.auth.signOut();
+                            }
+                        }}
+                        style={{ backgroundColor: '#e11d48', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                        Konto abmelden
+                    </button>
+                </div>
 
                 {/* Secret Developer Mode Toggle */}
                 <div style={{ textAlign: 'center', marginTop: '40px' }}>
