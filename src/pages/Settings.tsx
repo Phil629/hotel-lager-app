@@ -374,6 +374,12 @@ export const Settings: React.FC = () => {
                             </label>
                         </div>
                     </div>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--spacing-xl)' }}>
+                        <button type="submit" style={{ backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+                            <Save size={18} /> Einstellungen speichern
+                        </button>
+                    </div>
                 </SectionCard>
 
                 {/* 3. E-Mail API */}
