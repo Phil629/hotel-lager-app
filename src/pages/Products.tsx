@@ -1239,12 +1239,7 @@ export const Products: React.FC = () => {
                                                     <textarea value={newProduct.emailOrderBody || ''} onChange={e => setNewProduct({ ...newProduct, emailOrderBody: e.target.value })} rows={3} style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }} />
                                                 </div>
 
-                                                <div style={{ marginTop: 'var(--spacing-md)', padding: '12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)' }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, color: '#166534' }}>
-                                                        <input type="checkbox" checked={newProduct.autoOrder || false} onChange={e => setNewProduct({ ...newProduct, autoOrder: e.target.checked })} style={{ width: '18px', height: '18px' }} />
-                                                        Auto-Order (Vollautomatischer Versand via EmailJS) aktivieren
-                                                    </label>
-                                                </div>
+                                                
                                             </div>
 
                                         </div>

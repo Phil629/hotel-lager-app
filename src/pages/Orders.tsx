@@ -174,31 +174,7 @@ export const Orders: React.FC = () => {
         try {
             if (createTab === 'existing') {
                 if (orderCart.length === 0) return;
-                const mainProduct = orderCart[0].product;
-
-                // 1. Send Email if configured
-                if (mainProduct.autoOrder && mainProduct.emailOrderAddress) {
-                    const settings = StorageService.getSettings();
-                    if (settings && settings.serviceId && settings.templateId && settings.publicKey) {
-                        try {
-                            const qty = orderCart[0].quantity;
-                            const templateParams = {
-                                to_email: mainProduct.emailOrderAddress,
-                                subject: emailSubject,
-                                message: emailBody,
-                                product_name: orderCart.length > 1 ? orderCart.length + " Produkte" : mainProduct.name,
-                                quantity: orderCart.length > 1 ? "" : qty,
-                                unit: orderCart.length > 1 ? "" : mainProduct.unit
-                            };
-                            await emailjs.send(settings.serviceId, settings.templateId, templateParams, settings.publicKey);
-                            setNotification({ message: 'Bestellung wurde automatisch per E-Mail versendet!', type: 'success' });
-                        } catch (error) {
-                            console.error('Email send error:', error);
-                            setNotification({ message: 'Bestellung erstellt, aber Email konnte nicht gesendet werden.', type: 'error' });
-                        }
-                    }
-                }
-
+                
                 // 2. Save Orders
                 for (const item of orderCart) {
                     const newOrder: Order = {
@@ -428,60 +404,51 @@ export const Orders: React.FC = () => {
     
     const handleExecuteProposal = async (proposal: {product: Product, quantity: number}, emailProvider: 'mailto' | 'gmail' = 'mailto') => {
         try {
+            const prod = proposal.product;
+            const supplier = suppliers.find(s => s.id === prod.supplierId);
+            const emailAddress = supplier?.email || prod.emailOrderAddress || '';
+            const { subject, body } = generateEmailTemplate([{ product: prod, quantity: proposal.quantity }]);
+
+            let popup: Window | null = null;
+            if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) {
+                popup = window.open('about:blank', '_blank');
+            } else if ((prod.preferredOrderMethod === 'email' || emailAddress) && emailProvider === 'gmail') {
+                popup = window.open('about:blank', '_blank');
+            }
+
             const nowIso = new Date().toISOString();
             const newOrder: import('../types').Order = {
                  id: generateId(),
                  date: nowIso,
-                 productName: proposal.product.name,
+                 productName: prod.name,
                  quantity: proposal.quantity,
                  status: 'open',
-                 productImage: proposal.product.image,
-                 supplierEmail: proposal.product.emailOrderAddress,
-                 supplierPhone: proposal.product.supplierPhone,
+                 productImage: prod.image,
+                 supplierEmail: prod.emailOrderAddress,
+                 supplierPhone: prod.supplierPhone,
                  notes: 'Aus Bestellvorschlägen generiert'
             };
             
             await DataService.saveOrder(newOrder);
             setSessionGeneratedOrderIds(prev => [...prev, newOrder.id]);
 
-            const { subject, body } = generateEmailTemplate([{ product: proposal.product, quantity: proposal.quantity }]);
-            
-            if (proposal.product.autoOrder && proposal.product.emailOrderAddress) {
-                const settings = StorageService.getSettings();
-                if (settings.serviceId && settings.templateId && settings.publicKey) {
-                     const templateParams = {
-                         to_email: proposal.product.emailOrderAddress,
-                         subject: subject,
-                         message: body,
-                         product_name: proposal.product.name,
-                         quantity: proposal.quantity,
-                         unit: proposal.product.unit || ''
-                     };
-                     await emailjs.send(settings.serviceId, settings.templateId, templateParams, settings.publicKey);
-                     setNotification({ message: 'Bestellung erfasst & Mail versendet!', type: 'success' });
-                } else {
-                     setNotification({ message: 'Bestellung erfasst, aber EmailJS Fehler!', type: 'error' });
-                }
-            } else if (proposal.product.preferredOrderMethod === 'link' && proposal.product.orderUrl) {
-                window.open(proposal.product.orderUrl, '_blank');
+            if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) {
+                const url = prod.orderUrl || (supplier?.url || supplier?.loginUrl || '');
+                if (popup) popup.location.href = url || 'about:blank';
                 setNotification({ message: 'Bestellung erfasst! Shop geöffnet.', type: 'success' });
+            } else if (prod.preferredOrderMethod === 'email' || emailAddress) {
+                if (emailProvider === 'gmail') {
+                     const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddress}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                     if (popup) popup.location.href = url;
+                } else {
+                     window.location.href = `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                }
+                setNotification({ message: 'Bestellung erfasst! E-Mail geöffnet.', type: 'success' });
             } else {
-                 const supplier = suppliers.find(s => s.id === proposal.product.supplierId);
-                 const emailAddress = supplier?.email || proposal.product.emailOrderAddress || '';
-                 
-                 if (proposal.product.preferredOrderMethod === 'email' || emailAddress) {
-                     if (emailProvider === 'gmail') {
-                          window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddress}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
-                     } else {
-                          window.location.href = `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                     }
-                     setNotification({ message: 'Bestellung erfasst! E-Mail geöffnet.', type: 'success' });
-                 } else {
-                     setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
-                 }
+                setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
             }
 
-            setModalProposals(prev => prev.filter(p => p.product.id !== proposal.product.id));
+            setModalProposals(prev => prev.filter(p => p.product.id !== prod.id));
             loadOrders();
         } catch(e) {
              console.error('Order Proposal Error:', e);
@@ -2273,8 +2240,7 @@ export const Orders: React.FC = () => {
                                                             const supp = suppliers.find(s => s.id === prod.supplierId);
                                                             const emailAddr = supp?.email || prod.emailOrderAddress || '';
                                                             let btnText = "Bedarf merken";
-                                                            if (prod.autoOrder && emailAddr) btnText = "🤖 Auto-Mail senden";
-                                                            else if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) btnText = "🔗 Im Tab bestellen";
+                                                            if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) btnText = "🔗 Im Tab bestellen";
                                                             else if (prod.preferredOrderMethod === 'email' || emailAddr) btnText = "📧 E-Mail öffnen";
 
                                                             return (
