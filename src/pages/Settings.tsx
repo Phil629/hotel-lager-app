@@ -243,6 +243,20 @@ export const Settings: React.FC = () => {
                             </select>
                         </div>
                     </div>
+                    
+                    <div style={{ marginTop: 'var(--spacing-xl)' }}>
+                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 600 }}>E-Mail Programm für Bestellungen</label>
+                        <select
+                            value={settings.preferredEmailClient || 'all'}
+                            onChange={e => setSettings({ ...settings, preferredEmailClient: e.target.value as any })}
+                            style={{ width: '100%', maxWidth: '300px', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}
+                        >
+                            <option value="all">Auswahl anzeigen (Gmail & Lokales Programm)</option>
+                            <option value="gmail">Immer in Gmail (Browser) öffnen</option>
+                            <option value="mailto">Immer lokales Programm (Outlook, Apple Mail) nutzen</option>
+                        </select>
+                        <p style={{ fontSize: '13px', color: '#64748b', margin: '6px 0 0 0' }}>Legt fest, welche Buttons beim Generieren von Bestell-Mails sichtbar sind.</p>
+                    </div>
 
                     <div style={{ marginTop: 'var(--spacing-xl)' }}>
                         <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontWeight: 600 }}>Hotel Logo</label>

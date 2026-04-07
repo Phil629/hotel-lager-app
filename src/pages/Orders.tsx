@@ -2,6 +2,7 @@ import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
+import { StorageService } from '../services/storage';
 import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2 } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 
@@ -2242,22 +2243,27 @@ export const Orders: React.FC = () => {
                                                                             const webshopUrl = prod.orderUrl || suppliers.find(s => s.id === prod.supplierId)?.url || suppliers.find(s => s.id === prod.supplierId)?.loginUrl || '';
 
                                                                             if (btnText === '📧 E-Mail öffnen') {
+                                                                                const pref = StorageService.getSettings().preferredEmailClient;
                                                                                 return (
                                                                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                                                                        <a 
-                                                                                            href={gmailUrl}
-                                                                                            target="_blank"
-                                                                                            rel="noopener noreferrer"
-                                                                                            onClick={() => executeProposalDbSave(prop)}
-                                                                                            style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
-                                                                                            📧 Gmail
-                                                                                        </a>
-                                                                                        <a 
-                                                                                            href={mailtoUrl}
-                                                                                            onClick={() => executeProposalDbSave(prop)}
-                                                                                            style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
-                                                                                            📧 Mail-App
-                                                                                        </a>
+                                                                                        {(pref === 'all' || pref === 'gmail') && (
+                                                                                            <a 
+                                                                                                href={gmailUrl}
+                                                                                                target="_blank"
+                                                                                                rel="noopener noreferrer"
+                                                                                                onClick={() => executeProposalDbSave(prop)}
+                                                                                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+                                                                                                <Mail size={16} /> {pref === 'gmail' ? 'E-Mail öffnen' : 'Gmail'}
+                                                                                            </a>
+                                                                                        )}
+                                                                                        {(pref === 'all' || pref === 'mailto' || !pref) && (
+                                                                                            <a 
+                                                                                                href={mailtoUrl}
+                                                                                                onClick={() => executeProposalDbSave(prop)}
+                                                                                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+                                                                                                <Mail size={16} /> {pref === 'mailto' ? 'E-Mail öffnen' : 'Mail-App'}
+                                                                                            </a>
+                                                                                        )}
                                                                                     </div>
                                                                                 );
                                                                             } else if (btnText === '🔗 Im Tab bestellen') {

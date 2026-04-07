@@ -87,4 +87,5 @@ export interface AppSettings {
   currency?: string; // 'EUR', 'CHF', etc.
   currentPlan?: 'basic' | 'standard' | 'pro';
   developerMode?: boolean; // Toggle to show advanced settings
+  preferredEmailClient?: 'all' | 'mailto' | 'gmail';
 }
