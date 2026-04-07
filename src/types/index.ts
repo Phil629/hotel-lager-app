@@ -15,6 +15,9 @@ export interface Supplier {
   notes?: Note[];
   emailSubjectTemplate?: string;
   emailBodyTemplate?: string;
+  loginUrl?: string; // Optional login portal URL
+  loginUsername?: string; // Optional username
+  loginPassword?: string; // Optional password
   documents?: { name: string; url: string; date?: string; }[];
 }
 
@@ -36,7 +39,7 @@ export interface Product {
   consumptionAmount?: number;
   consumptionPeriod?: 'day' | 'week';
   lastConsumptionDate?: string;
-  targetStock?: number; // Target stock level for order proposals
+  standardOrderQuantity?: number; // Replaces targetStock: Always order exactly this amount
   ignoreOrderProposals?: boolean; // Exclude from order proposals
   lastCountedAt?: string;
 

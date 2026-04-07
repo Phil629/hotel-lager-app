@@ -251,7 +251,7 @@ export const Products: React.FC = () => {
             consumptionAmount: newProduct.consumptionAmount,
             consumptionPeriod: newProduct.consumptionPeriod,
             lastConsumptionDate: newProduct.lastConsumptionDate,
-            targetStock: newProduct.targetStock ? Number(newProduct.targetStock) : undefined,
+            standardOrderQuantity: newProduct.standardOrderQuantity ? Number(newProduct.standardOrderQuantity) : undefined,
             ignoreOrderProposals: newProduct.ignoreOrderProposals || false
         };
 
@@ -385,7 +385,7 @@ export const Products: React.FC = () => {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, targetStock: undefined, ignoreOrderProposals: false, price: 0, autoOrder: false, notes: [], preferredOrderMethod: 'email' });
+        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, standardOrderQuantity: undefined, ignoreOrderProposals: false, price: 0, autoOrder: false, notes: [], preferredOrderMethod: 'email' });
         setEditingId(null);
         // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
@@ -429,17 +429,21 @@ export const Products: React.FC = () => {
         return { product, curl, powershell };
     };
 
-    const prepareEmailLink = (type: 'mailto' | 'gmail') => {
-        if (orderCart.length === 0 || !orderCart[0].product.emailOrderAddress) return;
+        const prepareEmailLink = (type: 'mailto' | 'gmail') => {
+        if (orderCart.length === 0) return;
 
         const mainProduct = orderCart[0].product;
+        const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
+        const emailAddr = supplier?.email || mainProduct.emailOrderAddress || '';
+        if (!emailAddr) return;
+
         const encodedSubject = encodeURIComponent(emailSubject);
         const encodedBody = encodeURIComponent(emailBody);
 
         if (type === 'gmail') {
-            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${mainProduct.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
+            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddr}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
         } else {
-            window.location.href = `mailto:${mainProduct.emailOrderAddress}?subject=${encodedSubject}&body=${encodedBody}`;
+            window.location.href = `mailto:${emailAddr}?subject=${encodedSubject}&body=${encodedBody}`;
         }
     };
 
@@ -1137,8 +1141,8 @@ export const Products: React.FC = () => {
                                                         <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Ab hier schlägt der Autopilot an.</span>
                                                     </div>
                                                     <div>
-                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Soll-Bestand (Auffüllen bis)</label>
-                                                        <input type="number" value={newProduct.targetStock || ''} onChange={e => setNewProduct({ ...newProduct, targetStock: e.target.value ? Number(e.target.value) : undefined })} placeholder="Optional" style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Standard Bestellmenge (Stück)</label>
+                                                        <input type="number" value={newProduct.standardOrderQuantity || ''} onChange={e => setNewProduct({ ...newProduct, standardOrderQuantity: e.target.value ? Number(e.target.value) : undefined })} placeholder="z.B. 10" style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
                                                     </div>
                                                 </div>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
@@ -1177,7 +1181,8 @@ export const Products: React.FC = () => {
                                                             value={newProduct.supplierId || ''}
                                                             onChange={e => {
                                                                 const sId = e.target.value; const s = suppliers.find(su => su.id === sId);
-                                                                setNewProduct({ ...newProduct, supplierId: sId || undefined, emailOrderAddress: s?.email || '', supplierPhone: s?.phone || '' });
+                                                                const fallbackUrl = newProduct.orderUrl ? newProduct.orderUrl : (s?.url || s?.loginUrl || '');
+                                                                setNewProduct({ ...newProduct, supplierId: sId || undefined, emailOrderAddress: s?.email || '', supplierPhone: s?.phone || '', orderUrl: fallbackUrl });
                                                             }}
                                                             style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'white', fontWeight: 500 }}
                                                         >

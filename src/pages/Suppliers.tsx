@@ -1,6 +1,6 @@
 import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe } from 'lucide-react';
+import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff } from 'lucide-react';
 import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -19,6 +19,7 @@ export const Suppliers: React.FC = () => {
     const [formData, setFormData] = useState<Partial<Supplier>>({
         name: '', contactName: '', email: '', phone: '', url: '', notes: []
     });
+    const [showPassword, setShowPassword] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,6 +49,7 @@ export const Suppliers: React.FC = () => {
     };
 
     const handleOpenModal = (supplier?: Supplier) => {
+        setShowPassword(false);
         if (supplier) {
             setEditingSupplier(supplier);
             setFormData(supplier);
@@ -354,7 +356,34 @@ export const Suppliers: React.FC = () => {
 
                                 <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
 
+                                {/* Portal Login Infos */}
+                                <div>
+                                    <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Key size={16} /> Kunden-Login / Portal
+                                    </h3>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                        <div style={{ gridColumn: '1 / -1' }}>
+                                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Portal / Shop Webadresse (Optional)</label>
+                                            <input type="url" value={formData.loginUrl || ''} onChange={e => setFormData({ ...formData, loginUrl: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="https://shop.lieferant.de/login" />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Benutzername / Kundennummer</label>
+                                            <input type="text" value={formData.loginUsername || ''} onChange={e => setFormData({ ...formData, loginUsername: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="MaxMuster123" />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Passwort</label>
+                                            <div style={{ position: 'relative' }}>
+                                                <input type={showPassword ? "text" : "password"} value={formData.loginPassword || ''} onChange={e => setFormData({ ...formData, loginPassword: e.target.value })} style={{ width: '100%', padding: '10px 40px 10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="••••••••" />
+                                                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 
+                                <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
+
                                 {/* Zusatz-Infos / Notizen */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                     <h3 style={{ margin: '0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em' }}>Zusatz-Infos & Notizen</h3>

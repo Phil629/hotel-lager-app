@@ -397,12 +397,12 @@ export const Orders: React.FC = () => {
             
             const min = product.minStock || 0;
             if (product.stock <= min) {
-                const target = product.targetStock && product.targetStock > 0 ? product.targetStock : (min > 0 ? min * 2 : 1);
+                const standardQty = product.standardOrderQuantity ? product.standardOrderQuantity : (min > 0 ? min * 2 : 1);
                 
                 const openOrdersForProduct = orders.filter(o => o.status === 'open' && o.productName === product.name);
                 const openQuantity = openOrdersForProduct.reduce((sum, o) => sum + (o.quantity || 0), 0);
                 
-                const needed = target - product.stock - openQuantity;
+                const needed = standardQty - openQuantity;
                 if (needed > 0) {
                     const supplier = suppliers.find(s => s.id === product.supplierId);
                     proposals.push({
@@ -465,12 +465,17 @@ export const Orders: React.FC = () => {
             } else if (proposal.product.preferredOrderMethod === 'link' && proposal.product.orderUrl) {
                 window.open(proposal.product.orderUrl, '_blank');
                 setNotification({ message: 'Bestellung erfasst! Shop geöffnet.', type: 'success' });
-            } else if (proposal.product.preferredOrderMethod === 'email' || proposal.product.emailOrderAddress) {
-                 const mailto = `mailto:${proposal.product.emailOrderAddress || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                 window.location.href = mailto;
-                 setNotification({ message: 'Bestellung erfasst! E-Mail geöffnet.', type: 'success' });
             } else {
-                 setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
+                 const supplier = suppliers.find(s => s.id === proposal.product.supplierId);
+                 const emailAddress = supplier?.email || proposal.product.emailOrderAddress || '';
+                 
+                 if (proposal.product.preferredOrderMethod === 'email' || emailAddress) {
+                     const mailto = `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                     window.location.href = mailto;
+                     setNotification({ message: 'Bestellung erfasst! E-Mail geöffnet.', type: 'success' });
+                 } else {
+                     setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
+                 }
             }
 
             setModalProposals(prev => prev.filter(p => p.product.id !== proposal.product.id));

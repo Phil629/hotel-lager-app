@@ -27,7 +27,10 @@ const toSupabaseSupplier = (s: Supplier) => ({
     email: s.email,
     phone: s.phone,
     url: s.url,
-    notes: s.notes ? JSON.stringify(s.notes) : null
+    notes: s.notes ? JSON.stringify(s.notes) : null,
+    login_url: s.loginUrl,
+    login_username: s.loginUsername,
+    login_password: s.loginPassword
 });
 
 const fromSupabaseSupplier = (s: any): Supplier => ({
@@ -40,6 +43,9 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     notes: parseLegacyNotes(s.notes, s.show_note_on_order),
     emailSubjectTemplate: s.email_subject_template,
     emailBodyTemplate: s.email_body_template,
+    loginUrl: s.login_url,
+    loginUsername: s.login_username,
+    loginPassword: s.login_password,
     documents: s.documents ? (typeof s.documents === 'string' ? JSON.parse(s.documents) : s.documents) : []
 });
 
@@ -51,7 +57,7 @@ const toSupabaseProduct = (p: Product) => ({
     min_stock: p.minStock,
     price: p.price,
     product_number: p.productNumber,
-    target_stock: p.targetStock,
+    standard_order_quantity: p.standardOrderQuantity,
     ignore_order_proposals: p.ignoreOrderProposals,
     unit: p.unit,
     image: p.image,
@@ -78,7 +84,7 @@ const fromSupabaseProduct = (p: any): Product => ({
     minStock: p.min_stock,
     price: p.price,
     productNumber: p.product_number,
-    targetStock: p.target_stock,
+    standardOrderQuantity: p.standard_order_quantity,
     ignoreOrderProposals: p.ignore_order_proposals,
     unit: p.unit,
     image: p.image,

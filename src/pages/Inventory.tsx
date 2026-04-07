@@ -8,6 +8,7 @@ export const Inventory: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
     const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState<'category' | 'date_asc' | 'alpha'>('category');
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     
     useEffect(() => {
@@ -97,118 +98,157 @@ export const Inventory: React.FC = () => {
                 </div>
             </div>
 
-            <div style={{ position: 'relative', marginBottom: 'var(--spacing-xl)' }}>
-                <Search size={22} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                <input
-                    type="text"
-                    placeholder="Suchen nach Namen oder Kategorien..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+            <div style={{ display: 'flex', gap: '16px', marginBottom: 'var(--spacing-xl)', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: '1 1 300px' }}>
+                    <Search size={22} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                        type="text"
+                        placeholder="Suchen nach Namen oder Kategorien..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{
+                            width: '100%', padding: '16px 16px 16px 50px', borderRadius: 'var(--radius-lg)',
+                            border: '1px solid var(--color-border)', fontSize: '16px', backgroundColor: 'white',
+                            boxShadow: 'var(--shadow-sm)', outline: 'none'
+                        }}
+                    />
+                </div>
+                <select 
+                    value={sortBy} 
+                    onChange={e => setSortBy(e.target.value as any)}
                     style={{
-                        width: '100%', padding: '16px 16px 16px 50px', borderRadius: 'var(--radius-lg)',
-                        border: '1px solid var(--color-border)', fontSize: '16px', backgroundColor: 'white',
-                        boxShadow: 'var(--shadow-sm)', outline: 'none'
+                        padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)',
+                        fontSize: '16px', backgroundColor: 'white', boxShadow: 'var(--shadow-sm)', outline: 'none',
+                        cursor: 'pointer', flex: '0 0 auto'
                     }}
-                />
+                >
+                    <option value="category">Nach Kategorie gruppiert</option>
+                    <option value="date_asc">Am längsten nicht gezählt</option>
+                    <option value="alpha">Alphabetisch (A-Z)</option>
+                </select>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                {categories.map(category => {
-                    const categoryProducts = filteredProducts.filter(p => (p.category || 'Sonstiges') === category);
-                    if (categoryProducts.length === 0) return null;
+                {(() => {
+                    const renderProduct = (product: Product) => {
+                        const isChecked = checkedMap[product.id];
+                        return (
+                            <div key={product.id} style={{ 
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '12px 16px', backgroundColor: isChecked ? '#f0fdf4' : 'white',
+                                borderRadius: 'var(--radius-lg)', boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                border: `1px solid ${isChecked ? '#bbf7d0' : 'var(--color-border)'}`,
+                                transition: 'all 0.2s ease', gap: '16px', flexWrap: 'wrap'
+                            }}>
+                                
+                                {/* Left: Info */}
+                                <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 200px' }}>
+                                    <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text-main)', lineHeight: 1.2 }}>{product.name}</span>
+                                    {product.productNumber && (
+                                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>Art: {product.productNumber}</span>
+                                    )}
+                                    <span style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Einheit: {product.unit}</span>
+                                    {product.lastCountedAt && (
+                                        <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+                                            Gezählt: {new Date(product.lastCountedAt).toLocaleDateString('de-DE')} um {new Date(product.lastCountedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Right: Controls & Checkmark */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
+                                    
+                                    {/* Quantity Controls */}
+                                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'white' }}>
+                                        <button 
+                                            type="button"
+                                            onClick={() => handleUpdateStock(product, product.stock - 1)}
+                                            style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', borderRight: '1px solid #cbd5e1', color: '#1e293b' }}
+                                        >
+                                            <Minus size={22} color="#1e293b" />
+                                        </button>
+                                        
+                                        <input 
+                                            type="number"
+                                            value={product.stock}
+                                            onChange={(e) => {
+                                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                                handleUpdateStock(product, val);
+                                            }}
+                                            style={{ 
+                                                width: '60px', height: '44px', textAlign: 'center', fontSize: '18px', fontWeight: 700, 
+                                                border: 'none', backgroundColor: 'transparent', outline: 'none', color: 'var(--color-text-main)',
+                                                appearance: 'none', MozAppearance: 'textfield'
+                                            }}
+                                        />
+
+                                        <button 
+                                            type="button"
+                                            onClick={() => handleUpdateStock(product, product.stock + 1)}
+                                            style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', borderLeft: '1px solid #cbd5e1', color: '#1e293b' }}
+                                        >
+                                            <Plus size={22} color="#1e293b" />
+                                        </button>
+                                    </div>
+
+                                    <div style={{ width: '1px', height: '30px', backgroundColor: '#e2e8f0', margin: '0 8px' }}></div>
+
+                                    {/* Checkmark Button */}
+                                    <button 
+                                        type="button"
+                                        onClick={() => handleToggleChecked(product.id)}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: isChecked ? '#22c55e' : '#94a3b8' }}
+                                    >
+                                        {isChecked ? <CheckCircle2 size={32} /> : <Circle size={32} />}
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    };
+
+                    if (sortBy === 'category') {
+                        return categories.map(category => {
+                            const categoryProducts = filteredProducts.filter(p => (p.category || 'Sonstiges') === category);
+                            if (categoryProducts.length === 0) return null;
+
+                            return (
+                                <div key={category}>
+                                    <h3 style={{ 
+                                        fontSize: '18px', margin: '0 0 12px 0', padding: '4px 8px', color: '#475569', 
+                                        borderBottom: '2px solid #e2e8f0', display: 'flex', justifyContent: 'space-between'
+                                    }}>
+                                        {category}
+                                        <span style={{ fontSize: '14px', fontWeight: 'normal', color: '#94a3b8' }}>
+                                            {categoryProducts.filter(p => checkedMap[p.id]).length} / {categoryProducts.length}
+                                        </span>
+                                    </h3>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {categoryProducts.map(renderProduct)}
+                                    </div>
+                                </div>
+                            );
+                        });
+                    }
+
+                    // For 'date_asc' or 'alpha', we just map a sorted list
+                    const sorted = [...filteredProducts].sort((a, b) => {
+                        if (sortBy === 'alpha') {
+                            return a.name.localeCompare(b.name);
+                        } else {
+                            // date_asc (Oldest first)
+                            const timeA = a.lastCountedAt ? new Date(a.lastCountedAt).getTime() : 0;
+                            const timeB = b.lastCountedAt ? new Date(b.lastCountedAt).getTime() : 0;
+                            return timeA - timeB;
+                        }
+                    });
 
                     return (
-                        <div key={category}>
-                            <h3 style={{ 
-                                fontSize: '18px', margin: '0 0 12px 0', padding: '4px 8px', color: '#475569', 
-                                borderBottom: '2px solid #e2e8f0', display: 'flex', justifyContent: 'space-between'
-                            }}>
-                                {category}
-                                <span style={{ fontSize: '14px', fontWeight: 'normal', color: '#94a3b8' }}>
-                                    {categoryProducts.filter(p => checkedMap[p.id]).length} / {categoryProducts.length}
-                                </span>
-                            </h3>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {categoryProducts.map(product => {
-                                    const isChecked = checkedMap[product.id];
-                                    return (
-                                        <div key={product.id} style={{ 
-                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                            padding: '12px 16px', backgroundColor: isChecked ? '#f0fdf4' : 'white',
-                                            borderRadius: 'var(--radius-lg)', boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                            border: `1px solid ${isChecked ? '#bbf7d0' : 'var(--color-border)'}`,
-                                            transition: 'all 0.2s ease', gap: '16px', flexWrap: 'wrap'
-                                        }}>
-                                            
-                                            {/* Left: Info */}
-                                            <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 200px' }}>
-                                                <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text-main)', lineHeight: 1.2 }}>{product.name}</span>
-                                                {product.productNumber && (
-                                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>Art: {product.productNumber}</span>
-                                                )}
-                                                <span style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Einheit: {product.unit}</span>
-                                                {product.lastCountedAt && (
-                                                    <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
-                                                        Gezählt: {new Date(product.lastCountedAt).toLocaleDateString('de-DE')} um {new Date(product.lastCountedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {/* Right: Controls & Checkmark */}
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
-                                                
-                                                {/* Quantity Controls */}
-                                                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'white' }}>
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => handleUpdateStock(product, product.stock - 1)}
-                                                        style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', borderRight: '1px solid #cbd5e1', color: '#1e293b' }}
-                                                    >
-                                                        <Minus size={22} color="#1e293b" />
-                                                    </button>
-                                                    
-                                                    <input 
-                                                        type="number"
-                                                        value={product.stock}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                                            handleUpdateStock(product, val);
-                                                        }}
-                                                        style={{ 
-                                                            width: '60px', height: '44px', textAlign: 'center', fontSize: '18px', fontWeight: 700, 
-                                                            border: 'none', backgroundColor: 'transparent', outline: 'none', color: 'var(--color-text-main)',
-                                                            appearance: 'none', MozAppearance: 'textfield'
-                                                        }}
-                                                    />
-
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => handleUpdateStock(product, product.stock + 1)}
-                                                        style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', borderLeft: '1px solid #cbd5e1', color: '#1e293b' }}
-                                                    >
-                                                        <Plus size={22} color="#1e293b" />
-                                                    </button>
-                                                </div>
-
-                                                <div style={{ width: '1px', height: '30px', backgroundColor: '#e2e8f0', margin: '0 8px' }}></div>
-
-                                                {/* Checkmark Button */}
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => handleToggleChecked(product.id)}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: isChecked ? '#22c55e' : '#94a3b8' }}
-                                                >
-                                                    {isChecked ? <CheckCircle2 size={32} /> : <Circle size={32} />}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {sorted.map(renderProduct)}
                         </div>
                     );
-                })}
+
+                })()}
 
                 {filteredProducts.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
