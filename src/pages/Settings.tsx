@@ -6,6 +6,19 @@ import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import type { AppSettings } from '../types';
 
+const SectionCard = ({ children }: { children: React.ReactNode }) => (
+    <div style={{
+        backgroundColor: 'var(--color-surface)',
+        padding: 'var(--spacing-xl)',
+        borderRadius: 'var(--radius-xl)',
+        boxShadow: 'var(--shadow-md)',
+        border: '1px solid var(--color-border)',
+        marginBottom: 'var(--spacing-lg)'
+    }}>
+        {children}
+    </div>
+);
+
 export const Settings: React.FC = () => {
     const [settings, setSettings] = useState<AppSettings>({
         serviceId: '',
@@ -162,19 +175,6 @@ export const Settings: React.FC = () => {
             setIsMigrating(false);
         }
     };
-
-    const SectionCard = ({ children }: { children: React.ReactNode }) => (
-        <div style={{
-            backgroundColor: 'var(--color-surface)',
-            padding: 'var(--spacing-xl)',
-            borderRadius: 'var(--radius-xl)',
-            boxShadow: 'var(--shadow-md)',
-            border: '1px solid var(--color-border)',
-            marginBottom: 'var(--spacing-lg)'
-        }}>
-            {children}
-        </div>
-    );
 
     return (
         <div style={{ maxWidth: '800px', margin: '0 auto', paddingBottom: '40px' }}>
