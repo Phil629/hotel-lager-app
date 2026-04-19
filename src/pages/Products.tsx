@@ -1217,9 +1217,9 @@ export const Products: React.FC = () => {
                                     {activeModalTab === 'analytics' && (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                             <div style={{ padding: 'var(--spacing-lg)', backgroundColor: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
-                                                <h4 style={{ margin: '0 0 8px 0', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}><TrendingUp size={20} /> KI-Preisentwicklung</h4>
+                                                <h4 style={{ margin: '0 0 8px 0', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}><TrendingUp size={20} /> Preisentwicklung</h4>
                                                 <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 8px 0', lineHeight: 1.5 }}>
-                                                    Dieses Diagramm wird <strong>vollautomatisch</strong> durch alle Rechnungen und Bestellbestätigungen gefüllt, die jemals über deine Inbound-Mail Adresse von der KI verarbeitet wurden.
+                                                    Dieses Diagramm wird <strong>automatisch</strong> durch alle manuellen Bestellungen sowie durch eingehende Rechnungen gefüllt, die von der KI verarbeitet wurden.
                                                 </p>
                                                 
                                                 <PriceHistoryChart productName={newProduct.name || ''} />
