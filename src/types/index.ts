@@ -94,4 +94,5 @@ export interface AppSettings {
   currentPlan?: 'basic' | 'standard' | 'pro';
   developerMode?: boolean; // Toggle to show advanced settings
   preferredEmailClient?: 'all' | 'mailto' | 'gmail';
+  inventoryValuationMethod?: 'latest' | 'average';
 }

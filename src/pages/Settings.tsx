@@ -33,6 +33,7 @@ export const Settings: React.FC = () => {
         currency: 'EUR',
         currentPlan: 'pro',
         developerMode: false,
+        inventoryValuationMethod: 'latest',
         logoUrl: ''
     });
     const [userId, setUserId] = useState<string>('');
@@ -59,6 +60,7 @@ export const Settings: React.FC = () => {
             currency: stored.currency || 'EUR',
             currentPlan: stored.currentPlan || 'pro',
             developerMode: stored.developerMode || false,
+            inventoryValuationMethod: stored.inventoryValuationMethod || 'latest',
             logoUrl: stored.logoUrl || ''
         });
     }, []);
@@ -66,6 +68,11 @@ export const Settings: React.FC = () => {
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         StorageService.saveSettings(settings);
+        
+        // Versuche das Profil in Supabase zu updaten, falls die Spalte schon da ist
+        if (userId && supabase) {
+            supabase.from('profiles').update({ inventory_valuation_method: settings.inventoryValuationMethod }).eq('id', userId).then(() => console.log('Valuation method synced to cloud'));
+        }
         setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
         // Give time for toast before reload
         setTimeout(() => window.location.reload(), 1500);

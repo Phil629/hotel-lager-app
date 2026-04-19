@@ -23,11 +23,13 @@ serve(async (req) => {
     // Finde den Nutzer anhand der 'to' Adresse: in-[USERID-START]@...
     const match = to.match(/in-([a-zA-Z0-9\-]+)@/)
     let user_id = null;
+    let valuation_method = 'latest';
     if (match && match[1]) {
        // Search profiles for user where id starts with match[1]
-       const { data: profiles } = await supabase.from('profiles').select('id').ilike('id', `${match[1]}%`).limit(1)
+       const { data: profiles } = await supabase.from('profiles').select('id, inventory_valuation_method').ilike('id', `${match[1]}%`).limit(1)
        if (profiles && profiles.length > 0) {
            user_id = profiles[0].id
+           valuation_method = profiles[0].inventory_valuation_method || 'latest';
        }
     }
 
@@ -151,12 +153,16 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
         
         // Versuche das Produkt zu updaten (Preis) oder neu anzulegen
         const { data: existingProds } = await supabase.from('products')
-            .select('id, price').eq('user_id', user_id).ilike('name', item.product_name).limit(1)
+            .select('id, price, stock').eq('user_id', user_id).ilike('name', item.product_name).limit(1)
         
         if (existingProds && existingProds.length > 0) {
              const ep = existingProds[0]
-             if (item.price && ep.price !== item.price) {
-                  await supabase.from('products').update({ price: item.price }).eq('id', ep.id)
+             if (item.price) {
+                  let newPrice = item.price;
+                  if (valuation_method === 'average' && ep.stock > 0 && ep.price > 0) {
+                      newPrice = ((ep.stock * ep.price) + ((item.quantity || 1) * item.price)) / (ep.stock + (item.quantity || 1));
+                  }
+                  await supabase.from('products').update({ price: newPrice }).eq('id', ep.id)
              }
         } else {
              // Produkt komplett neu generieren

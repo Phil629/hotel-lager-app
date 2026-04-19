@@ -12,11 +12,51 @@ import { useSearchParams } from 'react-router-dom';
 
 const CATEGORIES = ['Lebensmittel', 'Getränke', 'Reinigung', 'Büro', 'Sonstiges'];
 
+
+const PriceHistoryChart = ({ productName }: { productName: string }) => {
+    const [data, setData] = useState<any[]>([]);
+    
+    useEffect(() => {
+        if (!productName) return;
+        DataService.getOrders().then(orders => {
+            const filtered = orders
+                .filter(o => o.productName === productName && o.price)
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .map(o => ({
+                    date: new Date(o.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric'}),
+                    price: o.price,
+                    supplier: o.supplierName || 'Unbekannt'
+                }));
+            setData(filtered);
+        });
+    }, [productName]);
+
+    if (data.length === 0) return <div style={{ padding: '30px 10px', textAlign: 'center', color: '#94a3b8', backgroundColor: '#f8fafc', borderRadius: '8px' }}>Keine historischen Preisdaten für dieses Produkt gefunden. Die Rechnung fällt beim nächsten automatischen Scan ein!</div>;
+
+    return (
+        <div style={{ width: '100%', height: 280, marginTop: '20px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="date" tick={{fontSize: 12, fill: '#64748b'}} tickMargin={10} axisLine={false} tickLine={false} />
+                    <YAxis dataKey="price" tick={{fontSize: 12, fill: '#64748b'}} tickFormatter={val => Number(val).toFixed(2) + '€'} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                    <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        formatter={(value: any, name: any, props: any) => [`${Number(value).toFixed(2)} € (Lieferant: ${props.payload.supplier})`, 'Einkaufspreis']}
+                        labelFormatter={(label: any) => `Kaufdatum: ${label}`}
+                    />
+                    <Line type="stepAfter" dataKey="price" stroke="#0ea5e9" strokeWidth={3} dot={{r: 4, fill: '#0284c7', strokeWidth: 0}} activeDot={{r: 6}} animationDuration={1500} />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
+
 export const Products: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [activeModalTab, setActiveModalTab] = useState<'basic' | 'inventory' | 'order'>('basic');
+    const [activeModalTab, setActiveModalTab] = useState<'basic' | 'inventory' | 'order' | 'analytics'>('basic');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newProduct, setNewProduct] = useState<Partial<Product>>({
         category: '',
@@ -965,6 +1005,20 @@ export const Products: React.FC = () => {
                                 <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
                                     <X size={24} color="var(--color-text-muted)" />
                                 </button>
+                                <button 
+                                    onClick={() => setActiveModalTab('analytics')}
+                                    type="button"
+                                    style={{
+                                        padding: 'var(--spacing-md) var(--spacing-sm)',
+                                        border: 'none',
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: activeModalTab === 'analytics' ? 600 : 400,
+                                        color: activeModalTab === 'analytics' ? '#0ea5e9' : 'var(--color-text-muted)',
+                                        borderBottom: activeModalTab === 'analytics' ? '2px solid #0ea5e9' : '2px solid transparent'
+                                    }}>
+                                    📈 Preis-Analyse
+                                </button>
                             </div>
 
                             {/* Tabs Header */}
@@ -1154,6 +1208,20 @@ export const Products: React.FC = () => {
                                                 <button type="button" onClick={() => { const updated = [...(newProduct.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }]; setNewProduct({ ...newProduct, notes: updated }); }} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
                                                     <Plus size={16} /> Weitere Notiz hinzufügen
                                                 </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* TAB: ANALYTICS */}
+                                    {activeModalTab === 'analytics' && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                            <div style={{ padding: 'var(--spacing-lg)', backgroundColor: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+                                                <h4 style={{ margin: '0 0 8px 0', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}><TrendingUp size={20} /> KI-Preisentwicklung</h4>
+                                                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 8px 0', lineHeight: 1.5 }}>
+                                                    Dieses Diagramm wird <strong>vollautomatisch</strong> durch alle Rechnungen und Bestellbestätigungen gefüllt, die jemals über deine Inbound-Mail Adresse von der KI verarbeitet wurden.
+                                                </p>
+                                                
+                                                <PriceHistoryChart productName={newProduct.name || ''} />
                                             </div>
                                         </div>
                                     )}
