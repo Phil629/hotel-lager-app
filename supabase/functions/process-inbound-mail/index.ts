@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // Initialisiere Supabase Client
@@ -36,7 +37,7 @@ serve(async (req) => {
     }
 
     // Call Gemini API (via REST, da es das leichtesten in Deno ist)
-    const prompt = `Analysiere diese Bestellbestätigung oder Lieferschein:
+    const prompt = `Analysiere diese Bestellbestätigung, Rechnung oder Lieferschein. Die Daten können im Text oder in einem angehängten PDF/Bild stehen.
 Betreff: ${subject}
 Text: ${bodyText}
 
@@ -56,11 +57,37 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
 `
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${GEMINI_API_KEY}`
     
+    // Baue die Payload für Gemini zusammen
+    const geminiParts: any[] = [{ text: prompt }];
+
+    // Betrachte Dateianhänge (z.B. PDFs, Bilder)
+    const attachmentsCountStr = formData.get('attachments') as string;
+    const attachmentsCount = attachmentsCountStr ? parseInt(attachmentsCountStr, 10) : 0;
+    
+    for (let i = 1; i <= attachmentsCount; i++) {
+        const file = formData.get(`attachment${i}`) as File | null;
+        if (file) {
+            const mimeType = file.type || '';
+            // Wir erlauben PDFs und alle gängigen Bilder (Scans von Rechnungen)
+            if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
+                const arrayBuffer = await file.arrayBuffer();
+                const base64Data = encode(new Uint8Array(arrayBuffer));
+                
+                geminiParts.push({
+                    inlineData: {
+                        mimeType: mimeType,
+                        data: base64Data
+                    }
+                });
+            }
+        }
+    }
+
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
+        contents: [{ parts: geminiParts }]
       })
     })
 
