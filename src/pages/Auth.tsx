@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
-import { LogIn, UserPlus, Key } from 'lucide-react';
+import { LogIn, UserPlus, Key, Mail } from 'lucide-react';
 
 interface AuthProps {
     onAuthSuccess: () => void;
@@ -8,6 +8,7 @@ interface AuthProps {
 
 export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     const [isLogin, setIsLogin] = useState(true);
+    const [isResetPassword, setIsResetPassword] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -23,7 +24,14 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         try {
             if (!supabase) throw new Error("Keine Datenbankverbindung! Bitte wende dich an den Support.");
 
-            if (isLogin) {
+            if (isResetPassword) {
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin,
+                });
+                if (error) throw error;
+                setMessage('Ein Link zum Zurücksetzen des Passworts wurde an deine E-Mail gesendet.');
+                setIsResetPassword(false);
+            } else if (isLogin) {
                 const { error } = await supabase.auth.signInWithPassword({ email, password });
                 if (error) throw error;
                 onAuthSuccess();
@@ -49,7 +57,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                         <Key size={30} color="white" />
                     </div>
                     <h2 style={{ margin: 0, fontSize: 'var(--font-size-2xl)', color: 'var(--color-text-main)' }}>
-                        {isLogin ? 'Willkommen zurück' : 'Konto erstellen'}
+                        {isResetPassword ? 'Passwort zurücksetzen' : (isLogin ? 'Willkommen zurück' : 'Konto erstellen')}
                     </h2>
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '8px' }}>
                         Hotel Inventur- & Bestellsystem
@@ -82,18 +90,31 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                         />
                     </div>
                     
-                    <div>
-                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Passwort</label>
-                        <input
-                            type="password"
-                            required
-                            autoComplete={isLogin ? "current-password" : "new-password"}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
-                            placeholder="Mindestens 6 Zeichen"
-                        />
-                    </div>
+                    {!isResetPassword && (
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Passwort</label>
+                            <input
+                                type="password"
+                                required
+                                autoComplete={isLogin ? "current-password" : "new-password"}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
+                                placeholder="Mindestens 6 Zeichen"
+                            />
+                            {isLogin && (
+                                <div style={{ textAlign: 'right', marginTop: 'var(--spacing-xs)' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setIsResetPassword(true); setError(null); setMessage(null); }}
+                                        style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 'var(--font-size-sm)', textDecoration: 'underline' }}
+                                    >
+                                        Passwort vergessen?
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <button
                         type="submit"
@@ -116,19 +137,29 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                             boxShadow: 'var(--shadow-sm)'
                         }}
                     >
-                        {isLogin ? <LogIn size={20} /> : <UserPlus size={20} />}
-                        {loading ? 'Wird verarbeitet...' : (isLogin ? 'Anmelden' : 'Registrieren')}
+                        {isResetPassword ? <Mail size={20} /> : (isLogin ? <LogIn size={20} /> : <UserPlus size={20} />)}
+                        {loading ? 'Wird verarbeitet...' : (isResetPassword ? 'Link senden' : (isLogin ? 'Anmelden' : 'Registrieren'))}
                     </button>
                 </form>
 
                 <div style={{ marginTop: 'var(--spacing-xl)', textAlign: 'center', borderTop: '1px solid var(--color-border)', paddingTop: 'var(--spacing-md)' }}>
-                    <button
-                        type="button"
-                        onClick={() => setIsLogin(!isLogin)}
-                        style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 'var(--font-size-sm)', textDecoration: 'underline' }}
-                    >
-                        {isLogin ? 'Noch kein Konto? Hier registrieren' : 'Bereits ein Konto? Hier anmelden'}
-                    </button>
+                    {isResetPassword ? (
+                        <button
+                            type="button"
+                            onClick={() => { setIsResetPassword(false); setIsLogin(true); setError(null); setMessage(null); }}
+                            style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 'var(--font-size-sm)', textDecoration: 'underline' }}
+                        >
+                            Zurück zur Anmeldung
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => { setIsLogin(!isLogin); setError(null); setMessage(null); }}
+                            style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 'var(--font-size-sm)', textDecoration: 'underline' }}
+                        >
+                            {isLogin ? 'Noch kein Konto? Hier registrieren' : 'Bereits ein Konto? Hier anmelden'}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

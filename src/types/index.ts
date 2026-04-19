@@ -6,6 +6,7 @@ export interface Note {
 }
 
 export interface Supplier {
+  is_auto_generated?: boolean;
   user_id?: string;
   id: string;
   name: string;
@@ -23,6 +24,7 @@ export interface Supplier {
 }
 
 export interface Product {
+  is_auto_generated?: boolean;
   user_id?: string;
   id: string;
   name: string;
@@ -53,6 +55,7 @@ export interface Product {
 }
 
 export interface Order {
+  is_auto_generated?: boolean;
   user_id?: string;
   id: string;
   date: string; // ISO string
