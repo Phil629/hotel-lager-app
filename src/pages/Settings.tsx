@@ -434,10 +434,10 @@ export const Settings: React.FC = () => {
                             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Deine Weiterleitungs-Adresse:</span>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <code style={{ flex: 1, padding: '12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid var(--color-border)', color: '#334155', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>
-                                    {userId ? `in-${userId.substring(0,8)}@inbound.bestellwesen.app` : 'Lade...'}
+                                    {userId ? `in-${userId.substring(0,8)}@inbound.bestellwesen.com` : 'Lade...'}
                                 </code>
                                 <button type="button" onClick={() => {
-                                    navigator.clipboard.writeText(`in-${userId.substring(0,8)}@inbound.bestellwesen.app`);
+                                    navigator.clipboard.writeText(`in-${userId.substring(0,8)}@inbound.bestellwesen.com`);
                                     setNotification({ message: 'Adresse kopiert!', type: 'success' });
                                 }} style={{ backgroundColor: 'white', border: '1px solid var(--color-border)', padding: '0 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, minHeight: '40px' }}>Kopieren</button>
                             </div>
