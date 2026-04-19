@@ -35,6 +35,7 @@ export const Settings: React.FC = () => {
         developerMode: false,
         logoUrl: ''
     });
+    const [userId, setUserId] = useState<string>('');
     const [isMigrating, setIsMigrating] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
@@ -43,6 +44,9 @@ export const Settings: React.FC = () => {
 
     useEffect(() => {
         const stored = StorageService.getSettings();
+        supabase?.auth.getUser().then(({ data }) => {
+            if (data?.user) setUserId(data.user.id);
+        });
         setSettings({
             serviceId: stored.serviceId || '',
             templateId: stored.templateId || '',
@@ -407,18 +411,38 @@ export const Settings: React.FC = () => {
                     </div>
                 </SectionCard>
 
-                {/* 3. E-Mail API */}
+                {/* 3. Automatisierungen */}
                 <SectionCard>
                     <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
-                        <Mail size={22} color="var(--color-primary)" /> E-Mail Automatisierung
+                        <Mail size={22} color="var(--color-primary)" /> Automatisierungen & Integrationen
                     </h3>
-                    <div style={{ backgroundColor: '#f8fafc', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', textAlign: 'center', marginTop: 'var(--spacing-md)' }}>
-                        <Check size={32} color="#0284c7" style={{ marginBottom: '8px' }} />
-                        <h4 style={{ margin: '0 0 8px 0', color: '#0284c7' }}>Zentrale API Aktiviert</h4>
-                        <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: '1.5' }}>
-                            Ihr Account nutzt die verschlüsselte SaaS E-Mail Schnittstelle. <br />
-                            Dokumente und Bestellungen werden sicher über unsere Server im Hintergrund versendet.
+                    
+                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)' }}>
+                        <h4 style={{ margin: '0 0 12px 0', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={18} color="#0284c7" /> Auto-Bestellungen (Outbound)</h4>
+                        <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: '1.5' }}>
+                            Dein Account nutzt unsere verschlüsselte SaaS E-Mail Schnittstelle. Bestellungen an Lieferanten werden direkt und sicher über unsere Edge Functions verschickt.
                         </p>
+                    </div>
+
+                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)' }}>
+                        <h4 style={{ margin: '0 0 12px 0', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}><Upload size={18} /> Bestätigungsleser (Inbound)</h4>
+                        <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#166534', lineHeight: '1.5' }}>
+                            Leite Lieferantenbestätigungen automatisch an dein Postfach weiter. Unsere KI liest die PDFs/Texte aus und korrigiert Bestände sowie Preise vollautomatisch!
+                        </p>
+                        
+                        <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px dashed #bbf7d0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Deine Weiterleitungs-Adresse:</span>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <code style={{ flex: 1, padding: '12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid var(--color-border)', color: '#334155', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>
+                                    {userId ? `in-${userId.substring(0,8)}@inbound.bestellwesen.app` : 'Lade...'}
+                                </code>
+                                <button type="button" onClick={() => {
+                                    navigator.clipboard.writeText(`in-${userId.substring(0,8)}@inbound.bestellwesen.app`);
+                                    setNotification({ message: 'Adresse kopiert!', type: 'success' });
+                                }} style={{ backgroundColor: 'white', border: '1px solid var(--color-border)', padding: '0 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, minHeight: '40px' }}>Kopieren</button>
+                            </div>
+                            <small style={{ color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>Tipp: Richte in deinem E-Mail Postfach (z.B. Gmail/Outlook) eine Filter-Regel ein, die Mails von Lieferanten automatisch an diese Adresse weiterleitet.</small>
+                        </div>
                     </div>
                 </SectionCard>
 
