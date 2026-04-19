@@ -25,8 +25,8 @@ serve(async (req) => {
     let user_id = null;
     let valuation_method = 'latest';
     if (match && match[1]) {
-       // Search profiles for user where id starts with match[1]
-       const { data: profiles } = await supabase.from('profiles').select('id, inventory_valuation_method').ilike('id', `${match[1]}%`).limit(1)
+       // Search profiles for user where id exactly matches match[1]
+       const { data: profiles } = await supabase.from('profiles').select('id, inventory_valuation_method').eq('id', match[1]).limit(1)
        if (profiles && profiles.length > 0) {
            user_id = profiles[0].id
            valuation_method = profiles[0].inventory_valuation_method || 'latest';
