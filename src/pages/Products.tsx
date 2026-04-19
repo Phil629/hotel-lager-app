@@ -43,7 +43,7 @@ const PriceHistoryChart = ({ productName }: { productName: string }) => {
                     <YAxis dataKey="price" tick={{fontSize: 12, fill: '#64748b'}} tickFormatter={val => Number(val).toFixed(2) + '€'} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
                     <Tooltip 
                         contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: any, name: any, props: any) => [`${Number(value).toFixed(2)} € (Lieferant: ${props.payload.supplier})`, 'Einkaufspreis']}
+                        formatter={(value: any, _name: any, props: any) => [`${Number(value).toFixed(2)} € (Lieferant: ${props.payload.supplier})`, 'Einkaufspreis']}
                         labelFormatter={(label: any) => `Kaufdatum: ${label}`}
                     />
                     <Line type="stepAfter" dataKey="price" stroke="#0ea5e9" strokeWidth={3} dot={{r: 4, fill: '#0284c7', strokeWidth: 0}} activeDot={{r: 6}} animationDuration={1500} />
