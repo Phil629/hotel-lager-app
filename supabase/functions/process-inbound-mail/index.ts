@@ -170,13 +170,13 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
         const { error: orderErr } = await supabase.from('orders').insert({
              id: crypto.randomUUID(),
              user_id: user_id,
-             productName: item.product_name,
+             product_name: item.product_name,
              quantity: item.quantity || 1,
              price: item.price || 0,
              date: parsedData.order_date || new Date().toISOString(),
              status: 'received',
-             supplierName: supName,
-             supplierId: supplier_id,
+             supplier_name: supName,
+             supplier_id: supplier_id,
              is_auto_generated: true,
              notes: `KI-Generiert aus Email-Betreff: ${subject}`
         })
@@ -207,7 +207,7 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
                   name: item.product_name,
                   category: 'Importiert',
                   price: item.price || 0,
-                  supplierId: supplier_id, // ACHTUNG hier muss valid supplierId sein
+                  supplier_id: supplier_id, // ACHTUNG hier muss valid supplierId sein
                   is_auto_generated: true,
                   stock: 0,
                   unit: 'Stk'
