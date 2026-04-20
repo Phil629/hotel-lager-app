@@ -64,7 +64,7 @@ Regeln:
    - order_confirmation
    - delivery_note
 5. Bei invoice: should_create_order = false
-6. Nimm bei order_date das Rechnungs-/Bestell-/Belegdatum, niemals ein zukünftiges Lieferdatum oder Zahlungsziel.
+6. Nimm bei order_date bevorzugt das Haupt-Belegdatum/Druckdatum oben im Kopf (z.B. "Datum: 07.04."). Nimm zur Not das Bestelldatum, aber NIEMALS ein zukünftiges Lieferdatum oder Zahlungsziel.
 7. In items dürfen KEINE Versandkosten, Pfand, Rabatte, Steuerzeilen, Leergut, Paletten oder Gebühren auftauchen.
 8. Wenn zu wenig Sicherheit besteht, document_type = "unknown".
 
@@ -233,21 +233,36 @@ Antworte ausschließlich als JSON:
         if (docType === 'delivery_note') orderStatus = 'received';
 
         if (shouldCreateOrder && orderStatus) {
-            const { error: orderErr } = await supabase.from('orders').insert({
-                 id: crypto.randomUUID(),
-                 user_id: user_id,
-                 product_name: item.product_name,
-                 quantity: Math.round(Number(item.quantity)) || 1,
-                 price: Number(item.price) || 0,
-                 date: parsedData.order_date || new Date().toISOString().slice(0, 10),
-                 status: orderStatus,
-                 supplier_name: supName,
-                 notes: `KI-Import (${docType}) aus Betreff: ${subject}. Referenz: ${parsedData.order_reference || parsedData.invoice_number || 'Keine'}`
-            })
-            if (orderErr) {
-                 console.error("Error creating order:", JSON.stringify(orderErr, null, 2));
+            const orderRef = parsedData.order_reference || parsedData.invoice_number || null;
+            
+            // Deduplication Check
+            let existingOrder = null;
+            if (orderRef) {
+                const { data: existingOrders, error: eoErr } = await supabase.from('orders')
+                    .select('id').eq('user_id', user_id).eq('order_number', orderRef).ilike('product_name', item.product_name).limit(1);
+                if (existingOrders && existingOrders.length > 0) existingOrder = existingOrders[0];
+            }
+            
+            if (existingOrder) {
+                 console.log(`Order for ${item.product_name} with ref ${orderRef} already exists. Skipping.`);
             } else {
-                 console.log(`Created order for ${item.product_name} with status ${orderStatus}`);
+                const { error: orderErr } = await supabase.from('orders').insert({
+                     id: crypto.randomUUID(),
+                     user_id: user_id,
+                     product_name: item.product_name,
+                     quantity: Math.round(Number(item.quantity)) || 1,
+                     price: Number(item.price) || 0,
+                     date: parsedData.order_date || new Date().toISOString().slice(0, 10),
+                     status: orderStatus,
+                     supplier_name: supName,
+                     order_number: orderRef,
+                     notes: `KI-Import (${docType}) aus Betreff: ${subject}. Referenz: ${orderRef || 'Keine'}`
+                })
+                if (orderErr) {
+                     console.error("Error creating order:", JSON.stringify(orderErr, null, 2));
+                } else {
+                     console.log(`Created order for ${item.product_name} with status ${orderStatus}`);
+                }
             }
         }
         
