@@ -50,7 +50,7 @@ Text: ${bodyText}
 Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Format ohne Markdown-Block drumherum. Keine Erklärungen:
 {
   "supplier_name": "Name des Lieferanten",
-  "supplier_email": "E-Mail Adresse des Lieferanten (falls in Text oder PDF zu finden, sonst null)",
+  "supplier_email": "Die E-Mail Adresse des Lieferanten (suche gezielt nach Absender/Support/Rechnung/Kontakt-Emails des Verkäufers. Schreibe hier NIEMALS die Email des Käufers/Hotels rein! Besser null lassen.)",
   "items": [
      {
        "product_name": "Name des Produkts",
@@ -172,8 +172,8 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
              id: crypto.randomUUID(),
              user_id: user_id,
              product_name: item.product_name,
-             quantity: item.quantity || 1,
-             price: item.price || 0,
+             quantity: Math.round(Number(item.quantity)) || 1,
+             price: Number(item.price) || 0,
              date: parsedData.order_date || new Date().toISOString(),
              status: 'received',
              supplier_name: supName,
