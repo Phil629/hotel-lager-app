@@ -70,10 +70,13 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
     const attachmentsCountStr = formData.get('attachments') as string;
     const attachmentsCount = attachmentsCountStr ? parseInt(attachmentsCountStr, 10) : 0;
     
+    console.log(`Received attachments count from Sendgrid: ${attachmentsCount}`);
+    
     for (let i = 1; i <= attachmentsCount; i++) {
         const file = formData.get(`attachment${i}`) as File | null;
         if (file) {
-            const mimeType = file.type || '';
+            const mimeType = file.type || 'application/octet-stream';
+            console.log(`Attachment ${i} found: name=${file.name}, mimeType=${mimeType}, size=${file.size}`);
             // Wir erlauben PDFs und alle gängigen Bilder (Scans von Rechnungen)
             if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
                 const arrayBuffer = await file.arrayBuffer();
@@ -98,6 +101,8 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
     })
 
     const geminiData = await geminiRes.json()
+    console.log("Raw Gemini API response snippet:", JSON.stringify(geminiData).substring(0, 500));
+    
     let extractedJsonText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
     
     // Kleiner Fix falls Gemini doch Markdown schickt
