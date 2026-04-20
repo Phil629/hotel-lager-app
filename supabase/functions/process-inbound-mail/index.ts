@@ -42,25 +42,55 @@ serve(async (req) => {
        return new Response("User not found", { status: 400 })
     }
 
-    const prompt = `Analysiere diese Bestellbestätigung, Rechnung oder Lieferschein. Die Daten können im Text oder in einem angehängten PDF/Bild stehen.
-Es geht hier um ein Hotel-Bestellwesen (Getränke, Lebensmittel, Hotelbedarf).
+    const prompt = `
+Du analysierst E-Mails und Anhänge für ein Hotel-Bestellwesen.
 
+WICHTIG:
+Bestimme ZUERST den Dokumenttyp.
+Erlaubte Typen:
+- "invoice"
+- "order_confirmation"
+- "delivery_note"
+- "unknown"
+
+Regeln:
+1. supplier_email darf NIEMALS die E-Mail des Hotels/Käufers sein.
+2. Bevorzuge als supplier_email:
+   a) Absenderadresse des Lieferanten
+   b) Kontakt-/Rechnungsmail in Mail-Signatur
+   c) Kontakt-/Rechnungsmail in PDF-Kopf/Fußzeile
+3. Falls nicht eindeutig: supplier_email = null
+4. Erzeuge should_create_order = true NUR bei:
+   - order_confirmation
+   - delivery_note
+5. Bei invoice: should_create_order = false
+6. Nimm bei order_date das Rechnungs-/Bestell-/Belegdatum, niemals ein zukünftiges Lieferdatum oder Zahlungsziel.
+7. In items dürfen KEINE Versandkosten, Pfand, Rabatte, Steuerzeilen, Leergut, Paletten oder Gebühren auftauchen.
+8. Wenn zu wenig Sicherheit besteht, document_type = "unknown".
+
+Metadaten:
 Betreff: ${subject}
+Absender: ${fromAddress}
 Text: ${bodyText}
 
-Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Format ohne Markdown-Block drumherum. Keine Erklärungen:
+Antworte ausschließlich als JSON:
 {
-  "supplier_name": "Name des Lieferanten",
-  "supplier_email": "Die E-Mail Adresse des Lieferanten (suche gezielt nach Absender/Support/Rechnung/Kontakt-Emails des Verkäufers. Schreibe hier NIEMALS die Email des Käufers/Hotels rein! Besser null lassen.)",
+  "document_type": "invoice",
+  "should_create_order": false,
+  "supplier_name": "string | null",
+  "supplier_email": "string | null",
+  "invoice_number": "string | null",
+  "order_reference": "string | null",
   "items": [
-     {
-       "product_name": "Name des Produkts (ACHTUNG: Lass Versandkosten, Porto, Pfandbeträge, Leergut, Euro-Paletten, Rabatte oder Steuern strikt weg! Es dürfen nur echte Waren/Artikel wie Lebensmittel, Getränke oder Hotelbedarf eintragen werden)",
-       "quantity": 10,
-       "price": 12.99
-     }
+    {
+      "product_name": "string",
+      "quantity": 1,
+      "price": 0
+    }
   ],
-  "total_price": 129.90,
-  "order_date": "YYYY-MM-DD (WICHTIG: Nimm das Rechnungsdatum oder Bestelldatum der Belegerstellung. Nimm NIEMALS ein zukünftiges Liefer- oder Zahlungsziel wie z.B. 'Lieferung am 26.04.'!)"
+  "total_price": 0,
+  "order_date": "YYYY-MM-DD | null",
+  "confidence": 0.0
 }
 `
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
@@ -98,7 +128,11 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: geminiParts }]
+        contents: [{ parts: geminiParts }],
+        generationConfig: {
+            temperature: 0.2, // Hohe Determiniertheit für Datenextraktion 
+            responseMimeType: "application/json"
+        }
       })
     })
 
@@ -138,14 +172,28 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
     console.log("Processing supplier...");
     let supplier_id = null;
     const supName = parsedData.supplier_name || 'Unbekannter Lieferant (KI)';
+    
+    // Normalisiere Suchbegriff etwas (GmbH, KG, etc entfernen) für robusteren iLike-Match
+    const cleanSupName = supName.replace(/gmbh|mbh|kg|ag|&|co\./gi, '').trim() || supName;
     const { data: existingSuppliers, error: supErr } = await supabase.from('suppliers')
-         .select('id').eq('user_id', user_id).ilike('name', supName).limit(1)
+         .select('id').eq('user_id', user_id).ilike('name', `%${cleanSupName}%`).limit(1)
     
     if (supErr) console.error("Error querying supplier:", supErr);
 
     if (existingSuppliers && existingSuppliers.length > 0) {
         supplier_id = existingSuppliers[0].id
         console.log("Found existing supplier:", supplier_id);
+        
+        // Update die Email, wenn die KI eine bessere gefunden hat
+        if (parsedData.supplier_email && parsedData.supplier_email.trim() !== '' && parsedData.supplier_email !== 'hello@unbekannt.com') {
+            const { error: updSupErr } = await supabase
+              .from('suppliers')
+              .update({ email: parsedData.supplier_email })
+              .eq('id', supplier_id);
+
+            if (updSupErr) console.error("Error updating supplier email:", updSupErr);
+            else console.log("Updated supplier email to:", parsedData.supplier_email);
+        }
     } else {
         const { data: newSupp, error: newSupErr } = await supabase.from('suppliers').insert({
             id: crypto.randomUUID(),
@@ -156,31 +204,46 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
         }).select('id').single()
         
         if (newSupErr) {
-            console.error("Error creating new supplier:", newSupErr);
+            console.error("Error creating new supplier:", JSON.stringify(newSupErr, null, 2));
         } else if (newSupp) {
             supplier_id = newSupp.id
             console.log("Successfully created new supplier:", supplier_id);
         }
     }
 
+    const shouldCreateOrder = parsedData.should_create_order === true;
+    const docType = parsedData.document_type || 'unknown';
+    console.log(`Document type: ${docType}. Should create order? ${shouldCreateOrder}`);
+
     // Aktualisiere oder Lege Produkte an
     const items = parsedData.items || []
-    console.log(`Found ${items.length} items to process in JSON:`, JSON.stringify(items));
+    console.log(`Found ${items.length} items to process.`);
     for (const item of items) {
+        if (!item?.product_name || item.product_name.toLowerCase().includes('versand') || item.product_name.toLowerCase().includes('pfand')) continue;
         console.log("Processing item:", item.product_name);
-        // Create order record for this item
-        const { error: orderErr } = await supabase.from('orders').insert({
-             id: crypto.randomUUID(),
-             user_id: user_id,
-             product_name: item.product_name,
-             quantity: Math.round(Number(item.quantity)) || 1,
-             price: Number(item.price) || 0,
-             date: parsedData.order_date || new Date().toISOString(),
-             status: 'received',
-             supplier_name: supName,
-             notes: `KI-Generiert aus Email-Betreff: ${subject}`
-        })
-        if (orderErr) console.error("Error creating order:", orderErr);
+        
+        let orderStatus = null;
+        if (docType === 'order_confirmation') orderStatus = 'ordered';
+        if (docType === 'delivery_note') orderStatus = 'received';
+
+        if (shouldCreateOrder && orderStatus) {
+            const { error: orderErr } = await supabase.from('orders').insert({
+                 id: crypto.randomUUID(),
+                 user_id: user_id,
+                 product_name: item.product_name,
+                 quantity: Math.round(Number(item.quantity)) || 1,
+                 price: Number(item.price) || 0,
+                 date: parsedData.order_date || new Date().toISOString().slice(0, 10),
+                 status: orderStatus,
+                 supplier_name: supName,
+                 notes: `KI-Import (${docType}) aus Betreff: ${subject}. Referenz: ${parsedData.order_reference || parsedData.invoice_number || 'Keine'}`
+            })
+            if (orderErr) {
+                 console.error("Error creating order:", JSON.stringify(orderErr, null, 2));
+            } else {
+                 console.log(`Created order for ${item.product_name} with status ${orderStatus}`);
+            }
+        }
         
         // Versuche das Produkt zu updaten (Preis) oder neu anzulegen
         const { data: existingProds, error: prodErr } = await supabase.from('products')
