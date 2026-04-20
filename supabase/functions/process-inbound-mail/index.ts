@@ -61,7 +61,7 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
   "order_date": "YYYY-MM-DD"
 }
 `
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${GEMINI_API_KEY}`
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`
     
     // Baue die Payload für Gemini zusammen
     const geminiParts: any[] = [{ text: prompt }];
