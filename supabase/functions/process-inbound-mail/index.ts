@@ -24,17 +24,21 @@ serve(async (req) => {
     const match = to.match(/in-([a-zA-Z0-9\-]+)@/)
     let user_id = null;
     let valuation_method = 'latest';
+    
+    console.log("Extracted TO address:", to);
+    
     if (match && match[1]) {
-       // Search profiles for user where id exactly matches match[1]
-       const { data: profiles } = await supabase.from('profiles').select('id, inventory_valuation_method').eq('id', match[1]).limit(1)
+       user_id = match[1]; // Nehme die UserID direkt aus der Mail-Adresse!
+       
+       // Optional: Versuche die Methode aus dem Profil zu laden, scheitert aber nicht, wenn Profil leer ist.
+       const { data: profiles, error } = await supabase.from('profiles').select('inventory_valuation_method').eq('id', match[1]).limit(1)
        if (profiles && profiles.length > 0) {
-           user_id = profiles[0].id
            valuation_method = profiles[0].inventory_valuation_method || 'latest';
        }
     }
 
     if (!user_id) {
-       console.error("No valid user mapping found for address:", to)
+       console.error("Critical fail: Regex failed to extract user ID from email 'to' address:", to)
        return new Response("User not found", { status: 400 })
     }
 
@@ -107,42 +111,63 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
     }
 
     // Schreibe Log in inbound_emails
-    const { data: inboundLog } = await supabase.from('inbound_emails').insert({
+    console.log("Attempting to insert into inbound_emails...");
+    const { data: inboundLog, error: logErr } = await supabase.from('inbound_emails').insert({
         user_id: user_id,
-        supplier_name: fromAddress,
+        supplier_name: fromAddress || '',
         subject: subject,
-        body_text: bodyText,
+        body_text: bodyText || '',
         extracted_data: parsedData,
         status: 'processed'
     }).select('id').single()
+    
+    if (logErr) {
+        console.error("CRITICAL ERROR inserting into inbound_emails:", logErr);
+    } else {
+        console.log("Successfully inserted inbound_emails row:", inboundLog);
+    }
 
     // Lege Supplier an
+    console.log("Processing supplier...");
     let supplier_id = null;
     const supName = parsedData.supplier_name || 'Unbekannter Lieferant (KI)';
-    const { data: existingSuppliers } = await supabase.from('suppliers')
+    const { data: existingSuppliers, error: supErr } = await supabase.from('suppliers')
          .select('id').eq('user_id', user_id).ilike('name', supName).limit(1)
     
+    if (supErr) console.error("Error querying supplier:", supErr);
+
     if (existingSuppliers && existingSuppliers.length > 0) {
         supplier_id = existingSuppliers[0].id
+        console.log("Found existing supplier:", supplier_id);
     } else {
-        const { data: newSupp } = await supabase.from('suppliers').insert({
+        const { data: newSupp, error: newSupErr } = await supabase.from('suppliers').insert({
+            id: crypto.randomUUID(),
             user_id: user_id,
             name: supName,
-            email: fromAddress,
+            email: fromAddress || 'hello@unbekannt.com',
             is_auto_generated: true
         }).select('id').single()
-        if (newSupp) supplier_id = newSupp.id
+        
+        if (newSupErr) {
+            console.error("Error creating new supplier:", newSupErr);
+        } else if (newSupp) {
+            supplier_id = newSupp.id
+            console.log("Successfully created new supplier:", supplier_id);
+        }
     }
 
     // Aktualisiere oder Lege Produkte an
     const items = parsedData.items || []
+    console.log(`Found ${items.length} items to process in JSON:`, JSON.stringify(items));
     for (const item of items) {
+        console.log("Processing item:", item.product_name);
         // Create order record for this item
-        await supabase.from('orders').insert({
+        const { error: orderErr } = await supabase.from('orders').insert({
+             id: crypto.randomUUID(),
              user_id: user_id,
              productName: item.product_name,
              quantity: item.quantity || 1,
-             price: item.price,
+             price: item.price || 0,
              date: parsedData.order_date || new Date().toISOString(),
              status: 'received',
              supplierName: supName,
@@ -150,10 +175,13 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
              is_auto_generated: true,
              notes: `KI-Generiert aus Email-Betreff: ${subject}`
         })
+        if (orderErr) console.error("Error creating order:", orderErr);
         
         // Versuche das Produkt zu updaten (Preis) oder neu anzulegen
-        const { data: existingProds } = await supabase.from('products')
+        const { data: existingProds, error: prodErr } = await supabase.from('products')
             .select('id, price, stock').eq('user_id', user_id).ilike('name', item.product_name).limit(1)
+        
+        if (prodErr) console.error("Error querying product:", prodErr);
         
         if (existingProds && existingProds.length > 0) {
              const ep = existingProds[0]
@@ -162,18 +190,25 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
                   if (valuation_method === 'average' && ep.stock > 0 && ep.price > 0) {
                       newPrice = ((ep.stock * ep.price) + ((item.quantity || 1) * item.price)) / (ep.stock + (item.quantity || 1));
                   }
-                  await supabase.from('products').update({ price: newPrice }).eq('id', ep.id)
+                  const { error: updateErr } = await supabase.from('products').update({ price: newPrice }).eq('id', ep.id)
+                  if (updateErr) console.error("Error updating price:", updateErr);
+                  else console.log("Updated existing product price:", ep.id);
              }
         } else {
              // Produkt komplett neu generieren
-             await supabase.from('products').insert({
+             const { error: newProdErr } = await supabase.from('products').insert({
+                  id: crypto.randomUUID(),
                   user_id: user_id,
                   name: item.product_name,
                   category: 'Importiert',
                   price: item.price || 0,
-                  supplierId: supplier_id,
-                  is_auto_generated: true
+                  supplierId: supplier_id, // ACHTUNG hier muss valid supplierId sein
+                  is_auto_generated: true,
+                  stock: 0,
+                  unit: 'Stk'
              })
+             if (newProdErr) console.error("Error creating new product:", newProdErr);
+             else console.log("Created new product:", item.product_name);
         }
     }
 
