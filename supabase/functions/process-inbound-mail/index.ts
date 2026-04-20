@@ -54,13 +54,13 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
   "supplier_email": "Die E-Mail Adresse des Lieferanten (suche gezielt nach Absender/Support/Rechnung/Kontakt-Emails des Verkäufers. Schreibe hier NIEMALS die Email des Käufers/Hotels rein! Besser null lassen.)",
   "items": [
      {
-       "product_name": "Name des Produkts (ACHTUNG: Lass Versandkosten, Porto, Pfandbeträge, Leergut, Paletten, Rabatte oder Steuern unbedingt weg! Es dürfen nur echte physische Waren eintragen werden)",
+       "product_name": "Name des Produkts (ACHTUNG: Lass Versandkosten, Porto, Pfandbeträge, Leergut, Euro-Paletten, Rabatte oder Steuern strikt weg! Es dürfen nur echte Waren/Artikel wie Lebensmittel, Getränke oder Hotelbedarf eintragen werden)",
        "quantity": 10,
        "price": 12.99
      }
   ],
   "total_price": 129.90,
-  "order_date": "YYYY-MM-DD"
+  "order_date": "YYYY-MM-DD (WICHTIG: Nimm das Rechnungsdatum oder Bestelldatum der Belegerstellung. Nimm NIEMALS ein zukünftiges Liefer- oder Zahlungsziel wie z.B. 'Lieferung am 26.04.'!)"
 }
 `
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
