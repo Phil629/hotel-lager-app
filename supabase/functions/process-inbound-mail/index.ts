@@ -219,11 +219,17 @@ Antworte ausschließlich als JSON:
     const items = parsedData.items || []
     console.log(`Found ${items.length} items to process.`);
     for (const item of items) {
-        if (!item?.product_name || item.product_name.toLowerCase().includes('versand') || item.product_name.toLowerCase().includes('pfand')) continue;
+        if (!item?.product_name) continue;
+        
+        const lowerName = item.product_name.toLowerCase();
+        if (lowerName.includes('versand') || lowerName.includes('pfand') || lowerName.includes('porto') || lowerName.includes('gebühr') || lowerName.includes('logistik') || lowerName.includes('palette')) {
+             console.log("Skipping non-product item:", item.product_name);
+             continue;
+        }
         console.log("Processing item:", item.product_name);
         
         let orderStatus = null;
-        if (docType === 'order_confirmation') orderStatus = 'ordered';
+        if (docType === 'order_confirmation') orderStatus = 'open';
         if (docType === 'delivery_note') orderStatus = 'received';
 
         if (shouldCreateOrder && orderStatus) {
