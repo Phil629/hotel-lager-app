@@ -42,8 +42,9 @@ serve(async (req) => {
        return new Response("User not found", { status: 400 })
     }
 
-    // Call Gemini API (via REST, da es das leichtesten in Deno ist)
     const prompt = `Analysiere diese Bestellbestätigung, Rechnung oder Lieferschein. Die Daten können im Text oder in einem angehängten PDF/Bild stehen.
+Es geht hier um ein Hotel-Bestellwesen (Getränke, Lebensmittel, Hotelbedarf).
+
 Betreff: ${subject}
 Text: ${bodyText}
 
@@ -53,7 +54,7 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
   "supplier_email": "Die E-Mail Adresse des Lieferanten (suche gezielt nach Absender/Support/Rechnung/Kontakt-Emails des Verkäufers. Schreibe hier NIEMALS die Email des Käufers/Hotels rein! Besser null lassen.)",
   "items": [
      {
-       "product_name": "Name des Produkts",
+       "product_name": "Name des Produkts (ACHTUNG: Lass Versandkosten, Porto, Pfandbeträge, Leergut, Paletten, Rabatte oder Steuern unbedingt weg! Es dürfen nur echte physische Waren eintragen werden)",
        "quantity": 10,
        "price": 12.99
      }
@@ -177,7 +178,6 @@ Extrahiere die folgenden Informationen und antworte AUSSCHLIESSLICH im JSON-Form
              date: parsedData.order_date || new Date().toISOString(),
              status: 'received',
              supplier_name: supName,
-             is_auto_generated: true,
              notes: `KI-Generiert aus Email-Betreff: ${subject}`
         })
         if (orderErr) console.error("Error creating order:", orderErr);
