@@ -229,13 +229,14 @@ Antworte ausschließlich als JSON:
         console.log("Processing item:", item.product_name);
         
         let orderStatus = null;
-        if (docType === 'order_confirmation') orderStatus = 'open';
-        if (docType === 'delivery_note') orderStatus = 'received';
+        if (docType === 'order_confirmation' || docType === 'delivery_note') {
+             orderStatus = 'open'; // Der Nutzer markiert Bestellungen strikt manuell als erhalten!
+        }
 
         if (shouldCreateOrder && orderStatus) {
             const orderRef = parsedData.order_reference || parsedData.invoice_number || null;
             
-            // Deduplication Check
+            // Stufe 1: Deduplication Check (Exakter Treffer mit Belegnummer)
             let existingOrder = null;
             if (orderRef) {
                 const { data: existingOrders, error: eoErr } = await supabase.from('orders')
@@ -243,9 +244,28 @@ Antworte ausschließlich als JSON:
                 if (existingOrders && existingOrders.length > 0) existingOrder = existingOrders[0];
             }
             
+            // Stufe 2: Fangnetz für rein manuell angelegte Bestellungen (die noch keine Bestellnummer haben!)
+            if (!existingOrder) {
+                const { data: openOrders } = await supabase.from('orders')
+                    .select('id').eq('user_id', user_id).eq('status', 'open').ilike('product_name', item.product_name).is('order_number', null).limit(1);
+                if (openOrders && openOrders.length > 0) {
+                     existingOrder = openOrders[0];
+                }
+            }
+            
             if (existingOrder) {
-                 console.log(`Order for ${item.product_name} with ref ${orderRef} already exists. Skipping.`);
+                 console.log(`Open order for ${item.product_name} already exists. Updating it...`);
+                 
+                 const updatePayload: any = {
+                      price: Number(item.price) || undefined
+                 };
+                 if (orderRef) updatePayload.order_number = orderRef;
+                 
+                 const { error: updErr } = await supabase.from('orders').update(updatePayload).eq('id', existingOrder.id);
+                 if (updErr) console.error("Error updating order:", JSON.stringify(updErr, null, 2));
+                 
             } else {
+                // Keine passende manuelle Bestellung gefunden -> Komplett neu anlegen
                 const { error: orderErr } = await supabase.from('orders').insert({
                      id: crypto.randomUUID(),
                      user_id: user_id,
@@ -261,7 +281,7 @@ Antworte ausschließlich als JSON:
                 if (orderErr) {
                      console.error("Error creating order:", JSON.stringify(orderErr, null, 2));
                 } else {
-                     console.log(`Created order for ${item.product_name} with status ${orderStatus}`);
+                     console.log(`Created new order for ${item.product_name} with status ${orderStatus}`);
                 }
             }
         }
