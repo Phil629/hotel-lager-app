@@ -666,7 +666,6 @@ export const Products: React.FC = () => {
             </div>
 
             {
-            {
                 filteredProducts.length === 0 ? (
                     <div style={{ padding: '40px', textAlign: 'center', backgroundColor: 'white', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)' }}>
                         <ShoppingCart size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
