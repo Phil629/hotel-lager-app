@@ -122,6 +122,7 @@ const toSupabaseOrder = (o: Order) => {
     if (o.supplierPhone) base.supplier_phone = o.supplierPhone;
     if (o.receivedAt) base.received_at = o.receivedAt;
     if (o.notes) base.notes = o.notes;
+    if (o.aiRevisions !== undefined) base.ai_revisions = o.aiRevisions;
 
     return base;
 };
@@ -144,7 +145,8 @@ const fromSupabaseOrder = (o: any): Order => ({
     supplierEmail: o.supplier_email,
     supplierPhone: o.supplier_phone,
     receivedAt: o.received_at,
-    notes: o.notes
+    notes: o.notes,
+    aiRevisions: o.ai_revisions
 });
 
 export const DataService = {

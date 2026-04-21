@@ -76,6 +76,11 @@ export interface Order {
   supplierPhone?: string; // Cached from product for easy access
   receivedAt?: string; // ISO string, timestamp when order was marked as received
   notes?: string; // New: Notes for the order
+  aiRevisions?: {
+    quantity?: { original: number; suggested: number; reverted: boolean; };
+    price?: { original: number; suggested: number; reverted: boolean; };
+    date?: { original: string; suggested: string; reverted: boolean; };
+  };
 }
 
 export interface AppSettings {

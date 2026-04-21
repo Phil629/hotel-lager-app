@@ -524,6 +524,49 @@ export const Orders: React.FC = () => {
             return new Date(dateB).getTime() - new Date(dateA).getTime();
         });
 
+
+    const handleRevertAi = async (orderId: string, type: 'quantity' | 'price' | 'date' | 'all', originalValue: any) => {
+        const order = orders.find(o => o.id === orderId);
+        if (!order || !order.aiRevisions) return;
+
+        let updatedOrder = { ...order };
+        let updatedRevisions = { ...order.aiRevisions };
+
+                if (type === 'all') {
+            if (updatedRevisions.quantity) {
+                updatedOrder.quantity = updatedRevisions.quantity.original;
+                updatedRevisions.quantity.reverted = true;
+            }
+            if (updatedRevisions.price) {
+                updatedOrder.price = updatedRevisions.price.original;
+                updatedRevisions.price.reverted = true;
+            }
+            if (updatedRevisions.date) {
+                updatedOrder.date = updatedRevisions.date.original;
+                updatedRevisions.date.reverted = true;
+            }
+        } else {
+            if (type === 'quantity') {
+                updatedOrder.quantity = originalValue;
+                if (updatedRevisions.quantity) updatedRevisions.quantity.reverted = true;
+            }
+            if (type === 'price') {
+                updatedOrder.price = originalValue;
+                if (updatedRevisions.price) updatedRevisions.price.reverted = true;
+            }
+            if (type === 'date') {
+                updatedOrder.date = originalValue;
+                if (updatedRevisions.date) updatedRevisions.date.reverted = true;
+            }
+        }
+        
+        updatedOrder.aiRevisions = updatedRevisions;
+
+        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        await DataService.updateOrder(updatedOrder);
+        setNotification({ message: 'KI-Änderung rückgängig gemacht.', type: 'info' });
+    };
+
     const renderOrderCard = (order: Order) => (
         <div key={order.id} style={{
             backgroundColor: getOrderBackgroundColor(order),
@@ -582,6 +625,71 @@ export const Orders: React.FC = () => {
                                 "{order.notes}"
                             </div>
                         )}
+                        {(() => {
+                            if (!order.aiRevisions) return null;
+                            const revs = order.aiRevisions;
+                            
+                            const hasPendingQty = revs.quantity && !revs.quantity.reverted;
+                            const hasPendingPrice = revs.price && !revs.price.reverted;
+                            const hasPendingDate = revs.date && !revs.date.reverted;
+                            
+                            if (!hasPendingQty && !hasPendingPrice && !hasPendingDate) return null;
+                            
+                            return (
+                                <div style={{ backgroundColor: '#fff8e1', border: '1px solid #ffe082', padding: '12px', borderRadius: 'var(--radius-md)', marginTop: '8px', marginBottom: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f57c00', fontWeight: 600, marginBottom: '12px', fontSize: 'var(--font-size-sm)' }}>
+                                        <span>✨ KI-Aktualisierung erkannt:</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {hasPendingQty && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                                                <span><strong style={{color:'#f57c00'}}>Menge: {revs.quantity?.suggested}</strong> (vorher {revs.quantity?.original})</span>
+                                                <button 
+                                                    onClick={() => handleRevertAi(order.id, 'quantity', revs.quantity?.original)}
+                                                    style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid #ffb74d', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#f57c00' }}
+                                                >
+                                                    Menge auf {revs.quantity?.original} zurücksetzen
+                                                </button>
+                                            </div>
+                                        )}
+                                        {hasPendingPrice && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                                                <span><strong style={{color:'#f57c00'}}>Preis: {revs.price?.suggested} €</strong> (vorher {revs.price?.original} €)</span>
+                                                <button 
+                                                    onClick={() => handleRevertAi(order.id, 'price', revs.price?.original)}
+                                                    style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid #ffb74d', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#f57c00' }}
+                                                >
+                                                    Preis zurücksetzen
+                                                </button>
+                                            </div>
+                                        )}
+                                        {hasPendingDate && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                                                <span><strong style={{color:'#f57c00'}}>Datum: {new Date(revs.date?.suggested || new Date()).toLocaleDateString('de-DE')}</strong> (vorher {new Date(revs.date?.original || new Date()).toLocaleDateString('de-DE')})</span>
+                                                <button 
+                                                    onClick={() => handleRevertAi(order.id, 'date', revs.date?.original)}
+                                                    style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid #ffb74d', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#f57c00' }}
+                                                >
+                                                    Datum zurücksetzen
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ borderTop: '1px solid #ffe082', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+                                        <button 
+                                            onClick={() => handleRevertAi(order.id, 'all', 0)}
+                                            style={{ padding: '6px 12px', fontSize: '12px', border: 'none', backgroundColor: '#ffe082', borderRadius: '4px', cursor: 'pointer', color: '#ef6c00', fontWeight: 600 }}
+                                        >
+                                            Alle verwerfen
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                        {order.aiRevisions?.quantity?.reverted && <div style={{fontSize: '11px', color: '#9e9e9e', marginBottom: '4px'}}>↳ KI-Mengenänderung abgelehnt</div>}
+                        {order.aiRevisions?.date?.reverted && <div style={{fontSize: '11px', color: '#9e9e9e', marginBottom: '4px'}}>↳ KI-Datumsänderung abgelehnt</div>}
+                        {order.aiRevisions?.price?.reverted && <div style={{fontSize: '11px', color: '#9e9e9e', marginBottom: '4px'}}>↳ KI-Preisänderung abgelehnt</div>}
+                        
                         {(() => {
                             let supplier = suppliers.find((s: Supplier) => s.name === order.supplierName);
                             // Fallback if supplier name was changed
