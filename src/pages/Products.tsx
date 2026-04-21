@@ -682,7 +682,7 @@ export const Products: React.FC = () => {
                             const supplierName = supplier?.name || "Ohne Lieferant (Unkategorisiert)";
                             
                             const isExpanded = expandedSuppliers[supplierId] !== false; // default true
-                            const showAll = expandedProductsLimit[supplierId] === true; // default false
+                            const showAll = expandedProductsLimit[supplierId] === true || showLowStockOnly || searchTerm.trim() !== ""; // auto-expand if filtering
                             const visibleProds = showAll ? supProds : supProds.slice(0, 5);
                             const hasMore = supProds.length > 5;
 
