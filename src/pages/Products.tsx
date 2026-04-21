@@ -97,8 +97,12 @@ export const Products: React.FC = () => {
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState("");
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+    const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>({});
+    const [expandedProductsLimit, setExpandedProductsLimit] = useState<Record<string, boolean>>({});
+    const toggleSupplier = (id: string) => setExpandedSuppliers(prev => ({...prev, [id]: prev[id] === false ? true : false}));
+    const toggleProductLimit = (id: string) => setExpandedProductsLimit(prev => ({...prev, [id]: !prev[id]}));
 
 
 
