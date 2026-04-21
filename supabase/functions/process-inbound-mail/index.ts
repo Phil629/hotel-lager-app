@@ -173,12 +173,41 @@ Antworte ausschließlich als JSON:
     let supplier_id = null;
     const supName = parsedData.supplier_name || 'Unbekannter Lieferant (KI)';
     
-    // Normalisiere Suchbegriff etwas (GmbH, KG, etc entfernen) für robusteren iLike-Match
-    const cleanSupName = supName.replace(/gmbh|mbh|kg|ag|&|co\./gi, '').trim() || supName;
-    const { data: existingSuppliers, error: supErr } = await supabase.from('suppliers')
-         .select('id').eq('user_id', user_id).ilike('name', `%${cleanSupName}%`).limit(1)
+    let existingSuppliers: any[] = [];
     
-    if (supErr) console.error("Error querying supplier:", supErr);
+    // 1. Try matching by email first, as it's the most precise unique identifier
+    const emailToMatch = parsedData.supplier_email?.trim();
+    if (emailToMatch && emailToMatch !== 'hello@unbekannt.com') {
+        const { data: emailMatch, error: emailErr } = await supabase.from('suppliers')
+             .select('id').eq('user_id', user_id).ilike('email', emailToMatch).limit(1);
+        if (emailErr) console.error("Error querying supplier by email:", emailErr);
+        if (emailMatch && emailMatch.length > 0) {
+            existingSuppliers = emailMatch;
+            console.log("Matched supplier by email:", emailToMatch);
+        }
+    }
+
+    // 2. Fallback: try matching by name
+    if (existingSuppliers.length === 0) {
+        // Normalisiere Suchbegriff etwas (GmbH, KG, etc entfernen)
+        const cleanSupName = supName.replace(/gmbh|mbh|kg|ag|&|co\./gi, '').trim() || supName;
+        // Benutze auch das erste signifikante Wort als Fallback, da "Hewo" nicht "%HEWO Getränke-Vertrieb...%" matcht (Target ist kürzer!)
+        const firstWord = cleanSupName.split(/[\s-]/)[0];
+        let orQuery = `name.ilike.%${cleanSupName}%`;
+        // Nur wenn das erste Wort lang genug ist, um random matches zu verhindern
+        if (firstWord && firstWord.length >= 3) {
+            orQuery += `,name.ilike.%${firstWord}%`;
+        }
+
+        const { data: nameMatch, error: supErr } = await supabase.from('suppliers')
+            .select('id').eq('user_id', user_id).or(orQuery).limit(1);
+        
+        if (supErr) console.error("Error querying supplier by name:", supErr);
+        if (nameMatch && nameMatch.length > 0) {
+             existingSuppliers = nameMatch;
+             console.log("Matched supplier by name:", supName);
+        }
+    }
 
     if (existingSuppliers && existingSuppliers.length > 0) {
         supplier_id = existingSuppliers[0].id
