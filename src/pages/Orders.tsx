@@ -525,6 +525,18 @@ export const Orders: React.FC = () => {
         });
 
 
+
+    const handleAcceptAi = async (orderId: string) => {
+        const order = orders.find(o => o.id === orderId);
+        if (!order || !order.aiRevisions) return;
+
+        let updatedOrder = { ...order, aiRevisions: undefined };
+
+        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        await DataService.updateOrder(updatedOrder);
+        setNotification({ message: 'KI-Änderungen bestätigt und übernommen.', type: 'success' });
+    };
+
     const handleRevertAi = async (orderId: string, type: 'quantity' | 'price' | 'date' | 'all', originalValue: any) => {
         const order = orders.find(o => o.id === orderId);
         if (!order || !order.aiRevisions) return;
@@ -675,7 +687,13 @@ export const Orders: React.FC = () => {
                                             </div>
                                         )}
                                     </div>
-                                    <div style={{ borderTop: '1px solid #ffe082', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <div style={{ borderTop: '1px solid #ffe082', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                        <button 
+                                            onClick={() => handleAcceptAi(order.id)}
+                                            style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #4caf50', backgroundColor: '#e8f5e9', borderRadius: '4px', cursor: 'pointer', color: '#2e7d32', fontWeight: 600 }}
+                                        >
+                                            <span style={{display: 'flex', alignItems: 'center', gap: '4px'}}>Alles beibehalten</span>
+                                        </button>
                                         <button 
                                             onClick={() => handleRevertAi(order.id, 'all', 0)}
                                             style={{ padding: '6px 12px', fontSize: '12px', border: 'none', backgroundColor: '#ffe082', borderRadius: '4px', cursor: 'pointer', color: '#ef6c00', fontWeight: 600 }}
