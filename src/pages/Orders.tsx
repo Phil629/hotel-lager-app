@@ -526,11 +526,29 @@ export const Orders: React.FC = () => {
 
 
 
+    
     const handleAcceptAi = async (orderId: string) => {
         const order = orders.find(o => o.id === orderId);
         if (!order || !order.aiRevisions) return;
 
-        let updatedOrder = { ...order, aiRevisions: undefined };
+        let updatedOrder = { ...order, aiRevisions: null };
+        const d = new Date().toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+        
+        const changes = [];
+        if (order.aiRevisions.quantity && !order.aiRevisions.quantity.reverted) {
+            changes.push(`Menge (${order.aiRevisions.quantity.suggested} statt ${order.aiRevisions.quantity.original})`);
+        }
+        if (order.aiRevisions.price && !order.aiRevisions.price.reverted) {
+            changes.push(`Preis (${order.aiRevisions.price.suggested}€ statt ${order.aiRevisions.price.original}€)`);
+        }
+        if (order.aiRevisions.date && !order.aiRevisions.date.reverted) {
+            const sgDate = new Date(order.aiRevisions.date.suggested).toLocaleDateString('de-DE');
+            const ogDate = new Date(order.aiRevisions.date.original).toLocaleDateString('de-DE');
+            changes.push(`Datum (${sgDate} statt ${ogDate})`);
+        }
+
+        const noteStr = `[KI-Log ${d}] KI-Änderungen beibehalten: ${changes.join(', ')}`;
+        updatedOrder.notes = updatedOrder.notes ? `${updatedOrder.notes}\n${noteStr}` : noteStr;
 
         setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
         await DataService.updateOrder(updatedOrder);
@@ -543,8 +561,11 @@ export const Orders: React.FC = () => {
 
         let updatedOrder = { ...order };
         let updatedRevisions = { ...order.aiRevisions };
+        const d = new Date().toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
 
-                if (type === 'all') {
+        let noteStr = '';
+
+        if (type === 'all') {
             if (updatedRevisions.quantity) {
                 updatedOrder.quantity = updatedRevisions.quantity.original;
                 updatedRevisions.quantity.reverted = true;
@@ -557,22 +578,29 @@ export const Orders: React.FC = () => {
                 updatedOrder.date = updatedRevisions.date.original;
                 updatedRevisions.date.reverted = true;
             }
+            noteStr = `[KI-Log ${d}] Alle KI-Eingriffe verworfen. Zurück auf manuelle Werte.`;
+            updatedOrder.aiRevisions = null; // hide entirely since everything is discarded
         } else {
             if (type === 'quantity') {
                 updatedOrder.quantity = originalValue;
                 if (updatedRevisions.quantity) updatedRevisions.quantity.reverted = true;
+                noteStr = `[KI-Log ${d}] KI-Menge abgelehnt (${originalValue} wiederhergestellt).`;
             }
             if (type === 'price') {
                 updatedOrder.price = originalValue;
                 if (updatedRevisions.price) updatedRevisions.price.reverted = true;
+                noteStr = `[KI-Log ${d}] KI-Preis abgelehnt (${originalValue}€ wiederhergestellt).`;
             }
             if (type === 'date') {
                 updatedOrder.date = originalValue;
                 if (updatedRevisions.date) updatedRevisions.date.reverted = true;
+                const ogDate = new Date(originalValue).toLocaleDateString('de-DE');
+                noteStr = `[KI-Log ${d}] KI-Datum abgelehnt (${ogDate} wiederhergestellt).`;
             }
+            updatedOrder.aiRevisions = updatedRevisions;
         }
         
-        updatedOrder.aiRevisions = updatedRevisions;
+        updatedOrder.notes = updatedOrder.notes ? `${updatedOrder.notes}\n${noteStr}` : noteStr;
 
         setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
         await DataService.updateOrder(updatedOrder);

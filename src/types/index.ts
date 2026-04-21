@@ -80,7 +80,7 @@ export interface Order {
     quantity?: { original: number; suggested: number; reverted: boolean; };
     price?: { original: number; suggested: number; reverted: boolean; };
     date?: { original: string; suggested: string; reverted: boolean; };
-  };
+  } | null;
 }
 
 export interface AppSettings {
