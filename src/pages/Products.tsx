@@ -754,7 +754,24 @@ export const Products: React.FC = () => {
                                                                 </div>
                                                             </div>
 
-                                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                                                                {product.orderUrl && (
+                                                                    <button onClick={() => window.open(product.orderUrl, '_blank')} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 600, transition: 'background-color 0.2s' }}>
+                                                                        <ExternalLink size={16} /> Webshop
+                                                                    </button>
+                                                                )}
+                                                                {(product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email) && (
+                                                                    <button onClick={() => window.location.href = `mailto:${product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email}`} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
+                                                                        <Mail size={16} /> E-Mail
+                                                                    </button>
+                                                                )}
+                                                                {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
+                                                                    <button onClick={() => window.location.href = `tel:${product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone}`} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
+                                                                        <Phone size={16} /> Anrufen
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
                                                                 <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', color: 'var(--color-text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
                                                                     <Edit2 size={16} /> Edit
                                                                 </button>
@@ -842,21 +859,21 @@ export const Products: React.FC = () => {
                                                                         </div>
                                                                     </td>
                                                                     <td style={{ padding: '16px' }}>
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                                             {product.orderUrl && (
-                                                                                <button onClick={() => window.open(product.orderUrl, '_blank')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 500, padding: '4px 8px', backgroundColor: '#eff6ff', borderRadius: '6px', width: 'fit-content' }}>
+                                                                                <button onClick={() => window.open(product.orderUrl, '_blank')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#1d4ed8', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: '6px 10px', backgroundColor: '#eff6ff', borderRadius: '6px', width: 'fit-content' }}>
                                                                                     <ExternalLink size={14} /> Webshop
                                                                                 </button>
                                                                             )}
-                                                                            {product.emailOrderAddress && (
-                                                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '13px', padding: '4px 8px', backgroundColor: '#f1f5f9', borderRadius: '6px', width: 'fit-content' }}>
-                                                                                    <Mail size={14} /> {product.emailOrderAddress}
-                                                                                </div>
+                                                                            {(product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email) && (
+                                                                                <button onClick={() => window.location.href = `mailto:${product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '13px', padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '6px', width: 'fit-content', fontWeight: 500 }}>
+                                                                                    <Mail size={14} /> E-Mail
+                                                                                </button>
                                                                             )}
-                                                                            {product.supplierPhone && (
-                                                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '13px', padding: '4px 8px', backgroundColor: '#f1f5f9', borderRadius: '6px', width: 'fit-content' }}>
-                                                                                    <Phone size={14} /> {product.supplierPhone}
-                                                                                </div>
+                                                                            {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
+                                                                                <button onClick={() => window.location.href = `tel:${product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '13px', padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '6px', width: 'fit-content', fontWeight: 500 }}>
+                                                                                    <Phone size={14} /> Anrufen
+                                                                                </button>
                                                                             )}
                                                                             {!product.orderUrl && !product.emailOrderAddress && !product.supplierPhone && (
                                                                                 <div style={{ color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>Keine Info</div>
