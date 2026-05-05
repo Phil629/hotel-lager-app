@@ -2096,7 +2096,7 @@ export const Orders: React.FC = () => {
                                                     ...oneTimeOrder,
                                                     supplierId: supplierId,
                                                     supplierName: supplier.name,
-                                                    supplierEmail: supplier.email,
+                                                    supplierEmail: supplier.email || '',
                                                     supplierPhone: supplier.phone || ''
                                                 });
                                             } else {

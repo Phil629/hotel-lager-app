@@ -71,8 +71,8 @@ export const Suppliers: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            if (!formData.name || !formData.email) {
-                setNotification({ message: 'Name und Email sind Pflichtfelder.', type: 'error' });
+            if (!formData.name) {
+                setNotification({ message: 'Name ist ein Pflichtfeld.', type: 'error' });
                 return;
             }
 
@@ -83,7 +83,7 @@ export const Suppliers: React.FC = () => {
                 id: targetSupplierId,
                 name: formData.name,
                 contactName: formData.contactName,
-                email: formData.email,
+                email: formData.email || '',
                 phone: formData.phone,
                 url: formData.url,
                 notes: formData.notes || [],
@@ -145,7 +145,7 @@ export const Suppliers: React.FC = () => {
 
     const filteredSuppliers = suppliers.filter(s =>
         s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.email.toLowerCase().includes(searchTerm.toLowerCase())
+        (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Modal product grouping

@@ -11,7 +11,7 @@ export interface Supplier {
   id: string;
   name: string;
   contactName?: string;
-  email: string;
+  email?: string;
   phone?: string;
   url?: string;
   notes?: Note[];
