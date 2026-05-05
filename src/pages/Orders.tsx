@@ -1757,8 +1757,11 @@ export const Orders: React.FC = () => {
                                                         <input 
                                                             type="number" 
                                                             min="1" 
-                                                            value={item.quantity} 
-                                                            onChange={e => updateCartQuantity(index, Number(e.target.value))}
+                                                            value={item.quantity === 0 ? '' : item.quantity} 
+                                                            onChange={e => {
+                                                                const val = e.target.value;
+                                                                updateCartQuantity(index, val === '' ? 0 : Number(val.replace(/^0+/, '')) || 0);
+                                                            }}
                                                             style={{ width: '60px', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: 'var(--font-size-md)' }} 
                                                         />
                                                         {index > 0 && (
