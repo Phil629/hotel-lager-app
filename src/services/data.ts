@@ -31,7 +31,8 @@ const toSupabaseSupplier = (s: Supplier) => ({
     preferred_order_method: s.preferredOrderMethod,
     order_email: s.orderEmail,
     order_phone: s.orderPhone,
-    order_url: s.orderUrl
+    order_url: s.orderUrl,
+    ignore_order_proposals: s.ignoreOrderProposals
 });
 
 const fromSupabaseSupplier = (s: any): Supplier => ({
@@ -51,7 +52,8 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     preferredOrderMethod: s.preferred_order_method,
     orderEmail: s.order_email,
     orderPhone: s.order_phone,
-    orderUrl: s.order_url
+    orderUrl: s.order_url,
+    ignoreOrderProposals: s.ignore_order_proposals
 });
 
 const toSupabaseProduct = (p: Product) => ({

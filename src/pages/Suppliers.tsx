@@ -94,7 +94,8 @@ export const Suppliers: React.FC = () => {
                 preferredOrderMethod: formData.preferredOrderMethod,
                 orderEmail: formData.orderEmail,
                 orderPhone: formData.orderPhone,
-                orderUrl: formData.orderUrl
+                orderUrl: formData.orderUrl,
+                ignoreOrderProposals: formData.ignoreOrderProposals
             } as Supplier;
 
             await DataService.saveSupplier(supplierToSave);
@@ -376,6 +377,19 @@ export const Suppliers: React.FC = () => {
                                     </div>
                                 </div>
 
+                                <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', backgroundColor: '#fff3cd', padding: '12px', borderRadius: '8px', border: '1px solid #ffeeba' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        id="ignoreProposals" 
+                                        checked={!!formData.ignoreOrderProposals}
+                                        onChange={e => setFormData({ ...formData, ignoreOrderProposals: e.target.checked })}
+                                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                    />
+                                    <label htmlFor="ignoreProposals" style={{ fontSize: '14px', fontWeight: 600, color: '#856404', cursor: 'pointer' }}>
+                                        Diesen Lieferanten aus allen Bestellvorschlägen ausschließen
+                                    </label>
+                                </div>
                                 <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
 
                                 {/* Portal Login Infos */}

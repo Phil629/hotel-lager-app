@@ -441,7 +441,8 @@ export const Orders: React.FC = () => {
         const proposals: {product: Product, supplierName: string, supplierId: string, quantity: number, openQty: number, selected: boolean}[] = [];
         for (const product of products) {
             if (product.ignoreOrderProposals) continue;
-            
+            const supplier = suppliers.find(s => s.id === product.supplierId);
+            if (supplier && supplier.ignoreOrderProposals) continue;
             const min = product.minStock || 0;
             if (product.stock <= min) {
                 const standardQty = product.standardOrderQuantity ? product.standardOrderQuantity : (min > 0 ? min * 2 : 1);

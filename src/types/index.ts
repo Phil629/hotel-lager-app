@@ -25,6 +25,7 @@ export interface Supplier {
   orderEmail?: string;
   orderPhone?: string;
   orderUrl?: string;
+  ignoreOrderProposals?: boolean;
 }
 
 export interface Product {
