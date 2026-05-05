@@ -284,11 +284,15 @@ export const Orders: React.FC = () => {
     };
 
     const openDefectModal = (target: Order | Order[]) => {
-        if (Array.isArray(target)) {
+        if (Array.isArray(target) && target.length > 1) {
             setDefectModalOrderOptions(target);
+            setDefectModalOrder({ id: 'ALL', productName: 'Alle Produkte der Lieferung', quantity: 0 } as any);
+            setDefectNotes('');
+        } else if (Array.isArray(target) && target.length === 1) {
+            setDefectModalOrderOptions(null);
             setDefectModalOrder(target[0]);
             setDefectNotes(target[0].defectNotes || '');
-        } else {
+        } else if (!Array.isArray(target)) {
             setDefectModalOrderOptions(null);
             setDefectModalOrder(target);
             setDefectNotes(target.defectNotes || '');
@@ -304,13 +308,25 @@ export const Orders: React.FC = () => {
     const saveDefect = async () => {
         if (defectModalOrder && defectNotes.trim()) {
             try {
-                const updatedOrder: Order = {
-                    ...defectModalOrder,
-                    hasDefect: true,
-                    defectNotes: defectNotes.trim(),
-                    defectReportedAt: new Date().toISOString()
-                };
-                await DataService.updateOrder(updatedOrder);
+                if (defectModalOrder.id === 'ALL' && defectModalOrderOptions) {
+                    for (const order of defectModalOrderOptions) {
+                        const updatedOrder: Order = {
+                            ...order,
+                            hasDefect: true,
+                            defectNotes: defectNotes.trim(),
+                            defectReportedAt: new Date().toISOString()
+                        };
+                        await DataService.updateOrder(updatedOrder);
+                    }
+                } else {
+                    const updatedOrder: Order = {
+                        ...defectModalOrder,
+                        hasDefect: true,
+                        defectNotes: defectNotes.trim(),
+                        defectReportedAt: new Date().toISOString()
+                    };
+                    await DataService.updateOrder(updatedOrder);
+                }
                 await loadOrders();
                 closeDefectModal();
                 setNotification({ message: 'Mangel wurde erfolgreich gemeldet!', type: 'success' });
@@ -2208,10 +2224,15 @@ export const Orders: React.FC = () => {
                                     <select
                                         value={defectModalOrder.id}
                                         onChange={e => {
-                                            const selected = defectModalOrderOptions.find(o => o.id === e.target.value);
-                                            if (selected) {
-                                                setDefectModalOrder(selected);
-                                                setDefectNotes(selected.defectNotes || '');
+                                            if (e.target.value === 'ALL') {
+                                                setDefectModalOrder({ id: 'ALL', productName: 'Alle Produkte der Lieferung', quantity: 0 } as any);
+                                                setDefectNotes('');
+                                            } else {
+                                                const selected = defectModalOrderOptions.find(o => o.id === e.target.value);
+                                                if (selected) {
+                                                    setDefectModalOrder(selected);
+                                                    setDefectNotes(selected.defectNotes || '');
+                                                }
                                             }
                                         }}
                                         style={{
@@ -2222,6 +2243,7 @@ export const Orders: React.FC = () => {
                                             fontSize: 'var(--font-size-sm)'
                                         }}
                                     >
+                                        <option value="ALL">Alle Produkte der Lieferung</option>
                                         {defectModalOrderOptions.map(o => (
                                             <option key={o.id} value={o.id}>{o.productName} ({o.quantity}x)</option>
                                         ))}
@@ -2485,12 +2507,13 @@ export const Orders: React.FC = () => {
                                             </div>
                                             <button
                                                 onClick={() => {
-                                                    const updated = { ...editingOrder };
-                                                    delete updated.hasDefect;
-                                                    delete updated.defectNotes;
-                                                    delete updated.defectReportedAt;
-                                                    delete updated.defectResolved;
-                                                    setEditingOrder(updated);
+                                                    setEditingOrder({
+                                                        ...editingOrder,
+                                                        hasDefect: false,
+                                                        defectNotes: null as unknown as string,
+                                                        defectReportedAt: null as unknown as string,
+                                                        defectResolved: null as unknown as boolean
+                                                    });
                                                 }}
                                                 style={{
                                                     padding: '6px 12px',
