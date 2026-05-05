@@ -48,6 +48,8 @@ export const Orders: React.FC = () => {
 
     // Pagination State
     const [visibleReceivedCount, setVisibleReceivedCount] = useState(10);
+    const [searchOpenTerm, setSearchOpenTerm] = useState('');
+    const [searchReceivedTerm, setSearchReceivedTerm] = useState('');
     const [expandedReceivedOrders, setExpandedReceivedOrders] = useState<Set<string>>(new Set());
 
     const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
@@ -520,6 +522,11 @@ export const Orders: React.FC = () => {
     
     const openOrders = orders
         .filter(o => o.status === 'open')
+        .filter(o => {
+            if (!searchOpenTerm) return true;
+            const term = searchOpenTerm.toLowerCase();
+            return o.productName.toLowerCase().includes(term) || (o.supplierName && o.supplierName.toLowerCase().includes(term)) || (o.notes && o.notes.toLowerCase().includes(term));
+        })
         .sort((a, b) => {
             const now = new Date();
 
@@ -585,6 +592,11 @@ export const Orders: React.FC = () => {
 
     const receivedOrders = orders
         .filter(o => o.status === 'received')
+        .filter(o => {
+            if (!searchReceivedTerm) return true;
+            const term = searchReceivedTerm.toLowerCase();
+            return o.productName.toLowerCase().includes(term) || (o.supplierName && o.supplierName.toLowerCase().includes(term)) || (o.notes && o.notes.toLowerCase().includes(term));
+        })
         .sort((a, b) => {
             const aHasUnresolvedDefect = a.hasDefect && !a.defectResolved;
             const bHasUnresolvedDefect = b.hasDefect && !b.defectResolved;
@@ -1411,16 +1423,28 @@ export const Orders: React.FC = () => {
                     </div>
 
             <div style={{ marginBottom: 'var(--spacing-2xl)' }}>
-                <h3 style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--spacing-sm)',
-                    color: 'var(--color-primary)',
-                    marginBottom: 'var(--spacing-lg)'
-                }}>
-                    <Clock size={24} />
-                    Offene Bestellungen
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-lg)', flexWrap: 'wrap', gap: '16px' }}>
+                    <h3 style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--spacing-sm)',
+                        color: 'var(--color-primary)',
+                        margin: 0
+                    }}>
+                        <Clock size={24} />
+                        Offene Bestellungen
+                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-full)', padding: '6px 16px', border: '1px solid var(--color-border)', flex: '1 1 250px', maxWidth: '400px' }}>
+                        <Search size={18} color="var(--color-text-muted)" style={{ marginRight: '8px' }} />
+                        <input
+                            type="text"
+                            placeholder="Offene Bestellungen suchen..."
+                            value={searchOpenTerm}
+                            onChange={e => setSearchOpenTerm(e.target.value)}
+                            style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}
+                        />
+                    </div>
+                </div>
 
                 {openOrders.length === 0 ? (
                     <div style={{
@@ -1591,16 +1615,28 @@ export const Orders: React.FC = () => {
             </div>
 
             <div>
-                <h3 style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--spacing-sm)',
-                    color: 'var(--color-success)',
-                    marginBottom: 'var(--spacing-lg)'
-                }}>
-                    <CheckCircle size={24} />
-                    Erhaltene Bestellungen
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-lg)', flexWrap: 'wrap', gap: '16px' }}>
+                    <h3 style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--spacing-sm)',
+                        color: 'var(--color-success)',
+                        margin: 0
+                    }}>
+                        <CheckCircle size={24} />
+                        Erhaltene Bestellungen
+                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-full)', padding: '6px 16px', border: '1px solid var(--color-border)', flex: '1 1 250px', maxWidth: '400px' }}>
+                        <Search size={18} color="var(--color-text-muted)" style={{ marginRight: '8px' }} />
+                        <input
+                            type="text"
+                            placeholder="Erhaltene Bestellungen suchen..."
+                            value={searchReceivedTerm}
+                            onChange={e => setSearchReceivedTerm(e.target.value)}
+                            style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}
+                        />
+                    </div>
+                </div>
 
                 {receivedOrders.length === 0 ? (
                     <div style={{
