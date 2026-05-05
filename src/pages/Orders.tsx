@@ -724,11 +724,24 @@ export const Orders: React.FC = () => {
                                 </span>
                             )}
                         </div>
-                        <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--spacing-xs)' }}>
-                            Menge: {order.quantity} • Bestellt am: {new Date(order.date).toLocaleDateString('de-DE')}
-                            {order.supplierName && ` • Bei: ${order.supplierName}`}
-                            {order.orderNumber && ` • Nr: ${order.orderNumber}`}
-                            {order.price && ` • Preis: ${order.price.toFixed(2)} €`}
+                        <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ 
+                                backgroundColor: 'var(--color-primary)', 
+                                color: 'white', 
+                                padding: '2px 8px', 
+                                borderRadius: '12px', 
+                                fontWeight: 'bold',
+                                fontSize: '13px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                            }}>
+                                {order.quantity}x bestellt
+                            </span>
+                            <span>• Bestellt am: {new Date(order.date).toLocaleDateString('de-DE')}</span>
+                            {order.supplierName && <span>• Bei: {order.supplierName}</span>}
+                            {order.orderNumber && <span>• Nr: {order.orderNumber}</span>}
+                            {order.price && <span>• Preis: {order.price.toFixed(2)} €</span>}
                         </div>
                         {order.notes && (
                             <div style={{ fontSize: 'var(--font-size-sm)', fontStyle: 'italic', marginBottom: 'var(--spacing-xs)', color: 'var(--color-text-main)' }}>
@@ -1215,6 +1228,25 @@ export const Orders: React.FC = () => {
                                 }}
                             >
                                 Rückgängig
+                            </button>
+                            <button
+                                onClick={() => setEditingOrder(order)}
+                                style={{
+                                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--color-border)',
+                                    backgroundColor: 'white',
+                                    color: 'var(--color-text-main)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 'var(--spacing-xs)',
+                                    fontSize: 'var(--font-size-sm)',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                <Edit2 size={16} />
+                                Bearbeiten
                             </button>
                             <button
                                 onClick={() => handleRepeatOrder(order)}
@@ -2564,9 +2596,19 @@ export const Orders: React.FC = () => {
                                         </button>
                                         <button
                                             onClick={async () => {
+                                                const originalOrder = orders.find(o => o.id === editingOrder.id);
+                                                if (originalOrder && originalOrder.status === 'received' && originalOrder.quantity !== editingOrder.quantity) {
+                                                    const diff = editingOrder.quantity - originalOrder.quantity;
+                                                    const product = products.find(p => p.name === editingOrder.productName);
+                                                    if (product) {
+                                                        const updatedProduct = { ...product, stock: Math.max(0, (product.stock || 0) + diff) };
+                                                        await DataService.updateProduct(updatedProduct);
+                                                    }
+                                                }
                                                 await DataService.updateOrder(editingOrder);
                                                 setEditingOrder(null);
                                                 loadOrders();
+                                                loadProducts();
                                             }}
                                             style={{
                                                 padding: 'var(--spacing-sm) var(--spacing-md)',
