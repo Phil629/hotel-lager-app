@@ -233,6 +233,16 @@ export const Orders: React.FC = () => {
                 receivedAt: newStatus === 'received' ? new Date().toISOString() : undefined
             };
             await DataService.updateOrder(updatedOrder);
+            
+            // Update Product Stock
+            const product = products.find(p => p.name === order.productName);
+            if (product) {
+                const stockChange = newStatus === 'received' ? order.quantity : -order.quantity;
+                const updatedProduct = { ...product, stock: Math.max(0, (product.stock || 0) + stockChange) };
+                await DataService.updateProduct(updatedProduct);
+                loadProducts(); // Refresh products
+            }
+
             loadOrders();
         }
     };
@@ -607,7 +617,11 @@ export const Orders: React.FC = () => {
         setNotification({ message: 'KI-Änderung rückgängig gemacht.', type: 'info' });
     };
 
-    const renderOrderCard = (order: Order) => (
+    const renderOrderCard = (order: Order) => {
+        const currentProduct = products.find(p => p.name === order.productName);
+        const displayImage = currentProduct?.image || order.productImage;
+        
+        return (
         <div key={order.id} style={{
             backgroundColor: getOrderBackgroundColor(order),
             padding: 'var(--spacing-lg)',
@@ -617,9 +631,9 @@ export const Orders: React.FC = () => {
         }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', flex: 1 }}>
-                    {order.productImage ? (
+                    {displayImage ? (
                         <img
-                            src={order.productImage}
+                            src={displayImage}
                             alt={order.productName}
                             style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
                         />
@@ -1164,14 +1178,15 @@ export const Orders: React.FC = () => {
                             >
                                 <Plus size={16} />
                                 Wiederholen
-                            </button>
-                        </div>
-                    )}
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
-    );
-    const renderReceivedOrderCard = (order: Order) => {
+        );
+    };
+    const renderReceivedOrderCard = (order: Order) => {
         const hasUnresolvedDefect = order.hasDefect && !order.defectResolved;
         const isExpanded = expandedReceivedOrders.has(order.id) || hasUnresolvedDefect;
         
