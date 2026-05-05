@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2 } from 'lucide-react';
+import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 
 export const Orders: React.FC = () => {
@@ -41,6 +41,16 @@ export const Orders: React.FC = () => {
     // Pagination State
     const [visibleReceivedCount, setVisibleReceivedCount] = useState(10);
     const [expandedReceivedOrders, setExpandedReceivedOrders] = useState<Set<string>>(new Set());
+
+    const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
+    const toggleSupplier = (supplierKey: string) => {
+        setExpandedSuppliers(prev => {
+            const next = new Set(prev);
+            if (next.has(supplierKey)) next.delete(supplierKey);
+            else next.add(supplierKey);
+            return next;
+        });
+    };
 
     const toggleReceivedOrder = (id: string) => {
         setExpandedReceivedOrders(prev => {
@@ -1350,32 +1360,43 @@ export const Orders: React.FC = () => {
                                 return (p?.supplierId || o.supplierName || 'Sonstige / Einmalbestellungen') === supplierKey;
                             });
 
+                            const isExpanded = expandedSuppliers.has(supplierKey);
                             return (
                                 <div key={supplierKey} style={{
                                     backgroundColor: 'var(--color-surface)',
                                     borderRadius: 'var(--radius-lg)',
                                     border: '1px solid var(--color-border)',
-                                    overflow: 'hidden'
+                                    overflow: 'hidden',
+                                    transition: 'all 0.2s ease-in-out'
                                 }}>
                                     <div style={{
                                         padding: 'var(--spacing-md) var(--spacing-lg)',
                                         backgroundColor: '#f8fafc',
-                                        borderBottom: '1px solid var(--color-border)',
+                                        borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none',
                                         display: 'flex',
                                         justifyContent: 'space-between',
                                         alignItems: 'center',
                                         flexWrap: 'wrap',
                                         gap: 'var(--spacing-md)'
                                     }}>
-                                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', color: 'var(--color-text-main)' }}>
-                                            <Package size={18} color="var(--color-primary)" />
-                                            {supplierName}
-                                            <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#e2e8f0', color: '#475569', borderRadius: '12px', fontWeight: 600 }}>
-                                                {supplierOrders.length}
-                                            </span>
-                                        </h4>
+                                        <div 
+                                            onClick={() => toggleSupplier(supplierKey)}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', flex: 1 }}
+                                        >
+                                            <div style={{ color: 'var(--color-text-muted)' }}>
+                                                {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                                            </div>
+                                            <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', color: 'var(--color-text-main)' }}>
+                                                <Package size={18} color="var(--color-primary)" />
+                                                {supplierName}
+                                                <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#e2e8f0', color: '#475569', borderRadius: '12px', fontWeight: 600 }}>
+                                                    {supplierOrders.length}
+                                                </span>
+                                            </h4>
+                                        </div>
                                         <button 
-                                            onClick={async () => {
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
                                                 for (const o of supplierOrders) {
                                                     await toggleOrderStatus(o.id);
                                                 }
@@ -1399,9 +1420,11 @@ export const Orders: React.FC = () => {
                                             Komplette Lieferung erhalten
                                         </button>
                                     </div>
-                                    <div style={{ padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                        {supplierOrders.map(renderOrderCard)}
-                                    </div>
+                                    {isExpanded && (
+                                        <div style={{ padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                            {supplierOrders.map(renderOrderCard)}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
