@@ -87,7 +87,14 @@ export const Suppliers: React.FC = () => {
                 phone: formData.phone,
                 url: formData.url,
                 notes: formData.notes || [],
-                documents: formData.documents || []
+                documents: formData.documents || [],
+                loginUrl: formData.loginUrl,
+                loginUsername: formData.loginUsername,
+                loginPassword: formData.loginPassword,
+                preferredOrderMethod: formData.preferredOrderMethod,
+                orderEmail: formData.orderEmail,
+                orderPhone: formData.orderPhone,
+                orderUrl: formData.orderUrl
             } as Supplier;
 
             await DataService.saveSupplier(supplierToSave);

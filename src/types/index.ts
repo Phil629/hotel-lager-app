@@ -22,6 +22,9 @@ export interface Supplier {
   loginPassword?: string; // Optional password
   documents?: { name: string; url: string; date?: string; }[];
   preferredOrderMethod?: 'email' | 'link' | 'phone';
+  orderEmail?: string;
+  orderPhone?: string;
+  orderUrl?: string;
 }
 
 export interface Product {

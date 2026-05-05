@@ -27,7 +27,11 @@ const toSupabaseSupplier = (s: Supplier) => ({
     notes: s.notes ? JSON.stringify(s.notes) : null,
     login_url: s.loginUrl,
     login_username: s.loginUsername,
-    login_password: s.loginPassword
+    login_password: s.loginPassword,
+    preferred_order_method: s.preferredOrderMethod,
+    order_email: s.orderEmail,
+    order_phone: s.orderPhone,
+    order_url: s.orderUrl
 });
 
 const fromSupabaseSupplier = (s: any): Supplier => ({
@@ -43,7 +47,11 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     loginUrl: s.login_url,
     loginUsername: s.login_username,
     loginPassword: s.login_password,
-    documents: s.documents ? (typeof s.documents === 'string' ? JSON.parse(s.documents) : s.documents) : []
+    documents: s.documents ? (typeof s.documents === 'string' ? JSON.parse(s.documents) : s.documents) : [],
+    preferredOrderMethod: s.preferred_order_method,
+    orderEmail: s.order_email,
+    orderPhone: s.order_phone,
+    orderUrl: s.order_url
 });
 
 const toSupabaseProduct = (p: Product) => ({

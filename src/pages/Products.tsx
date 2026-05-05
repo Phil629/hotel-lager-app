@@ -1572,7 +1572,7 @@ export const Products: React.FC = () => {
 
                                 {/* Order Methods Wrapper */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                    {selectedProductForOrder.orderUrl && (
+                                    {(selectedProductForOrder.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.url) && (
                                         <div style={{
                                             backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                             padding: 'var(--spacing-md)',
@@ -1587,7 +1587,7 @@ export const Products: React.FC = () => {
                                                 )}
                                             </label>
                                             <a
-                                                href={selectedProductForOrder.orderUrl}
+                                                href={selectedProductForOrder.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 style={{
@@ -1611,7 +1611,7 @@ export const Products: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {(selectedProductForOrder.supplierPhone || (suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone)) && (
+                                    {(selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone) && (
                                         <div style={{
                                             backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                             padding: 'var(--spacing-md)',
@@ -1626,7 +1626,7 @@ export const Products: React.FC = () => {
                                                 )}
                                             </label>
                                             <a
-                                                href={`tel:${selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone}`}
+                                                href={`tel:${selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone}`}
                                                 style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -1643,7 +1643,7 @@ export const Products: React.FC = () => {
                                                 }}
                                             >
                                                 <Phone size={16} />
-                                                {selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone}
+                                                {selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone}
                                                 <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>(Anrufen)</span>
                                             </a>
                                         </div>
