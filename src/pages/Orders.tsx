@@ -37,6 +37,12 @@ export const Orders: React.FC = () => {
     const [emailSubject, setEmailSubject] = useState('');
     const [emailBody, setEmailBody] = useState('');
     const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
+
+    const getEffectiveOrderMethod = (product: Product) => {
+        if (product.preferredOrderMethod) return product.preferredOrderMethod;
+        const supplier = suppliers.find(s => s.id === product.supplierId);
+        return supplier?.preferredOrderMethod || 'email';
+    };
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
 
@@ -137,7 +143,7 @@ export const Orders: React.FC = () => {
     const handleProductSelect = (product: Product) => {
         const initialCart = [{ product, quantity: 1 }];
         setOrderCart(initialCart);
-        setIsOrderEmailExpanded(product.preferredOrderMethod === 'email');
+        setIsOrderEmailExpanded(getEffectiveOrderMethod(product) === 'email');
 
         const { subject, body } = generateEmailTemplate(initialCart);
         setEmailSubject(subject);
@@ -763,8 +769,8 @@ export const Orders: React.FC = () => {
                                                 alignItems: 'center',
                                                 gap: '6px',
                                                 padding: '6px 12px',
-                                                backgroundColor: product.preferredOrderMethod === 'link' ? 'var(--color-primary)' : 'white',
-                                                color: product.preferredOrderMethod === 'link' ? 'white' : 'var(--color-primary)',
+                                                backgroundColor: getEffectiveOrderMethod(product) === 'link' ? 'var(--color-primary)' : 'white',
+                                                color: getEffectiveOrderMethod(product) === 'link' ? 'white' : 'var(--color-primary)',
                                                 border: '1px solid var(--color-primary)',
                                                 borderRadius: '4px',
                                                 textDecoration: 'none',
@@ -774,7 +780,7 @@ export const Orders: React.FC = () => {
                                         >
                                             <ExternalLink size={14} />
                                             Zur Webseite {""}
-                                            {product.preferredOrderMethod === 'link' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
+                                            {getEffectiveOrderMethod(product) === 'link' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
                                     {order.supplierEmail && !product.autoOrder && (
@@ -787,8 +793,8 @@ export const Orders: React.FC = () => {
                                                 alignItems: 'center',
                                                 gap: '6px',
                                                 padding: '6px 12px',
-                                                backgroundColor: product.preferredOrderMethod === 'email' ? '#EA4335' : 'white',
-                                                color: product.preferredOrderMethod === 'email' ? 'white' : '#EA4335',
+                                                backgroundColor: getEffectiveOrderMethod(product) === 'email' ? '#EA4335' : 'white',
+                                                color: getEffectiveOrderMethod(product) === 'email' ? 'white' : '#EA4335',
                                                 border: '1px solid #EA4335',
                                                 borderRadius: '4px',
                                                 textDecoration: 'none',
@@ -798,7 +804,7 @@ export const Orders: React.FC = () => {
                                         >
                                             <Mail size={14} />
                                             Email / Gmail {""}
-                                            {product.preferredOrderMethod === 'email' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
+                                            {getEffectiveOrderMethod(product) === 'email' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
                                     {(order.supplierPhone || product.supplierPhone) && (
@@ -809,8 +815,8 @@ export const Orders: React.FC = () => {
                                                 alignItems: 'center',
                                                 gap: '6px',
                                                 padding: '6px 12px',
-                                                backgroundColor: product.preferredOrderMethod === 'phone' ? '#ff9800' : 'white',
-                                                color: product.preferredOrderMethod === 'phone' ? 'white' : '#ff9800',
+                                                backgroundColor: getEffectiveOrderMethod(product) === 'phone' ? '#ff9800' : 'white',
+                                                color: getEffectiveOrderMethod(product) === 'phone' ? 'white' : '#ff9800',
                                                 border: '1px solid #ff9800',
                                                 borderRadius: '4px',
                                                 textDecoration: 'none',
@@ -820,7 +826,7 @@ export const Orders: React.FC = () => {
                                         >
                                             <Phone size={14} />
                                             Anrufen {""}
-                                            {product.preferredOrderMethod === 'phone' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
+                                            {getEffectiveOrderMethod(product) === 'phone' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
                                 </div>

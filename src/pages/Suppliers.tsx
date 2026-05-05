@@ -1,6 +1,6 @@
 import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -17,7 +17,7 @@ export const Suppliers: React.FC = () => {
 
     // Form State
     const [formData, setFormData] = useState<Partial<Supplier>>({
-        name: '', contactName: '', email: '', phone: '', url: '', notes: []
+        name: '', contactName: '', email: '', phone: '', url: '', notes: [], preferredOrderMethod: 'email'
     });
     const [showPassword, setShowPassword] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -56,7 +56,7 @@ export const Suppliers: React.FC = () => {
             setSelectedProductIds(products.filter(p => p.supplierId === supplier.id).map(p => p.id));
         } else {
             setEditingSupplier(null);
-            setFormData({ name: '', contactName: '', email: '', phone: '', url: '', notes: [], documents: [] });
+            setFormData({ name: '', contactName: '', email: '', phone: '', url: '', notes: [], documents: [], preferredOrderMethod: 'email' });
             setSelectedProductIds([]);
         }
         setIsModalOpen(true);
@@ -350,6 +350,21 @@ export const Suppliers: React.FC = () => {
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Webseite / Login-Portal URL</label>
                                             <input type="text" value={formData.url || ''} onChange={e => setFormData({ ...formData, url: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="www.beispiel.de" />
+                                        </div>
+                                    </div>
+
+                                    <div style={{ marginTop: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Standard Bestellweg für diesen Lieferanten</label>
+                                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                <input type="radio" name="pom_supplier" value="email" checked={formData.preferredOrderMethod === 'email' || !formData.preferredOrderMethod} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'email' })} /> <Mail size={16}/> Email
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                <input type="radio" name="pom_supplier" value="link" checked={formData.preferredOrderMethod === 'link'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'link' })} /> <ExternalLink size={16}/> Webshop (Link)
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                <input type="radio" name="pom_supplier" value="phone" checked={formData.preferredOrderMethod === 'phone'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'phone' })} /> <Phone size={16}/> Telefon
+                                            </label>
                                         </div>
                                     </div>
                                 </div>

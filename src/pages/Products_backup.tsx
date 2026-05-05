@@ -4,7 +4,7 @@ import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase } from '../services/supabase';
-import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -67,7 +67,7 @@ export const Products: React.FC = () => {
         price: 0,
         autoOrder: false,
         notes: [],
-        preferredOrderMethod: undefined
+        preferredOrderMethod: 'email'
     });
     const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
         const [newSupplier, setNewSupplier] = useState<Partial<Supplier>>({
@@ -84,12 +84,6 @@ export const Products: React.FC = () => {
     const [showIoTLink, setShowIoTLink] = useState<{ product: Product, curl: string, powershell: string } | null>(null);
     const [qrTab, setQrTab] = useState<'api' | 'order' | 'stock'>('api');
     const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
-
-    const getEffectiveOrderMethod = (product: Product) => {
-        if (product.preferredOrderMethod) return product.preferredOrderMethod;
-        const supplier = suppliers.find(s => s.id === product.supplierId);
-        return supplier?.preferredOrderMethod || 'email';
-    };
     const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
         
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -103,12 +97,8 @@ export const Products: React.FC = () => {
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState("");
+    const [searchTerm, setSearchTerm] = useState('');
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
-    const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>({});
-    const [expandedProductsLimit, setExpandedProductsLimit] = useState<Record<string, boolean>>({});
-    const toggleSupplier = (id: string) => setExpandedSuppliers(prev => ({...prev, [id]: prev[id] === false ? true : false}));
-    const toggleProductLimit = (id: string) => setExpandedProductsLimit(prev => ({...prev, [id]: !prev[id]}));
 
 
 
@@ -339,7 +329,7 @@ export const Products: React.FC = () => {
     };
 
     const handleOrderClick = (product: Product) => {
-        const initialCart = [{ product, quantity: product.standardOrderQuantity || 1 }];
+        const initialCart = [{ product, quantity: 1 }];
         setOrderCart(initialCart);
         setOrderDate(new Date().toISOString().split('T')[0]);
         setOrderNotes('');
@@ -353,7 +343,7 @@ export const Products: React.FC = () => {
 
     const addToCart = (product: Product) => {
         setOrderCart(prev => {
-            const newCart = [...prev, { product, quantity: product.standardOrderQuantity || 1 }];
+            const newCart = [...prev, { product, quantity: 1 }];
             const { subject, body } = generateEmailTemplate(newCart);
             setEmailSubject(subject);
             setEmailBody(body);
@@ -437,7 +427,7 @@ export const Products: React.FC = () => {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, standardOrderQuantity: undefined, ignoreOrderProposals: false, price: 0, autoOrder: false, notes: [], preferredOrderMethod: undefined });
+        setNewProduct({ category: '', unit: '', stock: 0, minStock: 0, standardOrderQuantity: undefined, ignoreOrderProposals: false, price: 0, autoOrder: false, notes: [], preferredOrderMethod: 'email' });
         setEditingId(null);
         // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
@@ -676,261 +666,315 @@ export const Products: React.FC = () => {
             </div>
 
             {
-                filteredProducts.length === 0 ? (
-                    <div style={{ padding: '40px', textAlign: 'center', backgroundColor: 'white', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)' }}>
-                        <ShoppingCart size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
-                        <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-main)' }}>Keine Produkte gefunden</h3>
-                        <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Versuche einen anderen Suchbegriff oder passe die Filter an.</p>
+                isMobile ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
+                        {filteredProducts.map(product => (
+                            <div key={product.id} style={{
+                                backgroundColor: 'white',
+                                borderRadius: 'var(--radius-xl)',
+                                padding: 'var(--spacing-lg)',
+                                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)',
+                                border: '1px solid var(--color-border)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 'var(--spacing-md)',
+                                position: 'relative',
+                                overflow: 'hidden'
+                            }}>
+                                {/* Mobile Low Stock Indicator */}
+                                {product.stock <= (product.minStock || 0) && (
+                                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', backgroundColor: '#ef4444' }} />
+                                )}
+                                
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+                                        {product.image && (
+                                            <div style={{ position: 'relative' }}>
+                                                <img src={product.image} alt={product.name} style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: 'var(--radius-md)', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }} />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <div style={{ fontWeight: 700, fontSize: 'var(--font-size-lg)', color: 'var(--color-text-main)', marginBottom: '4px' }}>{product.name}</div>
+                                            <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                                                {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' }}>
+                                    <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Bestand</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div style={{ fontSize: '20px', fontWeight: 800, color: product.stock <= (product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)' }}>
+                                                {product.stock}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Gesamtwert</div>
+                                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--color-text-main)' }}>
+                                            {product.price ? (product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                    <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', color: 'var(--color-text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
+                                        <Edit2 size={16} /> Edit
+                                    </button>
+                                    <button onClick={() => handleDeleteClick(product.id)} style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Trash2 size={18} />
+                                    </button>
+                                    <button onClick={() => handleOrderClick(product)} style={{ flex: '2 1 100%', padding: '12px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 600, boxShadow: '0 2px 4px 0 rgba(37, 99, 235, 0.2)' }}>
+                                        <ShoppingCart size={18} /> Bestellen
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        {Array.from(new Set(filteredProducts.map(p => p.supplierId || 'unsorted'))).map(supplierId => {
-                            const supProds = filteredProducts.filter(p => (p.supplierId || 'unsorted') === supplierId);
-                            const isUnsorted = supplierId === 'unsorted';
-                            const supplier = isUnsorted ? undefined : suppliers.find(s => s.id === supplierId);
-                            const supplierName = supplier?.name || "Ohne Lieferant (Unkategorisiert)";
-                            
-                            const isExpanded = expandedSuppliers[supplierId] !== false; // default true
-                            const showAll = expandedProductsLimit[supplierId] === true || showLowStockOnly || searchTerm.trim() !== ""; // auto-expand if filtering
-                            const visibleProds = showAll ? supProds : supProds.slice(0, 5);
-                            const hasMore = supProds.length > 5;
-
-                            return (
-                                <div key={supplierId} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-xl)', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-                                    <div 
-                                        onClick={() => toggleSupplier(supplierId)}
-                                        style={{ padding: '16px 24px', backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    <div style={{
+                        backgroundColor: 'white',
+                        borderRadius: 'var(--radius-xl)',
+                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)',
+                        border: '1px solid var(--color-border)',
+                        overflow: 'hidden'
+                    }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)' }}>
+                                <tr>
+                                    <th style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
+                                    <th
+                                        onClick={() => handleSort('name')}
+                                        style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
                                     >
-                                        <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><Building2 size={20} /></div>
-                                            {supplierName} 
-                                            <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#e2e8f0', borderRadius: '12px', color: '#475569', fontWeight: 600 }}>{supProds.length} Produkte</span>
-                                        </h2>
-                                        <button style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer' }}>
-                                            <ChevronDown style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', color: '#64748b' }} />
-                                        </button>
-                                    </div>
-                                    
-                                    {isExpanded && (
-                                        <>
-                                            {isMobile ? (
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', padding: '16px', backgroundColor: '#f1f5f9' }}>
-                                                    {visibleProds.map(product => (
-                                                        <div key={product.id} style={{
-                                                            backgroundColor: 'white',
-                                                            borderRadius: 'var(--radius-xl)',
-                                                            padding: 'var(--spacing-lg)',
-                                                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)',
-                                                            border: '1px solid var(--color-border)',
-                                                            display: 'flex',
-                                                            flexDirection: 'column',
-                                                            gap: 'var(--spacing-md)',
-                                                            position: 'relative'
-                                                        }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                                                <div style={{ display: 'flex', gap: 'var(--spacing-md)', flex: 1 }}>
-                                                                    {product.image ? (
-                                                                        <img src={product.image} alt={product.name} style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
-                                                                    ) : (
-                                                                        <div style={{ width: '60px', height: '60px', backgroundColor: '#f1f5f9', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                                                                            <ShoppingCart size={24} />
-                                                                        </div>
-                                                                    )}
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 700, color: 'var(--color-text-main)' }}>{product.name}</h3>
-                                                                        <div style={{ color: '#64748b', fontSize: '14px', fontWeight: 500 }}>
-                                                                            {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' }}>
-                                                                <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
-                                                                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Bestand</div>
-                                                                    <div style={{ fontSize: '20px', fontWeight: 800, color: product.stock <= (product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)' }}>
-                                                                        {product.stock}
-                                                                    </div>
-                                                                </div>
-                                                                <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
-                                                                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Gesamtwert</div>
-                                                                    <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--color-text-main)' }}>
-                                                                        {product.price ? (product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
-                                                                {product.orderUrl && (
-                                                                    <button onClick={() => window.open(product.orderUrl, '_blank')} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 600, transition: 'background-color 0.2s' }}>
-                                                                        <ExternalLink size={16} /> Webshop
-                                                                    </button>
-                                                                )}
-                                                                {(product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email) && (
-                                                                    <button onClick={() => window.location.href = `mailto:${product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email}`} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
-                                                                        <Mail size={16} /> E-Mail
-                                                                    </button>
-                                                                )}
-                                                                {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
-                                                                    <button onClick={() => window.location.href = `tel:${product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone}`} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
-                                                                        <Phone size={16} /> Anrufen
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-                                                                <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', color: 'var(--color-text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
-                                                                    <Edit2 size={16} /> Edit
-                                                                </button>
-                                                                <button onClick={() => handleDeleteClick(product.id)} style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                    <Trash2 size={18} />
-                                                                </button>
-                                                                <button onClick={() => handleOrderClick(product)} style={{ flex: '2 1 100%', padding: '12px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 600, boxShadow: '0 2px 4px 0 rgba(37, 99, 235, 0.2)' }}>
-                                                                    <ShoppingCart size={18} /> Bestellen
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            Name {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} style={{ opacity: 0.3 }} />}
+                                        </div>
+                                    </th>
+                                    <th
+                                        onClick={() => handleSort('stock')}
+                                        style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            Bestand & Wert {sortConfig.key === 'stock' ? (sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} style={{ opacity: 0.3 }} />}
+                                        </div>
+                                    </th>
+                                    <th style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kontakt / Links</th>
+                                    <th style={{ padding: '16px', textAlign: 'center', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Aktion</th>
+                                    <th style={{ padding: '16px', textAlign: 'right', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredProducts.map((product, index) => {
+                                    const isLastRows = index >= filteredProducts.length - 2 && filteredProducts.length > 3;
+                                    return (
+                                        <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background-color 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                            <td style={{ padding: '16px' }}>
+                                                {product.image ? (
+                                                    <img
+                                                        src={product.image}
+                                                        alt={product.name}
+                                                        style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: 'var(--radius-md)', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', border: '1px solid var(--color-border)' }}
+                                                    />
+                                                ) : (
+                                                    <div style={{ width: '48px', height: '48px', backgroundColor: '#f1f5f9', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                                                        <ShoppingCart size={20} />
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '16px', minWidth: '220px' }}>
+                                                <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--color-text-main)', marginBottom: '2px' }}>{product.name}</div>
+                                                <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 500 }}>
+                                                    {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
                                                 </div>
-                                            ) : (
-                                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)' }}>
-                                                        <tr>
-                                                            <th style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
-                                                            <th
-                                                                onClick={() => handleSort('name')}
-                                                                style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-                                                            >
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                    Name {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} style={{ opacity: 0.3 }} />}
-                                                                </div>
-                                                            </th>
-                                                            <th
-                                                                onClick={() => handleSort('stock')}
-                                                                style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-                                                            >
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                    Bestand & Wert {sortConfig.key === 'stock' ? (sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} style={{ opacity: 0.3 }} />}
-                                                                </div>
-                                                            </th>
-                                                            <th style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kontakt / Links</th>
-                                                            <th style={{ padding: '16px', textAlign: 'center', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Aktion</th>
-                                                            <th style={{ padding: '16px', textAlign: 'right', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {visibleProds.map((product, index) => {
-                                                            const isLastRows = index >= visibleProds.length - 2 && visibleProds.length > 3;
-                                                            return (
-                                                                <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background-color 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                                                    <td style={{ padding: '16px' }}>
-                                                                        {product.image ? (
-                                                                            <img src={product.image} alt={product.name} style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: 'var(--radius-md)', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', border: '1px solid var(--color-border)' }} />
-                                                                        ) : (
-                                                                            <div style={{ width: '48px', height: '48px', backgroundColor: '#f1f5f9', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                                                                                <ShoppingCart size={20} />
-                                                                            </div>
-                                                                        )}
-                                                                    </td>
-                                                                    <td style={{ padding: '16px', minWidth: '220px' }}>
-                                                                        <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--color-text-main)', marginBottom: '2px' }}>{product.name}</div>
-                                                                        <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 500 }}>
-                                                                            {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
-                                                                        </div>
-                                                                        
-                                                                        {(() => {
-                                                                            const _supp = suppliers.find(s => s.id === product.supplierId);
-                                                                            if (_supp?.notes) {
-                                                                                return (_supp.notes.filter(n => n.showOnOpenOrders) || []).map(n => (
-                                                                                    <div key={n.id} style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 8px', borderRadius: '4px', marginTop: '6px', fontSize: '11px', display: 'inline-block', marginRight: '4px' }}><strong>Lieferant:</strong> {n.text}</div>
-                                                                                ));
-                                                                            }
-                                                                            return null;
-                                                                        })()}
-                                                                        {(product.notes || []).filter(n => n.showOnOpenOrders).map(n => (
-                                                                            <div key={n.id} style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 8px', borderRadius: '4px', marginTop: '6px', fontSize: '11px', display: 'inline-block', marginRight: '4px' }}><strong>Notiz:</strong> {n.text}</div>
-                                                                        ))}
-                                                                    </td>
-                                                                    <td style={{ padding: '16px' }}>
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                            <div style={{ display: 'inline-flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', width: 'fit-content' }}>
-                                                                                <button onClick={() => handleStockUpdate(product, Math.max(0, product.stock - 1))} style={{ padding: '6px 12px', border: 'none', background: '#f8fafc', cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: '#64748b', transition: 'background 0.2s', borderRight: '1px solid var(--color-border)' }}>−</button>
-                                                                                <input type="number" value={product.stock} min={0} onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))} style={{ width: '50px', textAlign: 'center', fontSize: '15px', fontWeight: 800, border: 'none', padding: '6px 4px', color: product.stock <= (product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)', background: 'transparent', outline: 'none', MozAppearance: 'textfield' }} />
-                                                                                <button onClick={() => handleStockUpdate(product, product.stock + 1)} style={{ padding: '6px 12px', border: 'none', background: '#f8fafc', cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: 'var(--color-primary)', transition: 'background 0.2s', borderLeft: '1px solid var(--color-border)' }}>+</button>
-                                                                            </div>
-                                                                            {product.price && (
-                                                                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, paddingLeft: '4px' }}>
-                                                                                    ∑ {(product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    </td>
-                                                                    <td style={{ padding: '16px' }}>
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                            {product.orderUrl && (
-                                                                                <button onClick={() => window.open(product.orderUrl, '_blank')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#1d4ed8', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: '6px 10px', backgroundColor: '#eff6ff', borderRadius: '6px', width: 'fit-content' }}>
-                                                                                    <ExternalLink size={14} /> Webshop
-                                                                                </button>
-                                                                            )}
-                                                                            {(product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email) && (
-                                                                                <button onClick={() => window.location.href = `mailto:${product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '13px', padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '6px', width: 'fit-content', fontWeight: 500 }}>
-                                                                                    <Mail size={14} /> E-Mail
-                                                                                </button>
-                                                                            )}
-                                                                            {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
-                                                                                <button onClick={() => window.location.href = `tel:${product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '13px', padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '6px', width: 'fit-content', fontWeight: 500 }}>
-                                                                                    <Phone size={14} /> Anrufen
-                                                                                </button>
-                                                                            )}
-                                                                            {!product.orderUrl && !product.emailOrderAddress && !product.supplierPhone && (
-                                                                                <div style={{ color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>Keine Info</div>
-                                                                            )}
-                                                                        </div>
-                                                                    </td>
-                                                                    <td style={{ padding: '16px', textAlign: 'center' }}>
-                                                                        <button onClick={() => handleOrderClick(product)} style={{ backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 'var(--radius-full)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'transform 0.1s' }} onMouseOver={e => e.currentTarget.style.transform='translateY(-1px)'} onMouseOut={e => e.currentTarget.style.transform='translateY(0)'}>
-                                                                            <ShoppingCart size={16} /> Bestellen
-                                                                        </button>
-                                                                    </td>
-                                                                    <td style={{ padding: '16px', textAlign: 'right', position: 'relative' }}>
-                                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                                                                            <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} style={{ background: 'white', border: '1px solid var(--color-border)', color: '#475569', padding: '8px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Edit2 size={16} /></button>
-                                                                            <button onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)} style={{ background: 'white', border: '1px solid var(--color-border)', color: '#475569', padding: '8px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Settings size={16} /></button>
-                                                                        </div>
-                                                                        {openSettingsId === product.id && (
-                                                                            <>
-                                                                                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }} onClick={() => setOpenSettingsId(null)} />
-                                                                                <div style={{ position: 'absolute', right: '16px', ...(isLastRows ? { bottom: '100%', marginBottom: '8px' } : { top: '100%', marginTop: '8px' }), backgroundColor: 'white', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--color-border)', zIndex: 20, minWidth: '180px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                                                                                    <button onClick={() => { const links = getIoTLink(product); if (links) { setShowIoTLink(links); setOpenSettingsId(null); } }} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', borderBottom: '1px solid var(--color-border)', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'var(--color-text-main)', fontSize: '14px', fontWeight: 500 }}><Wifi size={16} /> IoT Setup / QR</button>
-                                                                                    <button onClick={() => handleDeleteClick(product.id)} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#ef4444', fontSize: '14px', fontWeight: 500 }}><Trash2 size={16} /> Produkt löschen</button>
-                                                                                </div>
-                                                                            </>
-                                                                        )}
-                                                                    </td>
-                                                                </tr>
-                                                            );
-                                                        })}
-                                                    </tbody>
-                                                </table>
-                                            )}
-                                            
-                                            {hasMore && (
-                                                <div style={{ borderTop: '1px solid var(--color-border)', backgroundColor: '#f8fafc' }}>
-                                                    <button 
-                                                        onClick={() => toggleProductLimit(supplierId)}
-                                                        style={{ width: '100%', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                                
+                                                {(() => {
+                                                    const supplier = suppliers.find(s => s.id === product.supplierId);
+                                                    if (supplier?.notes) {
+                                                        return (supplier.notes.filter(n => n.showOnOpenOrders) || []).map(n => (
+                                                            <div key={n.id} style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 8px', borderRadius: '4px', marginTop: '6px', fontSize: '11px', display: 'inline-block', marginRight: '4px' }}>
+                                                                <strong>Lieferant:</strong> {n.text}
+                                                            </div>
+                                                        ));
+                                                    }
+                                                    return null;
+                                                })()}
+                                                {(product.notes || []).filter(n => n.showOnOpenOrders).map(n => (
+                                                    <div key={n.id} style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 8px', borderRadius: '4px', marginTop: '6px', fontSize: '11px', display: 'inline-block', marginRight: '4px' }}>
+                                                        <strong>Notiz:</strong> {n.text}
+                                                    </div>
+                                                ))}
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <div style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        backgroundColor: 'white',
+                                                        border: '1px solid var(--color-border)',
+                                                        borderRadius: 'var(--radius-full)',
+                                                        overflow: 'hidden',
+                                                        boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+                                                        width: 'fit-content'
+                                                    }}>
+                                                        <button
+                                                            onClick={() => handleStockUpdate(product, Math.max(0, product.stock - 1))}
+                                                            style={{ padding: '6px 12px', border: 'none', background: '#f8fafc', cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: '#64748b', transition: 'background 0.2s', borderRight: '1px solid var(--color-border)' }}
+                                                            onMouseOver={e => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+                                                            onMouseOut={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                                                        >−</button>
+                                                        <input
+                                                            type="number"
+                                                            value={product.stock}
+                                                            min={0}
+                                                            onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))}
+                                                            style={{
+                                                                width: '50px',
+                                                                textAlign: 'center',
+                                                                fontSize: '15px',
+                                                                fontWeight: 800,
+                                                                border: 'none',
+                                                                padding: '6px 4px',
+                                                                color: product.stock <= (product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)',
+                                                                background: 'transparent',
+                                                                outline: 'none',
+                                                                MozAppearance: 'textfield'
+                                                            }}
+                                                        />
+                                                        <button
+                                                            onClick={() => handleStockUpdate(product, product.stock + 1)}
+                                                            style={{ padding: '6px 12px', border: 'none', background: '#f8fafc', cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: 'var(--color-primary)', transition: 'background 0.2s', borderLeft: '1px solid var(--color-border)' }}
+                                                            onMouseOver={e => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+                                                            onMouseOut={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                                                        >+</button>
+                                                    </div>
+                                                    {product.price && (
+                                                        <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, paddingLeft: '4px' }}>
+                                                            ∑ {(product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    {product.orderUrl && (
+                                                        <a href={product.orderUrl} target="_blank" rel="noopener noreferrer"
+                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', textDecoration: 'none', fontSize: '13px', fontWeight: 500, padding: '4px 8px', backgroundColor: '#eff6ff', borderRadius: '6px', width: 'fit-content' }}>
+                                                            <ExternalLink size={14} /> Webshop
+                                                        </a>
+                                                    )}
+                                                    {product.emailOrderAddress && (
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '13px', padding: '4px 8px', backgroundColor: '#f1f5f9', borderRadius: '6px', width: 'fit-content' }}>
+                                                            <Mail size={14} /> {product.emailOrderAddress}
+                                                        </div>
+                                                    )}
+                                                    {product.supplierPhone && (
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '13px', padding: '4px 8px', backgroundColor: '#f1f5f9', borderRadius: '6px', width: 'fit-content' }}>
+                                                            <Phone size={14} /> {product.supplierPhone}
+                                                        </div>
+                                                    )}
+                                                    {!product.orderUrl && !product.emailOrderAddress && !product.supplierPhone && (
+                                                         <div style={{ color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>Keine Info</div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '16px', textAlign: 'center' }}>
+                                                <button
+                                                    onClick={() => handleOrderClick(product)}
+                                                    style={{
+                                                        backgroundColor: 'var(--color-primary)',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        padding: '10px 18px',
+                                                        borderRadius: 'var(--radius-full)',
+                                                        cursor: 'pointer',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '8px',
+                                                        fontWeight: 600,
+                                                        boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2), 0 2px 4px -2px rgba(37, 99, 235, 0.2)',
+                                                        transition: 'transform 0.1s, box-shadow 0.1s'
+                                                    }}
+                                                    onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 8px -1px rgba(37, 99, 235, 0.3)'; }}
+                                                    onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(37, 99, 235, 0.2)'; }}
+                                                >
+                                                    <ShoppingCart size={16} />
+                                                    Bestellen
+                                                </button>
+                                            </td>
+                                            <td style={{ padding: '16px', textAlign: 'right', position: 'relative' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                                    <button
+                                                        onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }}
+                                                        style={{ background: 'none', border: '1px solid var(--color-border)', backgroundColor: 'white', color: '#475569', padding: '8px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' }}
                                                     >
-                                                        {showAll ? <><ChevronDown style={{transform:'rotate(180deg)'}} size={16}/> Wieder einklappen</> : <><ChevronDown size={16}/> Alle {supProds.length} Produkte anzeigen</>}
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)}
+                                                        style={{ background: 'none', border: '1px solid var(--color-border)', backgroundColor: 'white', color: '#475569', padding: '8px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' }}
+                                                    >
+                                                        <Settings size={16} />
                                                     </button>
                                                 </div>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            );
-                        })}
+
+                                                {openSettingsId === product.id && (
+                                                    <>
+                                                        <div
+                                                            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
+                                                            onClick={() => setOpenSettingsId(null)}
+                                                        />
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            right: '16px',
+                                                            ...(isLastRows
+                                                                ? { bottom: '100%', marginBottom: '8px' }
+                                                                : { top: '100%', marginTop: '8px' }
+                                                            ),
+                                                            backgroundColor: 'white',
+                                                            borderRadius: 'var(--radius-lg)',
+                                                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                                                            border: '1px solid var(--color-border)',
+                                                            zIndex: 20,
+                                                            minWidth: '180px',
+                                                            overflow: 'hidden',
+                                                            display: 'flex',
+                                                            flexDirection: 'column'
+                                                        }}>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const links = getIoTLink(product);
+                                                                    if (links) { setShowIoTLink(links); setOpenSettingsId(null); }
+                                                                }}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', borderBottom: '1px solid var(--color-border)', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'var(--color-text-main)', fontSize: '14px', fontWeight: 500 }}
+                                                                onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                                                                onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                <Wifi size={16} /> IoT Setup / QR
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteClick(product.id)}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#ef4444', fontSize: '14px', fontWeight: 500 }}
+                                                                onMouseOver={e => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                                                                onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                <Trash2 size={16} /> Produkt löschen
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table >
                     </div>
                 )
             }
+
             {
                 isModalOpen && (
                     <div style={{
@@ -1279,7 +1323,6 @@ export const Products: React.FC = () => {
                                             <div>
                                                 <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Präferierter Bestellweg (bei Klick auf Bestellen)</label>
                                                 <div style={{ display: 'flex', gap: 'var(--spacing-md)', backgroundColor: 'white', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="" checked={!newProduct.preferredOrderMethod} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: undefined })} /> Vom Lieferanten übernehmen</label>
                                                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="email" checked={newProduct.preferredOrderMethod === 'email'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'email' })} /> <Mail size={16}/> Email</label>
                                                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="link" checked={newProduct.preferredOrderMethod === 'link'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'link' })} /> <ExternalLink size={16}/> Webshop (Link)</label>
                                                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="phone" checked={newProduct.preferredOrderMethod === 'phone'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'phone' })} /> <Phone size={16}/> Telefon</label>
@@ -1574,15 +1617,15 @@ export const Products: React.FC = () => {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                     {selectedProductForOrder.orderUrl && (
                                         <div style={{
-                                            backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                            backgroundColor: selectedProductForOrder.preferredOrderMethod === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                             padding: 'var(--spacing-md)',
                                             borderRadius: 'var(--radius-md)',
-                                            border: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                            order: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? -1 : 0
+                                            border: selectedProductForOrder.preferredOrderMethod === 'link' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                            order: selectedProductForOrder.preferredOrderMethod === 'link' ? -1 : 0
                                         }}>
                                             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
                                                 Bestelllink:
-                                                {getEffectiveOrderMethod(selectedProductForOrder) === 'link' && (
+                                                {selectedProductForOrder.preferredOrderMethod === 'link' && (
                                                     <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                 )}
                                             </label>
@@ -1598,8 +1641,8 @@ export const Products: React.FC = () => {
                                                     padding: 'var(--spacing-sm)',
                                                     borderRadius: 'var(--radius-sm)',
                                                     border: '1px solid var(--color-border)',
-                                                    backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? 'var(--color-primary)' : 'var(--color-surface)',
-                                                    color: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? 'white' : 'var(--color-text-main)',
+                                                    backgroundColor: selectedProductForOrder.preferredOrderMethod === 'link' ? 'var(--color-primary)' : 'var(--color-surface)',
+                                                    color: selectedProductForOrder.preferredOrderMethod === 'link' ? 'white' : 'var(--color-text-main)',
                                                     cursor: 'pointer',
                                                     fontWeight: 500,
                                                     textDecoration: 'none'
@@ -1613,15 +1656,15 @@ export const Products: React.FC = () => {
 
                                     {(selectedProductForOrder.supplierPhone || (suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone)) && (
                                         <div style={{
-                                            backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                            backgroundColor: selectedProductForOrder.preferredOrderMethod === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                             padding: 'var(--spacing-md)',
                                             borderRadius: 'var(--radius-md)',
-                                            border: getEffectiveOrderMethod(selectedProductForOrder) === 'phone' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                            order: getEffectiveOrderMethod(selectedProductForOrder) === 'phone' ? -1 : 0
+                                            border: selectedProductForOrder.preferredOrderMethod === 'phone' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                            order: selectedProductForOrder.preferredOrderMethod === 'phone' ? -1 : 0
                                         }}>
                                             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
                                                 Telefonische Bestellung:
-                                                {getEffectiveOrderMethod(selectedProductForOrder) === 'phone' && (
+                                                {selectedProductForOrder.preferredOrderMethod === 'phone' && (
                                                     <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                 )}
                                             </label>
@@ -1651,7 +1694,7 @@ export const Products: React.FC = () => {
 
                                     {selectedProductForOrder.emailOrderAddress && !selectedProductForOrder.autoOrder && (
                                         <>
-                                            {getEffectiveOrderMethod(selectedProductForOrder) !== 'email' && !isOrderEmailExpanded ? (
+                                            {selectedProductForOrder.preferredOrderMethod !== 'email' && !isOrderEmailExpanded ? (
                                                 <button
                                                     type="button"
                                                     onClick={() => setIsOrderEmailExpanded(true)}
@@ -1675,15 +1718,15 @@ export const Products: React.FC = () => {
                                                 </button>
                                             ) : (
                                                 <div style={{
-                                                    backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'email' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                                    backgroundColor: selectedProductForOrder.preferredOrderMethod === 'email' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                                     padding: 'var(--spacing-md)',
                                                     borderRadius: 'var(--radius-md)',
-                                                    border: getEffectiveOrderMethod(selectedProductForOrder) === 'email' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                    order: getEffectiveOrderMethod(selectedProductForOrder) === 'email' ? -1 : 0
+                                                    border: selectedProductForOrder.preferredOrderMethod === 'email' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                    order: selectedProductForOrder.preferredOrderMethod === 'email' ? -1 : 0
                                                 }}>
                                                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
                                                         Email Vorschau & Bearbeitung:
-                                                        {getEffectiveOrderMethod(selectedProductForOrder) === 'email' && (
+                                                        {selectedProductForOrder.preferredOrderMethod === 'email' && (
                                                             <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                         )}
                                                     </label>
