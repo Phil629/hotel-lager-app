@@ -1439,18 +1439,28 @@ export const Orders: React.FC = () => {
                             });
 
                             const isExpanded = expandedSuppliers.has(supplierKey);
+                            
+                            // Calculate supplier properties for styling
+                            const hasDefect = supplierOrders.some(o => o.hasDefect && !o.defectResolved);
+                            const isDelayed = supplierOrders.some(o => o.expectedDeliveryDate && new Date(o.expectedDeliveryDate).setHours(0,0,0,0) < new Date().setHours(0,0,0,0));
+                            const supplierDeliveryDate = supplierOrders.map(o => o.expectedDeliveryDate).find(d => !!d);
+                            
+                            const supplierBgColor = hasDefect ? '#fff3e0' : isDelayed ? '#ffebee' : '#f8fafc';
+                            const supplierBorderColor = hasDefect ? '#ff9800' : isDelayed ? '#f44336' : 'var(--color-border)';
+                            const iconColor = hasDefect ? '#ff9800' : isDelayed ? '#f44336' : 'var(--color-primary)';
+                            
                             return (
                                 <div key={supplierKey} style={{
                                     backgroundColor: 'var(--color-surface)',
                                     borderRadius: 'var(--radius-lg)',
-                                    border: '1px solid var(--color-border)',
+                                    border: `1px solid ${supplierBorderColor}`,
                                     overflow: 'hidden',
                                     transition: 'all 0.2s ease-in-out'
                                 }}>
                                     <div style={{
                                         padding: 'var(--spacing-md) var(--spacing-lg)',
-                                        backgroundColor: '#f8fafc',
-                                        borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none',
+                                        backgroundColor: supplierBgColor,
+                                        borderBottom: isExpanded ? `1px solid ${supplierBorderColor}` : 'none',
                                         display: 'flex',
                                         justifyContent: 'space-between',
                                         alignItems: 'center',
@@ -1464,12 +1474,27 @@ export const Orders: React.FC = () => {
                                             <div style={{ color: 'var(--color-text-muted)' }}>
                                                 {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                                             </div>
-                                            <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', color: 'var(--color-text-main)' }}>
-                                                <Package size={18} color="var(--color-primary)" />
+                                            <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', color: 'var(--color-text-main)', flexWrap: 'wrap' }}>
+                                                <Package size={18} color={iconColor} />
                                                 {supplierName}
                                                 <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#e2e8f0', color: '#475569', borderRadius: '12px', fontWeight: 600 }}>
                                                     {supplierOrders.length}
                                                 </span>
+                                                {hasDefect && (
+                                                    <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#ffe0b2', color: '#e65100', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <AlertTriangle size={12} /> Mangel
+                                                    </span>
+                                                )}
+                                                {isDelayed && (
+                                                    <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#ffcdd2', color: '#c62828', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <Clock size={12} /> Verspätet
+                                                    </span>
+                                                )}
+                                                {!isDelayed && supplierDeliveryDate && (
+                                                    <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#e3f2fd', color: '#1565c0', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <Calendar size={12} /> {new Date(supplierDeliveryDate).toLocaleDateString('de-DE')}
+                                                    </span>
+                                                )}
                                             </h4>
                                         </div>
                                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -2496,8 +2521,11 @@ export const Orders: React.FC = () => {
                                     <input
                                         type="number"
                                         min="1"
-                                        value={editingOrder.quantity}
-                                        onChange={e => setEditingOrder({ ...editingOrder, quantity: Number(e.target.value) })}
+                                        value={editingOrder.quantity === 0 ? '' : editingOrder.quantity}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setEditingOrder({ ...editingOrder, quantity: val === '' ? 0 : Number(val.replace(/^0+/, '')) || 0 });
+                                        }}
                                         style={{ width: '100%', padding: 'var(--spacing-sm)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                     />
                                 </div>
