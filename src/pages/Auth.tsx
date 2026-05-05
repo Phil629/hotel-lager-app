@@ -50,7 +50,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     };
 
     return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', width: '100vw', position: 'fixed', top: 0, left: 0, backgroundColor: 'var(--color-background)', zIndex: 9999 }}>
             <div style={{ width: '100%', maxWidth: '400px', backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-2xl)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', border: '1px solid var(--color-border)' }}>
                 <div style={{ textAlign: 'center', marginBottom: 'var(--spacing-xl)' }}>
                     <div style={{ width: '60px', height: '60px', backgroundColor: 'var(--color-primary)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto var(--spacing-md)' }}>
@@ -78,10 +78,12 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
 
                 <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
                     <div>
-                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>E-Mail Adresse</label>
+                        <label htmlFor="email" style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>E-Mail Adresse</label>
                         <input
                             type="email"
                             required
+                            id="email"
+                            name="email"
                             autoComplete={isLogin ? "username" : "email"}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -92,10 +94,12 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                     
                     {!isResetPassword && (
                         <div>
-                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Passwort</label>
+                            <label htmlFor="password" style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Passwort</label>
                             <input
                                 type="password"
                                 required
+                                id="password"
+                                name="password"
                                 autoComplete={isLogin ? "current-password" : "new-password"}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}

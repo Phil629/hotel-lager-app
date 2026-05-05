@@ -9,12 +9,14 @@ import { Statistics } from './pages/Statistics';
 import { Inventory } from './pages/Inventory';
 import { Auth } from './pages/Auth';
 import { Admin } from './pages/Admin';
+import { UpdatePassword } from './pages/UpdatePassword';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { supabase } from './services/supabase';
 
 function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isRecovery, setIsRecovery] = useState(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -45,7 +47,10 @@ function App() {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase!.auth.onAuthStateChange((_event, session) => {
+    } = supabase!.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true);
+      }
       checkBanStatus(session);
     });
 
@@ -54,6 +59,10 @@ function App() {
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f1f5f9' }}>Lade Anwendung...</div>;
+  }
+
+  if (isRecovery) {
+    return <UpdatePassword onSuccess={() => setIsRecovery(false)} />;
   }
 
   return (
