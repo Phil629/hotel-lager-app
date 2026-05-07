@@ -1,3 +1,19 @@
+export interface Company {
+  id: string;
+  name: string;
+  join_code: string;
+  created_at?: string;
+}
+
+export interface Profile {
+  id: string;
+  email?: string;
+  role: 'owner' | 'employee' | 'viewer' | 'admin';
+  company_id?: string;
+  is_banned?: boolean;
+  admin_notes?: string;
+}
+
 export interface Note {
   id: string;
   text: string;
@@ -8,6 +24,7 @@ export interface Note {
 export interface Supplier {
   is_auto_generated?: boolean;
   user_id?: string;
+  company_id?: string;
   id: string;
   name: string;
   contactName?: string;
@@ -31,6 +48,7 @@ export interface Supplier {
 export interface Product {
   is_auto_generated?: boolean;
   user_id?: string;
+  company_id?: string;
   id: string;
   name: string;
   category?: string;
@@ -62,6 +80,7 @@ export interface Product {
 export interface Order {
   is_auto_generated?: boolean;
   user_id?: string;
+  company_id?: string;
   id: string;
   date: string; // ISO string
   productName: string;

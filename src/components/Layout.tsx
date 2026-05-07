@@ -23,7 +23,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-                if (data?.role === 'admin') setIsAdmin(true);
+                if (data?.role === 'admin' || data?.role === 'owner') setIsAdmin(true);
             }
         };
         checkAdmin();

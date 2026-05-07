@@ -37,6 +37,9 @@ export const Settings: React.FC = () => {
         logoUrl: ''
     });
     const [userId, setUserId] = useState<string>('');
+    const [role, setRole] = useState<string>('');
+    const [companyCode, setCompanyCode] = useState<string>('');
+    const [joinCodeInput, setJoinCodeInput] = useState<string>('');
     const [isMigrating, setIsMigrating] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
@@ -45,8 +48,18 @@ export const Settings: React.FC = () => {
 
     useEffect(() => {
         const stored = StorageService.getSettings();
-        supabase?.auth.getUser().then(({ data }) => {
-            if (data?.user) setUserId(data.user.id);
+        supabase?.auth.getUser().then(async ({ data }) => {
+            if (data?.user) {
+                setUserId(data.user.id);
+                const { data: profile } = await supabase.from('profiles').select('role, company_id').eq('id', data.user.id).single();
+                if (profile) {
+                    setRole(profile.role || 'user');
+                    if (profile.company_id) {
+                        const { data: company } = await supabase.from('companies').select('join_code').eq('id', profile.company_id).single();
+                        if (company) setCompanyCode(company.join_code);
+                    }
+                }
+            }
         });
         setSettings({
             serviceId: stored.serviceId || '',
@@ -76,6 +89,18 @@ export const Settings: React.FC = () => {
         setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
         // Give time for toast before reload
         setTimeout(() => window.location.reload(), 1500);
+    };
+
+    const handleJoinCompany = async () => {
+        if (!joinCodeInput || !supabase || !userId) return;
+        const { data: company } = await supabase.from('companies').select('id').eq('join_code', joinCodeInput).single();
+        if (company) {
+            await supabase.from('profiles').update({ company_id: company.id, role: 'employee' }).eq('id', userId);
+            setNotification({ message: 'Erfolgreich dem Unternehmen beigetreten!', type: 'success' });
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            setNotification({ message: 'Code ungültig oder Firma nicht gefunden.', type: 'error' });
+        }
     };
 
     const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,6 +252,7 @@ export const Settings: React.FC = () => {
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column' }}>
                 
                 {/* 1. Unternehmensprofil */}
+                {role === 'owner' && (
                 <SectionCard>
                     <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
                         <Building2 size={22} color="var(--color-primary)" /> Unternehmensprofil
@@ -329,10 +355,44 @@ export const Settings: React.FC = () => {
                         </div>
                     </div>
                 </SectionCard>
+                )}
 
-                {/* 2. Abo & Funktionen */}
+                {/* Team & Mitarbeiter */}
                 <SectionCard>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: 'var(--spacing-md)' }}>
+                        <Users size={22} color="var(--color-primary)" />
+                        <h3 style={{ margin: 0, color: 'var(--color-text)' }}>Team & Mitarbeiter</h3>
+                    </div>
+                    
+                    {role === 'owner' ? (
+                        <div>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Du bist Inhaber dieses Unternehmens. Gib deinen Mitarbeitern diesen Einladungs-Code, damit sie beitreten können:</p>
+                            <div style={{ display: 'inline-flex', gap: '10px', alignItems: 'center', backgroundColor: 'var(--color-background)', padding: '12px 24px', borderRadius: '8px', fontSize: '24px', fontWeight: 'bold', letterSpacing: '4px', border: '1px dashed var(--color-primary)' }}>
+                                {companyCode || 'Laden...'}
+                            </div>
+                            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '16px' }}>Mitarbeiter müssen sich einfach selbst einen Account anlegen und den Code hier in ihren Einstellungen eintragen.</p>
+                        </div>
+                    ) : (
+                        <div>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Möchtest du einem Unternehmen beitreten? Trage hier den Einladungs-Code deines Chefs ein:</p>
+                            <div style={{ display: 'flex', gap: '10px', maxWidth: '400px' }}>
+                                <input 
+                                    type="text" 
+                                    placeholder="Z.B. a1b2c3d4"
+                                    value={joinCodeInput}
+                                    onChange={e => setJoinCodeInput(e.target.value)}
+                                    style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '16px' }}
+                                />
+                                <button type="button" onClick={handleJoinCompany} className="button-primary">Beitreten</button>
+                            </div>
+                        </div>
+                    )}
+                </SectionCard>
+
+                {/* 2. Abo & Funktionen - Nur für Owner */}
+                {role === 'owner' && (
+                    <SectionCard>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
                             <SettingsIcon size={22} color="var(--color-primary)" /> Funktionen & Tarife
                         </h3>
