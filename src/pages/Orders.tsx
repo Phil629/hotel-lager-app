@@ -127,7 +127,7 @@ export const Orders: React.FC = () => {
         const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
         
         let subject = supplier?.emailSubjectTemplate || mainProduct.emailOrderSubject || `Bestellung: {product_name}`;
-        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nHotel Rezeption`;
+        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nEinkauf`;
 
         if (cart.length === 1) {
             subject = subject.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
@@ -361,7 +361,7 @@ export const Orders: React.FC = () => {
             `Bestelldatum: ${new Date(order.date).toLocaleDateString('de-DE')}\n\n` +
             `Mangelbeschreibung:\n${order.defectNotes || 'Keine Details angegeben'}\n\n` +
             `Mit freundlichen Grüßen\n` +
-            `Hotel Rezeption`
+            `Einkauf`
         );
 
         window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${order.supplierEmail}&su=${subject}&body=${body}`, '_blank');
@@ -1048,7 +1048,7 @@ export const Orders: React.FC = () => {
                                                                 `Bestelldatum: ${new Date(order.date).toLocaleDateString('de-DE')}\n\n` +
                                                                 `Mangelbeschreibung:\n${order.defectNotes || 'Keine Details angegeben'}\n\n` +
                                                                 `Mit freundlichen Grüßen\n` +
-                                                                `Hotel Rezeption`
+                                                                `Einkauf`
                                                             );
                                                             window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${order.supplierEmail}&su=${subject}&body=${body}`, '_blank');
                                                         }}

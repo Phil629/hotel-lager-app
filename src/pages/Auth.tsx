@@ -60,7 +60,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                         {isResetPassword ? 'Passwort zurücksetzen' : (isLogin ? 'Willkommen zurück' : 'Konto erstellen')}
                     </h2>
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '8px' }}>
-                        Hotel Inventur- & Bestellsystem
+                        B2B Inventur- & Bestellsystem
                     </p>
                 </div>
 
@@ -88,7 +88,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
-                            placeholder="hotel@beispiel.de"
+                            placeholder="mail@unternehmen.de"
                         />
                     </div>
                     

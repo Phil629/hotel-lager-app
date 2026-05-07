@@ -94,7 +94,7 @@ export const StorageService = {
             publicKey: '', 
             enableStockManagement: true, 
             inventoryMode: false,
-            hotelName: 'Mein Hotel',
+            hotelName: 'Mein Unternehmen',
             currency: 'EUR',
             currentPlan: 'pro',
             developerMode: false

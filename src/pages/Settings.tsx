@@ -39,7 +39,6 @@ export const Settings: React.FC = () => {
     const [userId, setUserId] = useState<string>('');
     const [role, setRole] = useState<string>('');
     const [companyCode, setCompanyCode] = useState<string>('');
-    const [joinCodeInput, setJoinCodeInput] = useState<string>('');
     const [isMigrating, setIsMigrating] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
@@ -71,7 +70,7 @@ export const Settings: React.FC = () => {
             supabaseKey: stored.supabaseKey || '',
             enableStockManagement: stored.enableStockManagement ?? true,
             inventoryMode: stored.inventoryMode ?? false,
-            hotelName: stored.hotelName || 'Mein Hotel',
+            hotelName: stored.hotelName || 'Mein Unternehmen',
             currency: stored.currency || 'EUR',
             currentPlan: stored.currentPlan || 'pro',
             developerMode: stored.developerMode || false,
@@ -91,18 +90,6 @@ export const Settings: React.FC = () => {
         setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
         // Give time for toast before reload
         setTimeout(() => window.location.reload(), 1500);
-    };
-
-    const handleJoinCompany = async () => {
-        if (!joinCodeInput || !supabase || !userId) return;
-        const { data: company } = await supabase.from('companies').select('id').eq('join_code', joinCodeInput).single();
-        if (company) {
-            await supabase.from('profiles').update({ company_id: company.id, role: 'employee' }).eq('id', userId);
-            setNotification({ message: 'Erfolgreich dem Unternehmen beigetreten!', type: 'success' });
-            setTimeout(() => window.location.reload(), 1500);
-        } else {
-            setNotification({ message: 'Code ungültig oder Firma nicht gefunden.', type: 'error' });
-        }
     };
 
     const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,7 +215,7 @@ export const Settings: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
                 <div>
                     <h2 style={{ fontSize: 'var(--font-size-3xl)', margin: 0, color: 'var(--color-text)' }}>Einstellungen</h2>
-                    <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>Verwalten Sie Ihr Profil und Ihre Hotel-App Konfiguration.</p>
+                    <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>Verwalten Sie Ihr Profil und Ihre App-Konfiguration.</p>
                 </div>
                 <button 
                     onClick={handleSave}
@@ -272,7 +259,7 @@ export const Settings: React.FC = () => {
                     
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--spacing-xl)', marginTop: 'var(--spacing-lg)' }}>
                         <div>
-                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 600 }}>Hotel Name</label>
+                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 600 }}>Unternehmensname</label>
                             <input
                                 type="text"
                                 value={settings.hotelName}
@@ -368,27 +355,13 @@ export const Settings: React.FC = () => {
                     
                     {(role === 'owner' || role === 'admin') && (
                         <div style={{ marginBottom: 'var(--spacing-xl)', paddingBottom: 'var(--spacing-md)', borderBottom: '1px solid var(--color-border)' }}>
-                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Du bist aktuell der Inhaber deines eigenen Bereiches. Gib diesen Code weiter, um Mitarbeiter in dein Hotel einzuladen:</p>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Du bist aktuell der Inhaber deines eigenen Bereiches. Gib diesen Code weiter, um Mitarbeiter in dein Unternehmen einzuladen:</p>
                             <div style={{ display: 'inline-flex', gap: '10px', alignItems: 'center', backgroundColor: 'var(--color-background)', padding: '12px 24px', borderRadius: '8px', fontSize: '24px', fontWeight: 'bold', letterSpacing: '4px', border: '1px dashed var(--color-primary)' }}>
                                 {companyCode || 'Laden...'}
                             </div>
                         </div>
                     )}
-                    
-                    <div>
-                        <p style={{ color: 'var(--color-text-main)', fontWeight: 600, marginBottom: '8px' }}>Du bist Mitarbeiter in einem anderen Hotel?</p>
-                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px', fontSize: '14px' }}>Trage hier den Einladungs-Code deines Chefs ein, um zu seinem Hotel zu wechseln:</p>
-                        <div style={{ display: 'flex', gap: '10px', maxWidth: '400px' }}>
-                            <input 
-                                type="text" 
-                                placeholder="Z.B. a1b2c3d4"
-                                value={joinCodeInput}
-                                onChange={e => setJoinCodeInput(e.target.value)}
-                                style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '16px' }}
-                            />
-                            <button type="button" onClick={handleJoinCompany} className="button-primary">Beitreten</button>
-                        </div>
-                    </div>
+
                 </SectionCard>
 
                 {/* 2. Abo & Funktionen - Nur für Owner */}

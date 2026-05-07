@@ -32,7 +32,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     }, []);
 
     const displayLogo = settings.logoUrl || logo;
-    const displayHotelName = settings.hotelName || 'Hotel';
+    const displayHotelName = settings.hotelName || 'Unternehmen';
 
     return (
         <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--color-background)' }}>
@@ -48,7 +48,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', color: 'var(--color-primary)' }}>
-                        <img src={displayLogo} alt="Hotel Logo" style={{ height: '40px', maxWidth: '100px', objectFit: 'contain', borderRadius: '4px' }} />
+                        <img src={displayLogo} alt="Unternehmens Logo" style={{ height: '40px', maxWidth: '100px', objectFit: 'contain', borderRadius: '4px' }} />
                         <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{displayHotelName}</h1>
                     </div>
                     {userEmail && (

@@ -9,6 +9,7 @@ import { Statistics } from './pages/Statistics';
 import { Inventory } from './pages/Inventory';
 import { Auth } from './pages/Auth';
 import { Admin } from './pages/Admin';
+import { Setup } from './pages/Setup';
 import { UpdatePassword } from './pages/UpdatePassword';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { supabase } from './services/supabase';
@@ -17,6 +18,7 @@ function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isRecovery, setIsRecovery] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -29,13 +31,14 @@ function App() {
         setSession(null);
         return;
       }
-      const { data } = await supabase!.from('profiles').select('is_banned').eq('id', currentSession.user.id).single();
+      const { data } = await supabase!.from('profiles').select('is_banned, company_id').eq('id', currentSession.user.id).single();
       if (data?.is_banned) {
         await supabase!.auth.signOut();
         setSession(null);
         alert("Dein Account wurde gesperrt. Bitte wende dich an den Support.");
       } else {
         setSession(currentSession);
+        setNeedsSetup(!data?.company_id);
       }
     };
 
@@ -71,6 +74,11 @@ function App() {
         <Routes>
           <Route path="/auth" element={<Auth onAuthSuccess={() => {}} />} />
           <Route path="*" element={<Navigate to="/auth" replace />} />
+        </Routes>
+      ) : needsSetup ? (
+        <Routes>
+          <Route path="/setup" element={<Setup />} />
+          <Route path="*" element={<Navigate to="/setup" replace />} />
         </Routes>
       ) : (
         <Layout>
