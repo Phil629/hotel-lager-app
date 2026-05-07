@@ -51,11 +51,13 @@ export const Settings: React.FC = () => {
         supabase?.auth.getUser().then(async ({ data }) => {
             if (data?.user) {
                 setUserId(data.user.id);
-                const { data: profile } = await supabase!.from('profiles').select('role, company_id').eq('id', data.user.id).single();
+                const { data: profile, error } = await supabase!.from('profiles').select('role, company_id').eq('id', data.user.id).single();
+                console.log("Fetched profile:", profile, "Error:", error);
                 if (profile) {
                     setRole(profile.role || 'user');
                     if (profile.company_id) {
-                        const { data: company } = await supabase!.from('companies').select('join_code').eq('id', profile.company_id).single();
+                        const { data: company, error: companyError } = await supabase!.from('companies').select('join_code').eq('id', profile.company_id).single();
+                        console.log("Fetched company:", company, "Error:", companyError);
                         if (company) setCompanyCode(company.join_code);
                     }
                 }
