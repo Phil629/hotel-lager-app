@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
 import { DataService } from '../services/data';
-import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check , LogOut} from 'lucide-react';
+import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check, LogOut, Users } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import type { AppSettings } from '../types';
@@ -51,11 +51,11 @@ export const Settings: React.FC = () => {
         supabase?.auth.getUser().then(async ({ data }) => {
             if (data?.user) {
                 setUserId(data.user.id);
-                const { data: profile } = await supabase.from('profiles').select('role, company_id').eq('id', data.user.id).single();
+                const { data: profile } = await supabase!.from('profiles').select('role, company_id').eq('id', data.user.id).single();
                 if (profile) {
                     setRole(profile.role || 'user');
                     if (profile.company_id) {
-                        const { data: company } = await supabase.from('companies').select('join_code').eq('id', profile.company_id).single();
+                        const { data: company } = await supabase!.from('companies').select('join_code').eq('id', profile.company_id).single();
                         if (company) setCompanyCode(company.join_code);
                     }
                 }
