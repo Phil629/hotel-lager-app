@@ -477,6 +477,7 @@ export const Settings: React.FC = () => {
                         </button>
                     </div>
                 </SectionCard>
+                )}
 
                 {/* 3. Automatisierungen */}
                 <SectionCard>
