@@ -366,29 +366,29 @@ export const Settings: React.FC = () => {
                         <h3 style={{ margin: 0, color: 'var(--color-text)' }}>Team & Mitarbeiter</h3>
                     </div>
                     
-                    {(role === 'owner' || role === 'admin') ? (
-                        <div>
-                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Du bist Inhaber dieses Unternehmens. Gib deinen Mitarbeitern diesen Einladungs-Code, damit sie beitreten können:</p>
+                    {(role === 'owner' || role === 'admin') && (
+                        <div style={{ marginBottom: 'var(--spacing-xl)', paddingBottom: 'var(--spacing-md)', borderBottom: '1px solid var(--color-border)' }}>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Du bist aktuell der Inhaber deines eigenen Bereiches. Gib diesen Code weiter, um Mitarbeiter in dein Hotel einzuladen:</p>
                             <div style={{ display: 'inline-flex', gap: '10px', alignItems: 'center', backgroundColor: 'var(--color-background)', padding: '12px 24px', borderRadius: '8px', fontSize: '24px', fontWeight: 'bold', letterSpacing: '4px', border: '1px dashed var(--color-primary)' }}>
                                 {companyCode || 'Laden...'}
                             </div>
-                            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '16px' }}>Mitarbeiter müssen sich einfach selbst einen Account anlegen und den Code hier in ihren Einstellungen eintragen.</p>
-                        </div>
-                    ) : (
-                        <div>
-                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Möchtest du einem Unternehmen beitreten? Trage hier den Einladungs-Code deines Chefs ein:</p>
-                            <div style={{ display: 'flex', gap: '10px', maxWidth: '400px' }}>
-                                <input 
-                                    type="text" 
-                                    placeholder="Z.B. a1b2c3d4"
-                                    value={joinCodeInput}
-                                    onChange={e => setJoinCodeInput(e.target.value)}
-                                    style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '16px' }}
-                                />
-                                <button type="button" onClick={handleJoinCompany} className="button-primary">Beitreten</button>
-                            </div>
                         </div>
                     )}
+                    
+                    <div>
+                        <p style={{ color: 'var(--color-text-main)', fontWeight: 600, marginBottom: '8px' }}>Du bist Mitarbeiter in einem anderen Hotel?</p>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px', fontSize: '14px' }}>Trage hier den Einladungs-Code deines Chefs ein, um zu seinem Hotel zu wechseln:</p>
+                        <div style={{ display: 'flex', gap: '10px', maxWidth: '400px' }}>
+                            <input 
+                                type="text" 
+                                placeholder="Z.B. a1b2c3d4"
+                                value={joinCodeInput}
+                                onChange={e => setJoinCodeInput(e.target.value)}
+                                style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '16px' }}
+                            />
+                            <button type="button" onClick={handleJoinCompany} className="button-primary">Beitreten</button>
+                        </div>
+                    </div>
                 </SectionCard>
 
                 {/* 2. Abo & Funktionen - Nur für Owner */}
