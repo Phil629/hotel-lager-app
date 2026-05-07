@@ -16,12 +16,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     const settings = StorageService.getSettings();
     const [isAdmin, setIsAdmin] = useState(false);
+    const [userEmail, setUserEmail] = useState<string>('');
 
     useEffect(() => {
         const checkAdmin = async () => {
             if (!supabase) return;
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
+                setUserEmail(user.email || '');
                 const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
                 if (data?.role === 'admin' || data?.role === 'owner') setIsAdmin(true);
             }
@@ -44,9 +46,16 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 flexDirection: 'column',
                 gap: 'var(--spacing-xl)'
             }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', color: 'var(--color-primary)' }}>
-                    <img src={displayLogo} alt="Hotel Logo" style={{ height: '40px', maxWidth: '100px', objectFit: 'contain', borderRadius: '4px' }} />
-                    <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{displayHotelName}</h1>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', color: 'var(--color-primary)' }}>
+                        <img src={displayLogo} alt="Hotel Logo" style={{ height: '40px', maxWidth: '100px', objectFit: 'contain', borderRadius: '4px' }} />
+                        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{displayHotelName}</h1>
+                    </div>
+                    {userEmail && (
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginLeft: '4px', wordBreak: 'break-all' }}>
+                            {userEmail}
+                        </div>
+                    )}
                 </div>
 
                 <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
