@@ -252,7 +252,7 @@ export const Settings: React.FC = () => {
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column' }}>
                 
                 {/* 1. Unternehmensprofil */}
-                {role === 'owner' && (
+                {(role === 'owner' || role === 'admin') && (
                 <SectionCard>
                     <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
                         <Building2 size={22} color="var(--color-primary)" /> Unternehmensprofil
@@ -364,7 +364,7 @@ export const Settings: React.FC = () => {
                         <h3 style={{ margin: 0, color: 'var(--color-text)' }}>Team & Mitarbeiter</h3>
                     </div>
                     
-                    {role === 'owner' ? (
+                    {(role === 'owner' || role === 'admin') ? (
                         <div>
                             <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Du bist Inhaber dieses Unternehmens. Gib deinen Mitarbeitern diesen Einladungs-Code, damit sie beitreten können:</p>
                             <div style={{ display: 'inline-flex', gap: '10px', alignItems: 'center', backgroundColor: 'var(--color-background)', padding: '12px 24px', borderRadius: '8px', fontSize: '24px', fontWeight: 'bold', letterSpacing: '4px', border: '1px dashed var(--color-primary)' }}>
@@ -390,7 +390,7 @@ export const Settings: React.FC = () => {
                 </SectionCard>
 
                 {/* 2. Abo & Funktionen - Nur für Owner */}
-                {role === 'owner' && (
+                {(role === 'owner' || role === 'admin') && (
                     <SectionCard>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
