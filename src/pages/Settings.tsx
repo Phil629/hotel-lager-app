@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
 import { DataService } from '../services/data';
-import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check, LogOut, Users } from 'lucide-react';
+import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check, LogOut, Users, UserPlus } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';

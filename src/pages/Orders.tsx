@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
+import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 
 export const Orders: React.FC = () => {
