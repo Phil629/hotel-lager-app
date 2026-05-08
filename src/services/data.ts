@@ -156,7 +156,9 @@ const fromSupabaseOrder = (o: any): Order => ({
     supplierPhone: o.supplier_phone,
     receivedAt: o.received_at,
     notes: o.notes,
-    aiRevisions: o.ai_revisions
+    aiRevisions: o.ai_revisions,
+    user_id: o.user_id,
+    updated_by: o.updated_by
 });
 
 export const DataService = {
@@ -202,7 +204,17 @@ export const DataService = {
             console.error('Supabase error:', error);
             throw error;
         }
-        return (data || []).map(fromSupabaseOrder);
+        
+        // Fetch profiles to map emails
+        const { data: profilesData } = await supabase.from('profiles').select('id, email');
+        const profilesMap = new Map((profilesData || []).map(p => [p.id, p.email]));
+        
+        return (data || []).map(o => {
+            const mapped = fromSupabaseOrder(o);
+            if (mapped.user_id) mapped.creatorEmail = profilesMap.get(mapped.user_id);
+            if (mapped.updated_by) mapped.updaterEmail = profilesMap.get(mapped.updated_by);
+            return mapped;
+        });
     },
 
     async saveOrder(order: Order): Promise<void> {

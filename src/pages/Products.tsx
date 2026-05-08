@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
-import { supabase } from '../services/supabase';
+import { supabase, getSupabaseClient } from '../services/supabase';
 import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
@@ -123,7 +123,26 @@ export const Products: React.FC = () => {
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
+
+        const supabaseClient = getSupabaseClient();
+        let channel: any;
+        if (supabaseClient) {
+            channel = supabaseClient.channel('products_realtime')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+                    DataService.getProducts().then(setProducts);
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+                    DataService.getProducts().then(setProducts);
+                })
+                .subscribe();
+        }
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            if (channel && supabaseClient) {
+                supabaseClient.removeChannel(channel);
+            }
+        };
     }, []);
 
     useEffect(() => {
@@ -679,8 +698,34 @@ export const Products: React.FC = () => {
                 filteredProducts.length === 0 ? (
                     <div style={{ padding: '40px', textAlign: 'center', backgroundColor: 'white', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)' }}>
                         <ShoppingCart size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
-                        <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-main)' }}>Keine Produkte gefunden</h3>
-                        <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Versuche einen anderen Suchbegriff oder passe die Filter an.</p>
+                        {products.length === 0 ? (
+                            <>
+                                <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-main)' }}>Noch keine Produkte vorhanden</h3>
+                                <p style={{ margin: '0 0 16px 0', color: 'var(--color-text-muted)' }}>Beginne damit, dein erstes Produkt für dieses Unternehmen anzulegen.</p>
+                                <button
+                                    onClick={() => setIsModalOpen(true)}
+                                    style={{
+                                        backgroundColor: 'var(--color-primary)',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '10px 20px',
+                                        borderRadius: 'var(--radius-md)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <Plus size={18} /> Erstes Produkt anlegen
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-main)' }}>Keine Produkte gefunden</h3>
+                                <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Versuche einen anderen Suchbegriff oder passe die Filter an.</p>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

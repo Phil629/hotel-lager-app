@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
+import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 
 export const Suppliers: React.FC = () => {
@@ -25,6 +26,25 @@ export const Suppliers: React.FC = () => {
 
     useEffect(() => {
         loadData();
+
+        const supabaseClient = getSupabaseClient();
+        let channel: any;
+        if (supabaseClient) {
+            channel = supabaseClient.channel('suppliers_realtime')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => {
+                    loadData();
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+                    loadData();
+                })
+                .subscribe();
+        }
+
+        return () => {
+            if (channel && supabaseClient) {
+                supabaseClient.removeChannel(channel);
+            }
+        };
     }, []);
 
     useEffect(() => {

@@ -33,23 +33,12 @@ export const Setup: React.FC = () => {
             const { data: { user } } = await supabase!.auth.getUser();
             if (!user) throw new Error("Nicht eingeloggt");
 
-            // 1. Create company
-            const join_code = Math.random().toString(36).substring(2, 10);
-            const { data: newCompany, error: createError } = await supabase!
-                .from('companies')
-                .insert([{ name: companyName, join_code }])
-                .select()
-                .single();
+            // 1. Call secure RPC to create company and join
+            const { error: rpcError } = await supabase!.rpc('create_company_and_join', { 
+                company_name: companyName 
+            });
             
-            if (createError) throw createError;
-
-            // 2. Update profile
-            const { error: profileError } = await supabase!
-                .from('profiles')
-                .update({ company_id: newCompany.id, role: 'owner' })
-                .eq('id', user.id);
-
-            if (profileError) throw profileError;
+            if (rpcError) throw rpcError;
 
             // Save hotel name locally for UI consistency
             const settings = StorageService.getSettings();
@@ -73,31 +62,20 @@ export const Setup: React.FC = () => {
             const { data: { user } } = await supabase!.auth.getUser();
             if (!user) throw new Error("Nicht eingeloggt");
 
-            // 1. Find company by code
-            const { data: company, error: searchError } = await supabase!
-                .from('companies')
-                .select('id, name')
-                .eq('join_code', joinCode)
-                .single();
+            // Call secure RPC to join company by code
+            const { data: companyData, error: rpcError } = await supabase!.rpc('join_company_by_code', {
+                code: joinCode
+            });
 
-            if (searchError || !company) {
-                throw new Error("Einladungs-Code ungültig oder Unternehmen nicht gefunden.");
-            }
-
-            // 2. Update profile
-            const { error: profileError } = await supabase!
-                .from('profiles')
-                .update({ company_id: company.id, role: 'employee' })
-                .eq('id', user.id);
-
-            if (profileError) throw profileError;
+            if (rpcError) throw new Error(rpcError.message || "Einladungs-Code ungültig.");
+            if (!companyData) throw new Error("Unternehmen nicht gefunden.");
 
             // Save hotel name locally
             const settings = StorageService.getSettings();
-            settings.hotelName = company.name;
+            settings.hotelName = companyData.name;
             StorageService.saveSettings(settings);
 
-            setNotification({ message: `Erfolgreich dem Unternehmen ${company.name} beigetreten!`, type: 'success' });
+            setNotification({ message: `Erfolgreich dem Unternehmen ${companyData.name} beigetreten!`, type: 'success' });
             setTimeout(() => window.location.href = '/', 1000);
         } catch (error: any) {
             console.error(error);

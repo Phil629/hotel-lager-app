@@ -105,6 +105,9 @@ export interface Order {
     price?: { original: number; suggested: number; reverted: boolean; };
     date?: { original: string; suggested: string; reverted: boolean; };
   } | null;
+  updated_by?: string; // UUID of the user who last modified this order
+  creatorEmail?: string; // Mapped dynamically in frontend
+  updaterEmail?: string; // Mapped dynamically in frontend
 }
 
 export interface AppSettings {

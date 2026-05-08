@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import { DataService } from '../services/data';
 import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check, LogOut, Users } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
+import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 import type { AppSettings } from '../types';
 
@@ -41,6 +42,8 @@ export const Settings: React.FC = () => {
     const [companyCode, setCompanyCode] = useState<string>('');
     const [isMigrating, setIsMigrating] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [teamMembers, setTeamMembers] = useState<Array<{ id: string, email: string, role: string }>>([]);
+    const [inviteEmail, setInviteEmail] = useState('');
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     const devClickCount = useRef(0);
     const devTimeout = useRef<number | null>(null);
@@ -58,6 +61,12 @@ export const Settings: React.FC = () => {
                         const { data: company, error: companyError } = await supabase!.from('companies').select('join_code').eq('id', profile.company_id).single();
                         console.log("Fetched company:", company, "Error:", companyError);
                         if (company) setCompanyCode(company.join_code);
+                        
+                        // Fetch team members if admin/owner
+                        if (profile.company_id) {
+                            const { data: team } = await supabase!.from('profiles').select('id, email, role').eq('company_id', profile.company_id);
+                            if (team) setTeamMembers(team);
+                        }
                     }
                 }
             }
@@ -135,6 +144,37 @@ export const Settings: React.FC = () => {
             setNotification({ message: settings.developerMode ? 'Developer Mode deaktiviert' : 'Developer Mode aktiviert!', type: 'success' });
             devClickCount.current = 0;
         }
+    };
+
+    const handleInviteEmployee = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!inviteEmail.trim()) return;
+
+        const subject = encodeURIComponent('Einladung zu unserem B2B Bestellsystem');
+        const bodyText = `Hallo,\n\nich möchte dich zu unserem Bestellsystem einladen.\nBitte registriere dich unter: ${window.location.origin}\n\nUnser Unternehmens-Code lautet: ${companyCode}\n\nViele Grüße,\n${settings.hotelName}`;
+        
+        // Try EmailJS first if configured
+        if (settings.serviceId && settings.templateId && settings.publicKey) {
+            try {
+                await emailjs.send(settings.serviceId, settings.templateId, {
+                    to_email: inviteEmail,
+                    subject: decodeURIComponent(subject),
+                    message: bodyText,
+                    hotel_name: settings.hotelName
+                }, settings.publicKey);
+                setNotification({ message: 'Einladung wurde erfolgreich per E-Mail verschickt.', type: 'success' });
+                setInviteEmail('');
+                return;
+            } catch (err) {
+                console.error("EmailJS failed:", err);
+                // Fallthrough to mailto
+            }
+        }
+
+        // Fallback to mailto
+        window.location.href = `mailto:${inviteEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+        setNotification({ message: 'E-Mail-Programm wurde geöffnet.', type: 'info' });
+        setInviteEmail('');
     };
 
     const handleMigration = async () => {
@@ -362,6 +402,49 @@ export const Settings: React.FC = () => {
                         </div>
                     )}
 
+                    {(role === 'owner' || role === 'admin') && (
+                        <div style={{ marginBottom: 'var(--spacing-xl)', paddingBottom: 'var(--spacing-md)', borderBottom: '1px solid var(--color-border)' }}>
+                            <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-text)' }}>Mitarbeiter einladen</h4>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px', fontSize: '14px' }}>Gib die E-Mail-Adresse ein, um eine automatische Einladung zu versenden.</p>
+                            <form onSubmit={handleInviteEmployee} style={{ display: 'flex', gap: '8px' }}>
+                                <input
+                                    type="email"
+                                    required
+                                    placeholder="E-Mail Adresse"
+                                    value={inviteEmail}
+                                    onChange={(e) => setInviteEmail(e.target.value)}
+                                    style={{ flex: 1, padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
+                                />
+                                <button type="submit" style={{ backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+                                    <Mail size={16} /> Einladen
+                                </button>
+                            </form>
+                        </div>
+                    )}
+
+                    <div>
+                        <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-text)' }}>Registrierte Mitarbeiter</h4>
+                        {teamMembers.length > 0 ? (
+                            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {teamMembers.map(member => (
+                                    <li key={member.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <div style={{ padding: '8px', backgroundColor: 'var(--color-surface)', borderRadius: '50%', color: 'var(--color-text-muted)' }}>
+                                                <UserPlus size={16} />
+                                            </div>
+                                            <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{member.email}</span>
+                                        </div>
+                                        <span style={{ fontSize: '12px', textTransform: 'uppercase', backgroundColor: '#e2e8f0', color: '#475569', padding: '4px 8px', borderRadius: '12px', fontWeight: 600 }}>{member.role}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--color-text-muted)', backgroundColor: 'var(--color-background)', borderRadius: '8px', border: '1px dashed var(--color-border)' }}>
+                                Noch keine weiteren Mitarbeiter im Team.
+                            </div>
+                        )}
+                    </div>
+
                 </SectionCard>
 
                 {/* 2. Abo & Funktionen - Nur für Owner */}
@@ -508,6 +591,26 @@ export const Settings: React.FC = () => {
                         style={{ backgroundColor: '#e11d48', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600 }}
                     >
                         Konto abmelden
+                    </button>
+
+                    <button 
+                        type="button" 
+                        onClick={async () => {
+                            if (window.confirm('WARNUNG: Möchten Sie Ihr Konto und alle persönlichen Daten wirklich unwiderruflich löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) {
+                                try {
+                                    // Normally this would call an Edge Function or trigger user deletion in Auth.
+                                    // For now, we sign out and show a message or call an RPC.
+                                    await supabase?.rpc('delete_user_account');
+                                    await supabase?.auth.signOut();
+                                    window.location.href = '/';
+                                } catch (e) {
+                                    alert('Fehler beim Löschen des Kontos. Bitte an den Support wenden.');
+                                }
+                            }
+                        }}
+                        style={{ backgroundColor: 'transparent', color: '#e11d48', border: '1px solid #e11d48', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600, marginTop: '16px', display: 'block' }}
+                    >
+                        Konto & Daten unwiderruflich löschen
                     </button>
                 </div>
 

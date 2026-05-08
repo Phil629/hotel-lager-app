@@ -165,6 +165,11 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                         </button>
                     )}
                 </div>
+                
+                <div style={{ marginTop: 'var(--spacing-lg)', textAlign: 'center', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                    <a href="https://bestell-app.de/impressum" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline', marginRight: '16px' }}>Impressum</a>
+                    <a href="https://bestell-app.de/datenschutz" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Datenschutz</a>
+                </div>
             </div>
         </div>
     );

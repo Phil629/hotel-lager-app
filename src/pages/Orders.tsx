@@ -103,6 +103,27 @@ export const Orders: React.FC = () => {
         loadOrders();
         loadProducts();
         loadSuppliers();
+
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+
+        // Listen to changes on all relevant tables
+        const channel = supabase.channel('orders_realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+                console.log('Realtime update received for orders');
+                loadOrders();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+                loadProducts();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => {
+                loadSuppliers();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const loadOrders = async () => {
@@ -1108,6 +1129,12 @@ export const Orders: React.FC = () => {
                                 </a>
                             </div>
                         )}
+                        {(order.creatorEmail || order.updaterEmail) && (
+                            <div style={{ marginTop: 'var(--spacing-sm)', paddingTop: 'var(--spacing-xs)', borderTop: '1px dashed var(--color-border)', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                                {order.creatorEmail && <div>Erstellt von: {order.creatorEmail}</div>}
+                                {order.updaterEmail && <div>Zuletzt bearbeitet von: {order.updaterEmail}</div>}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
@@ -1454,7 +1481,15 @@ export const Orders: React.FC = () => {
                         borderRadius: 'var(--radius-lg)',
                         color: 'var(--color-text-muted)'
                     }}>
-                        Keine offenen Bestellungen.
+                        {orders.filter(o => o.status === 'open').length === 0 ? (
+                            <>
+                                <ShoppingCart size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
+                                <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-main)' }}>Noch keine Bestellungen</h3>
+                                <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Lege deine erste Bestellung an.</p>
+                            </>
+                        ) : (
+                            "Keine passenden offenen Bestellungen gefunden."
+                        )}
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
@@ -2073,22 +2108,24 @@ export const Orders: React.FC = () => {
                                             </div>
                                         )}
 
-                                        <button
-                                            onClick={handleCreateOrder}
-                                            style={{
-                                                width: '100%',
-                                                padding: '10px',
-                                                backgroundColor: 'var(--color-primary)',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: 'var(--radius-md)',
-                                                cursor: 'pointer',
-                                                fontWeight: 500,
-                                                marginTop: 'var(--spacing-md)'
-                                            }}
-                                        >
-                                            Bestellung aufgeben
-                                        </button>
+                                <div style={{ position: "sticky", bottom: "-24px", backgroundColor: "var(--color-surface)", padding: "16px 0 0 0", marginTop: "16px", borderTop: "1px solid var(--color-border)", zIndex: 10 }}>
+                                    <button
+                                        onClick={handleCreateOrder}
+                                        style={{
+                                            width: "100%",
+                                            padding: "12px",
+                                            backgroundColor: "var(--color-primary)",
+                                            color: "white",
+                                            border: "none",
+                                            borderRadius: "var(--radius-md)",
+                                            cursor: "pointer",
+                                            fontWeight: 600,
+                                            boxShadow: "0 -4px 10px rgba(0,0,0,0.05)"
+                                        }}
+                                    >
+                                        Bestellung anlegen
+                                    </button>
+                                </div>
                                     </div>
                                 )}
                             </>
