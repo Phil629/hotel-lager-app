@@ -16,6 +16,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     const settings = StorageService.getSettings();
     const [isAdmin, setIsAdmin] = useState(false);
+    const [userRole, setUserRole] = useState<string>('');
     const [userEmail, setUserEmail] = useState<string>('');
 
     useEffect(() => {
@@ -25,7 +26,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             if (user) {
                 setUserEmail(user.email || '');
                 const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-                if (data?.role === 'admin' || data?.role === 'owner') setIsAdmin(true);
+                setUserRole(data?.role || '');
+                if (data?.role === 'admin') setIsAdmin(true);
             }
         };
         checkAdmin();
@@ -52,8 +54,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{displayHotelName}</h1>
                     </div>
                     {userEmail && (
-                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginLeft: '4px', wordBreak: 'break-all' }}>
-                            {userEmail}
+                        <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginLeft: '4px', wordBreak: 'break-all' }}>
+                            {userEmail} {(isAdmin || userRole === 'owner') && <span style={{ backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', marginLeft: '6px', fontWeight: 'bold' }}>{userRole === 'owner' ? 'Inhaber' : 'System-Admin'}</span>}
                         </div>
                     )}
                 </div>
