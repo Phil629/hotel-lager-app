@@ -239,7 +239,7 @@ export const Orders: React.FC = () => {
             loadOrders();
         } catch (error) {
             console.error('Order Error:', error);
-            setNotification({ message: 'Fehler beim Anlegen der Bestellung.', type: 'error' });
+            setNotification({ message: `Fehler: ${error instanceof Error ? error.message : JSON.stringify(error)}`, type: 'error' });
         }
     };
 
