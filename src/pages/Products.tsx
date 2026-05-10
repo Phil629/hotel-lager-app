@@ -542,7 +542,7 @@ export const Products: React.FC = () => {
 
     const filteredProducts = useMemo(() => products.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesLowStock = showLowStockOnly ? p.stock <= (p.minStock || 0) : true;
+        const matchesLowStock = showLowStockOnly ? Number(p.stock) <= Number(p.minStock || 0) : true;
         return matchesSearch && matchesLowStock;
     }).sort((a, b) => {
         if (!sortConfig.key) return 0;
@@ -567,7 +567,7 @@ export const Products: React.FC = () => {
         [products]
     );
     const lowStockCount = useMemo(
-        () => products.filter(p => p.stock <= (p.minStock || 0)).length,
+        () => products.filter(p => Number(p.stock) <= Number(p.minStock || 0)).length,
         [products]
     );
 
@@ -767,7 +767,7 @@ export const Products: React.FC = () => {
                                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' }}>
                                                                 <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                                                                     <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Bestand</div>
-                                                                    <div style={{ fontSize: '20px', fontWeight: 800, color: product.stock <= (product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)' }}>
+                                                                    <div style={{ fontSize: '20px', fontWeight: 800, color: Number(product.stock) <= Number(product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)' }}>
                                                                         {product.stock}
                                                                     </div>
                                                                 </div>
@@ -834,7 +834,7 @@ export const Products: React.FC = () => {
                                                         {visibleProds.map((product, index) => {
                                                             const isLastRows = index >= visibleProds.length - 2 && visibleProds.length > 3;
                                                             return (
-                                                                <tr key={product.id} className={product.stock <= (product.minStock || 0) ? 'row-low-stock' : ''}>
+                                                                <tr key={product.id} className={Number(product.stock) <= Number(product.minStock || 0) ? 'row-low-stock' : ''}>
                                                                     <td>
                                                                         {product.image ? (
                                                                             <img src={product.image} alt={product.name} style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
@@ -867,10 +867,10 @@ export const Products: React.FC = () => {
                                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                                             <div style={{ display: 'inline-flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', width: 'fit-content' }}>
                                                                                 <button onClick={() => handleStockUpdate(product, Math.max(0, product.stock - 1))} style={{ padding: '6px 11px', border: 'none', background: 'var(--color-surface-elevated)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-text-muted)', borderRight: '1px solid var(--color-border)' }}>−</button>
-                                                                                <input type="number" value={product.stock} min={0} onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))} style={{ width: '48px', textAlign: 'center', fontSize: '14px', fontWeight: 800, border: 'none', padding: '6px 4px', color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'var(--color-text-main)', background: 'transparent', outline: 'none', MozAppearance: 'textfield' }} />
+                                                                                <input type="number" value={product.stock} min={0} onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))} style={{ width: '48px', textAlign: 'center', fontSize: '14px', fontWeight: 800, border: 'none', padding: '6px 4px', color: Number(product.stock) <= Number(product.minStock || 0) ? 'var(--color-danger)' : 'var(--color-text-main)', background: 'transparent', outline: 'none', MozAppearance: 'textfield' }} />
                                                                                 <button onClick={() => handleStockUpdate(product, product.stock + 1)} style={{ padding: '6px 11px', border: 'none', background: 'var(--color-surface-elevated)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-primary)', borderLeft: '1px solid var(--color-border)' }}>+</button>
                                                                             </div>
-                                                                            {product.stock <= (product.minStock || 0) && (
+                                                                            {Number(product.stock) <= Number(product.minStock || 0) && (
                                                                                 <span className="badge badge-danger" style={{ fontSize: '10.5px' }}>
                                                                                     <AlertTriangle size={10} /> Nachbestellen
                                                                                 </span>
