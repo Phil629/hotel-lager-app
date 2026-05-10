@@ -1,54 +1,78 @@
 :root {
-  /* Colors */
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-secondary: #64748b;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  
-  --color-background: #f8fafc;
-  --color-surface: #ffffff;
-  --color-text-main: #0f172a;
-  --color-text-muted: #64748b;
-  --color-border: #e2e8f0;
+  /* ── Brand & Semantic Colors ── */
+  --color-primary:          #2563eb;
+  --color-primary-hover:    #1d4ed8;
+  --color-secondary:        #64748b;
+  --color-success:          #22c55e;
+  --color-success-bg:       #f0fdf4;
+  --color-warning:          #f59e0b;
+  --color-warning-bg:       #fffbeb;
+  --color-danger:           #ef4444;
+  --color-danger-bg:        #fef2f2;
 
-  /* Typography */
-  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-size-sm: 0.875rem;
+  /* ── Surfaces ── */
+  --color-background:       #f1f5f9;
+  --color-surface:          #ffffff;
+  --color-surface-elevated: #f8fafc;
+  --color-border:           #e2e8f0;
+  --color-border-strong:    #cbd5e1;
+
+  /* ── Text ── */
+  --color-text-main:        #0f172a;
+  --color-text-secondary:   #334155;
+  --color-text-muted:       #64748b;
+  --color-text-faint:       #94a3b8;
+
+  /* ── Sidebar (dark) ── */
+  --sidebar-bg:             #0f172a;
+  --sidebar-border:         rgba(255, 255, 255, 0.06);
+  --sidebar-text:           #94a3b8;
+  --sidebar-text-hover:     #e2e8f0;
+  --sidebar-text-active:    #ffffff;
+  --sidebar-hover-bg:       rgba(255, 255, 255, 0.07);
+  --sidebar-active-bg:      #2563eb;
+  --sidebar-width:          244px;
+
+  /* ── Typography ── */
+  --font-family:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-size-xs:   0.75rem;
+  --font-size-sm:   0.875rem;
   --font-size-base: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.25rem;
-  --font-size-2xl: 1.5rem;
+  --font-size-lg:   1.125rem;
+  --font-size-xl:   1.25rem;
+  --font-size-2xl:  1.5rem;
+  --font-size-3xl:  1.875rem;
 
-  /* Spacing */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
+  /* ── Spacing ── */
+  --spacing-xs:  0.25rem;
+  --spacing-sm:  0.5rem;
+  --spacing-md:  1rem;
+  --spacing-lg:  1.5rem;
+  --spacing-xl:  2rem;
+  --spacing-2xl: 3rem;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  /* ── Shadows ── */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.08);
 
-  /* Radius */
+  /* ── Border Radius ── */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-full: 9999px;
 }
 
+/* ── Global Base ── */
 body {
   background-color: var(--color-background);
   color: var(--color-text-main);
   font-family: var(--font-family);
-  margin: 0;
   -webkit-font-smoothing: antialiased;
-}
-
-* {
-  box-sizing: border-box;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button {
@@ -58,4 +82,58 @@ button {
 
 input, select, textarea {
   font-family: inherit;
+}
+
+/* ── Sidebar Navigation Links ── */
+.sidebar-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sidebar-text);
+  transition: background-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+.sidebar-nav-link:hover {
+  background-color: var(--sidebar-hover-bg);
+  color: var(--sidebar-text-hover);
+}
+.sidebar-nav-link.active {
+  background-color: var(--sidebar-active-bg);
+  color: var(--sidebar-text-active);
+  font-weight: 600;
+}
+
+/* Inventur-Modus — orange accent */
+.sidebar-nav-link.inventory {
+  color: #fb923c;
+  background-color: rgba(251, 146, 60, 0.1);
+  font-weight: 600;
+}
+.sidebar-nav-link.inventory:hover {
+  background-color: rgba(251, 146, 60, 0.18);
+  color: #fdba74;
+}
+.sidebar-nav-link.inventory.active {
+  background-color: #ea580c;
+  color: #ffffff;
+}
+
+/* SaaS Admin — rot */
+.sidebar-nav-link.admin {
+  color: #fca5a5;
+  background-color: rgba(239, 68, 68, 0.1);
+  font-weight: 600;
+}
+.sidebar-nav-link.admin:hover {
+  background-color: rgba(239, 68, 68, 0.18);
+  color: #fecaca;
+}
+.sidebar-nav-link.admin.active {
+  background-color: #991b1b;
+  color: #ffffff;
 }

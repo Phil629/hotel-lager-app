@@ -1,10 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, ShoppingCart, Settings, Users, BarChart3, ClipboardList } from 'lucide-react';
+import { Package, ShoppingCart, Settings, Users, BarChart3, ClipboardList, ShieldAlert } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
 import { useState, useEffect } from 'react';
-import { ShieldAlert } from 'lucide-react';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -12,7 +11,6 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const location = useLocation();
-    const isActive = (path: string) => location.pathname === path;
 
     const settings = StorageService.getSettings();
     const [isAdmin, setIsAdmin] = useState(false);
@@ -27,7 +25,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 setUserEmail(user.email || '');
                 const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
                 setUserRole(data?.role || '');
-                // Sidebar-Admin-Link nur für SaaS-Admins (nicht für Company-Owner)
                 if (data?.role === 'admin') setIsAdmin(true);
             }
         };
@@ -37,199 +34,165 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const displayLogo = settings.logoUrl || logo;
     const displayHotelName = settings.hotelName || 'Unternehmen';
 
+    const navLink = (path: string, variant?: 'inventory' | 'admin') => {
+        const active = location.pathname === path;
+        const base = 'sidebar-nav-link';
+        const variantClass = variant ? ` ${variant}` : '';
+        const activeClass = active ? ' active' : '';
+        return `${base}${variantClass}${activeClass}`;
+    };
+
+    const roleBadge = isAdmin
+        ? { label: 'System-Admin', bg: 'rgba(239,68,68,0.18)', color: '#fca5a5' }
+        : userRole === 'owner'
+            ? { label: 'Inhaber', bg: 'rgba(59,130,246,0.18)', color: '#93c5fd' }
+            : null;
+
     return (
         <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--color-background)' }}>
-            {/* Sidebar */}
+            {/* ── Dark Sidebar ── */}
             <aside style={{
-                width: '250px',
-                backgroundColor: 'var(--color-surface)',
-                borderRight: '1px solid var(--color-border)',
-                padding: 'var(--spacing-lg)',
+                width: 'var(--sidebar-width)',
+                flexShrink: 0,
+                backgroundColor: 'var(--sidebar-bg)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 'var(--spacing-xl)'
+                boxShadow: '2px 0 8px rgba(0,0,0,0.25)',
             }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', color: 'var(--color-primary)' }}>
-                        <img src={displayLogo} alt="Unternehmens Logo" style={{ height: '40px', maxWidth: '100px', objectFit: 'contain', borderRadius: '4px' }} />
-                        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{displayHotelName}</h1>
+                {/* Logo + Company + User */}
+                <div style={{
+                    padding: '20px 16px',
+                    borderBottom: '1px solid var(--sidebar-border)',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: userEmail ? '10px' : 0 }}>
+                        <img
+                            src={displayLogo}
+                            alt="Logo"
+                            style={{ height: '34px', width: '34px', objectFit: 'contain', borderRadius: '8px', flexShrink: 0 }}
+                        />
+                        <span style={{
+                            color: '#f1f5f9',
+                            fontWeight: 700,
+                            fontSize: '15px',
+                            lineHeight: 1.3,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                        }}>
+                            {displayHotelName}
+                        </span>
                     </div>
+
                     {userEmail && (
-                        <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginLeft: '4px', wordBreak: 'break-all' }}>
-                            {userEmail} {(isAdmin || userRole === 'owner') && <span style={{ backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', marginLeft: '6px', fontWeight: 'bold' }}>{userRole === 'owner' ? 'Inhaber' : 'System-Admin'}</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{
+                                fontSize: '11.5px',
+                                color: 'var(--sidebar-text)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                maxWidth: '150px',
+                            }}>
+                                {userEmail}
+                            </span>
+                            {roleBadge && (
+                                <span style={{
+                                    backgroundColor: roleBadge.bg,
+                                    color: roleBadge.color,
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    padding: '2px 7px',
+                                    borderRadius: 'var(--radius-full)',
+                                    flexShrink: 0,
+                                    letterSpacing: '0.02em',
+                                }}>
+                                    {roleBadge.label}
+                                </span>
+                            )}
                         </div>
                     )}
                 </div>
 
-                <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                {/* Navigation */}
+                <nav style={{
+                    flex: 1,
+                    padding: '10px 8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                    overflowY: 'auto',
+                }}>
                     {StorageService.getSettings().inventoryMode && (
-                        <Link
-                            to="/inventory"
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 'var(--spacing-sm)',
-                                padding: 'var(--spacing-md)',
-                                border: 'none',
-                                borderRadius: 'var(--radius-md)',
-                                backgroundColor: isActive('/inventory') ? '#f97316' : '#fff7ed',
-                                color: isActive('/inventory') ? 'white' : '#ea580c',
-                                textDecoration: 'none',
-                                fontSize: 'var(--font-size-base)',
-                                transition: 'all 0.2s',
-                                fontWeight: 600
-                            }}
-                        >
-                            <ClipboardList size={20} />
+                        <Link to="/inventory" className={navLink('/inventory', 'inventory')}>
+                            <ClipboardList size={17} style={{ flexShrink: 0 }} />
                             Inventur
                         </Link>
                     )}
 
-                    <Link
-                        to="/orders"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--spacing-sm)',
-                            padding: 'var(--spacing-md)',
-                            border: 'none',
-                            borderRadius: 'var(--radius-md)',
-                            backgroundColor: isActive('/orders') ? 'var(--color-primary)' : 'transparent',
-                            color: isActive('/orders') ? 'white' : 'var(--color-text-muted)',
-                            textDecoration: 'none',
-                            fontSize: 'var(--font-size-base)',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <ShoppingCart size={20} />
+                    <Link to="/orders" className={navLink('/orders')}>
+                        <ShoppingCart size={17} style={{ flexShrink: 0 }} />
                         Bestellungen
                     </Link>
-                    
 
-                    
-
-                    <Link
-                        to="/products"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--spacing-sm)',
-                            padding: 'var(--spacing-md)',
-                            border: 'none',
-                            borderRadius: 'var(--radius-md)',
-                            backgroundColor: isActive('/products') ? 'var(--color-primary)' : 'transparent',
-                            color: isActive('/products') ? 'white' : 'var(--color-text-muted)',
-                            textDecoration: 'none',
-                            fontSize: 'var(--font-size-base)',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <Package size={20} />
+                    <Link to="/products" className={navLink('/products')}>
+                        <Package size={17} style={{ flexShrink: 0 }} />
                         Produkte
                     </Link>
 
-                    <Link
-                        to="/suppliers"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--spacing-sm)',
-                            padding: 'var(--spacing-md)',
-                            border: 'none',
-                            borderRadius: 'var(--radius-md)',
-                            backgroundColor: isActive('/suppliers') ? 'var(--color-primary)' : 'transparent',
-                            color: isActive('/suppliers') ? 'white' : 'var(--color-text-muted)',
-                            textDecoration: 'none',
-                            fontSize: 'var(--font-size-base)',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <Users size={20} />
+                    <Link to="/suppliers" className={navLink('/suppliers')}>
+                        <Users size={17} style={{ flexShrink: 0 }} />
                         Lieferanten
                     </Link>
 
-                    <Link
-                        to="/statistics"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--spacing-sm)',
-                            padding: 'var(--spacing-md)',
-                            border: 'none',
-                            borderRadius: 'var(--radius-md)',
-                            backgroundColor: isActive('/statistics') ? 'var(--color-primary)' : 'transparent',
-                            color: isActive('/statistics') ? 'white' : 'var(--color-text-muted)',
-                            textDecoration: 'none',
-                            fontSize: 'var(--font-size-base)',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <BarChart3 size={20} />
+                    <Link to="/statistics" className={navLink('/statistics')}>
+                        <BarChart3 size={17} style={{ flexShrink: 0 }} />
                         Statistiken
                     </Link>
 
-                    <Link
-                        to="/settings"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--spacing-sm)',
-                            padding: 'var(--spacing-md)',
-                            border: 'none',
-                            borderRadius: 'var(--radius-md)',
-                            backgroundColor: isActive('/settings') ? 'var(--color-primary)' : 'transparent',
-                            color: isActive('/settings') ? 'white' : 'var(--color-text-muted)',
-                            textDecoration: 'none',
-                            fontSize: 'var(--font-size-base)',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <Settings size={20} />
+                    <Link to="/settings" className={navLink('/settings')}>
+                        <Settings size={17} style={{ flexShrink: 0 }} />
                         Einstellungen
                     </Link>
-                
-                    {isAdmin && (
-                        <div style={{ marginTop: 'auto', paddingTop: 'var(--spacing-xl)', borderTop: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
-                            <Link
-                                to="/admin"
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-sm)',
-                                    padding: 'var(--spacing-md)',
-                                    border: 'none',
-                                    borderRadius: 'var(--radius-md)',
-                                    backgroundColor: isActive('/admin') ? '#be123c' : '#fff1f2',
-                                    color: isActive('/admin') ? 'white' : '#be123c',
-                                    textDecoration: 'none',
-                                    fontSize: 'var(--font-size-base)',
-                                    transition: 'all 0.2s',
-                                    fontWeight: 600
-                                }}
-                            >
-                                <ShieldAlert size={20} />
-                                SaaS Admin
-                            </Link>
-                        </div>
-                    )}
                 </nav>
+
+                {/* Admin — pinned to bottom */}
+                {isAdmin && (
+                    <div style={{ padding: '8px', borderTop: '1px solid var(--sidebar-border)' }}>
+                        <Link to="/admin" className={navLink('/admin', 'admin')}>
+                            <ShieldAlert size={17} style={{ flexShrink: 0 }} />
+                            SaaS Admin
+                        </Link>
+                    </div>
+                )}
             </aside>
 
-            {/* Main Content */}
-            <main style={{ flex: 1, padding: 'var(--spacing-xl)', overflowY: 'auto' }}>
-                
-                <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            {/* ── Main Content ── */}
+            <main style={{ flex: 1, padding: 'var(--spacing-xl)', overflowY: 'auto', minWidth: 0 }}>
+                <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
                     {StorageService.getSettings().inventoryMode && location.pathname !== '/inventory' && (
-                        <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fdba74', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                            <div style={{ fontSize: '24px', flexShrink: 0 }}>🚨</div>
+                        <div style={{
+                            backgroundColor: '#fff7ed',
+                            border: '1px solid #fdba74',
+                            padding: '14px 20px',
+                            borderRadius: 'var(--radius-lg)',
+                            marginBottom: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '14px',
+                            boxShadow: 'var(--shadow-sm)',
+                        }}>
+                            <div style={{ fontSize: '22px', flexShrink: 0 }}>🚨</div>
                             <div>
-                                <div style={{ color: '#c2410c', fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>Zähl-Assistent (Inventur-Modus) aktiv</div>
-                                <div style={{ color: '#ea580c', fontSize: '14px' }}>Der automatische System-Verbrauch ist temporär angehalten, um das Zählergebnis nicht zu verfälschen. Vergiss nicht, ihn nach der Inventur wieder zu deaktivieren!</div>
+                                <div style={{ color: '#c2410c', fontWeight: 700, fontSize: '14px', marginBottom: '3px' }}>
+                                    Zähl-Assistent (Inventur-Modus) aktiv
+                                </div>
+                                <div style={{ color: '#ea580c', fontSize: '13px' }}>
+                                    Der automatische System-Verbrauch ist temporär angehalten. Bitte nach der Inventur deaktivieren.
+                                </div>
                             </div>
                         </div>
                     )}
                     {children}
-
                 </div>
             </main>
         </div>
