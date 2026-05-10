@@ -172,7 +172,7 @@ export const Orders: React.FC = () => {
     };
 
     const handleProductSelect = (product: Product) => {
-        const initialCart = [{ product, quantity: 1 }];
+        const initialCart = [{ product, quantity: product.standardOrderQuantity || 1 }];
         setOrderCart(initialCart);
         setIsOrderEmailExpanded(getEffectiveOrderMethod(product) === 'email');
 
@@ -183,7 +183,7 @@ export const Orders: React.FC = () => {
 
     const addToCart = (product: Product) => {
         setOrderCart(prev => {
-            const newCart = [...prev, { product, quantity: 1 }];
+            const newCart = [...prev, { product, quantity: product.standardOrderQuantity || 1 }];
             const { subject, body } = generateEmailTemplate(newCart);
             setEmailSubject(subject);
             setEmailBody(body);
@@ -1697,21 +1697,8 @@ export const Orders: React.FC = () => {
 
             {/* Create Order Modal */}
             {isCreateModalOpen && (
-                <div style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
-                }}>
-                    <div style={{
-                        backgroundColor: 'var(--color-surface)',
-                        padding: 'var(--spacing-xl)',
-                        borderRadius: 'var(--radius-lg)',
-                        width: '100%',
-                        maxWidth: '600px',
-                        maxHeight: '90vh',
-                        overflowY: 'auto',
-                        boxShadow: 'var(--shadow-lg)'
-                    }}>
+                <div className="modal-overlay">
+                    <div className="modal-box" style={{ maxWidth: '600px', padding: 'var(--spacing-xl)', overflowY: 'auto' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
                             <h3 style={{ margin: 0 }}>Neue Bestellung</h3>
                             <button onClick={() => setIsCreateModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
@@ -2096,20 +2083,7 @@ export const Orders: React.FC = () => {
                                         )}
 
                                 <div style={{ position: "sticky", bottom: "-24px", backgroundColor: "var(--color-surface)", padding: "16px 0 0 0", marginTop: "16px", borderTop: "1px solid var(--color-border)", zIndex: 10 }}>
-                                    <button
-                                        onClick={handleCreateOrder}
-                                        style={{
-                                            width: "100%",
-                                            padding: "12px",
-                                            backgroundColor: "var(--color-primary)",
-                                            color: "white",
-                                            border: "none",
-                                            borderRadius: "var(--radius-md)",
-                                            cursor: "pointer",
-                                            fontWeight: 600,
-                                            boxShadow: "0 -4px 10px rgba(0,0,0,0.05)"
-                                        }}
-                                    >
+                                    <button onClick={handleCreateOrder} className="btn btn-primary" style={{ width: '100%' }}>
                                         Bestellung anlegen
                                     </button>
                                 </div>
@@ -2289,20 +2263,7 @@ export const Orders: React.FC = () => {
                                         style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
                                     />
                                 </div>
-                                <button
-                                    onClick={handleCreateOrder}
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px',
-                                        backgroundColor: 'var(--color-primary)',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: 'var(--radius-md)',
-                                        cursor: 'pointer',
-                                        fontWeight: 500,
-                                        marginTop: 'var(--spacing-sm)'
-                                    }}
-                                >
+                                <button onClick={handleCreateOrder} className="btn btn-primary" style={{ width: '100%', marginTop: 'var(--spacing-sm)' }}>
                                     Bestellung anlegen
                                 </button>
                             </div>
@@ -2729,20 +2690,8 @@ export const Orders: React.FC = () => {
 
             {
                 orderToDelete && (
-                    <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.5)',
-                        display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100
-                    }}>
-                        <div style={{
-                            backgroundColor: 'white',
-                            padding: 'var(--spacing-xl)',
-                            borderRadius: 'var(--radius-lg)',
-                            maxWidth: '400px',
-                            width: '100%',
-                            boxShadow: 'var(--shadow-lg)',
-                            textAlign: 'center'
-                        }}>
+                    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+                        <div className="card" style={{ padding: 'var(--spacing-xl)', maxWidth: '400px', textAlign: 'center' }}>
                             <div style={{ color: 'var(--color-danger)', marginBottom: 'var(--spacing-md)' }}>
                                 <AlertTriangle size={48} style={{ margin: '0 auto' }} />
                             </div>
@@ -2751,17 +2700,7 @@ export const Orders: React.FC = () => {
                                 Möchtest du die Bestellung für <strong>{orderToDelete.productName}</strong> ({orderToDelete.quantity}x) wirklich unwiderruflich löschen?
                             </p>
                             <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'center' }}>
-                                <button
-                                    onClick={() => setOrderToDelete(null)}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-lg)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--color-border)',
-                                        backgroundColor: 'transparent',
-                                        cursor: 'pointer',
-                                        fontWeight: 500
-                                    }}
-                                >
+                                <button onClick={() => setOrderToDelete(null)} className="btn btn-ghost">
                                     Abbrechen
                                 </button>
                                 <button
@@ -2772,15 +2711,7 @@ export const Orders: React.FC = () => {
                                         loadOrders();
                                         setNotification({ message: 'Bestellung erfolgreich gelöscht.', type: 'success' });
                                     }}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-lg)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: 'none',
-                                        backgroundColor: 'var(--color-danger)',
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        fontWeight: 500
-                                    }}
+                                    className="btn btn-danger-solid"
                                 >
                                     Löschen
                                 </button>
