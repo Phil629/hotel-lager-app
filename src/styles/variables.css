@@ -342,6 +342,8 @@ textarea:focus {
 
 /* ── Button extras ── */
 .btn-circle { border-radius: var(--radius-full) !important; padding: 8px; }
+.btn-success { background-color: var(--color-success); color: #ffffff; }
+.btn-success:hover:not(:disabled) { background-color: #16a34a; box-shadow: var(--shadow-md); }
 .btn-warning { background-color: #f59e0b; color: #ffffff; }
 .btn-warning:hover:not(:disabled) { background-color: #d97706; box-shadow: var(--shadow-md); }
 .btn-danger-solid { background-color: var(--color-danger); color: #ffffff; }
@@ -378,7 +380,7 @@ textarea:focus {
   transition: background-color 0.15s;
 }
 .products-table tbody tr:hover { background-color: var(--color-surface-elevated); }
-.products-table tbody tr.row-low-stock { border-left: 3px solid var(--color-danger); }
+.products-table tbody tr.row-low-stock td:first-child { box-shadow: inset 4px 0 0 0 var(--color-danger); }
 .products-table tbody td { padding: 14px 16px; vertical-align: middle; }
 
 /* ── Toast Animations ── */
