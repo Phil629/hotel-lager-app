@@ -769,23 +769,11 @@ export const Orders: React.FC = () => {
                             )}
                         </div>
                         <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ 
-                                backgroundColor: 'var(--color-primary)', 
-                                color: 'white', 
-                                padding: '2px 8px', 
-                                borderRadius: '12px', 
-                                fontWeight: 'bold',
-                                fontSize: '13px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                            }}>
-                                {order.quantity}x bestellt
-                            </span>
-                            <span>• Bestellt am: {new Date(order.date).toLocaleDateString('de-DE')}</span>
-                            {order.supplierName && <span>• Bei: {order.supplierName}</span>}
+                            <span className="badge badge-primary">{order.quantity}x bestellt</span>
+                            <span>Bestellt am: {new Date(order.date).toLocaleDateString('de-DE')}</span>
+                            {order.supplierName && <span>• {order.supplierName}</span>}
                             {order.orderNumber && <span>• Nr: {order.orderNumber}</span>}
-                            {order.price && <span>• Preis: {order.price.toFixed(2)} €</span>}
+                            {order.price && <span>• {order.price.toFixed(2)} €</span>}
                         </div>
                         {order.notes && (
                             <div style={{ fontSize: 'var(--font-size-sm)', fontStyle: 'italic', marginBottom: 'var(--spacing-xs)', color: 'var(--color-text-main)' }}>
@@ -796,75 +784,30 @@ export const Orders: React.FC = () => {
                             const product = products.find((p: Product) => p.name === order.productName);
                             if (!product) return null;
                             return (
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px', marginBottom: '8px' }}>
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', marginBottom: '6px' }}>
                                     {product.orderUrl && (
-                                        <a
-                                            href={product.orderUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                padding: '6px 12px',
-                                                backgroundColor: getEffectiveOrderMethod(product) === 'link' ? 'var(--color-primary)' : 'white',
-                                                color: getEffectiveOrderMethod(product) === 'link' ? 'white' : 'var(--color-primary)',
-                                                border: '1px solid var(--color-primary)',
-                                                borderRadius: '4px',
-                                                textDecoration: 'none',
-                                                fontSize: '12px',
-                                                fontWeight: 500
-                                            }}
+                                        <a href={product.orderUrl} target="_blank" rel="noopener noreferrer"
+                                            className={getEffectiveOrderMethod(product) === 'link' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost'}
                                         >
-                                            <ExternalLink size={14} />
-                                            Zur Webseite {""}
-                                            {getEffectiveOrderMethod(product) === 'link' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
+                                            <ExternalLink size={13} /> Webshop
+                                            {getEffectiveOrderMethod(product) === 'link' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
                                     {order.supplierEmail && !product.autoOrder && (
-                                        <a
-                                            href={`https://mail.google.com/mail/?view=cm&fs=1&to=${order.supplierEmail}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                padding: '6px 12px',
-                                                backgroundColor: getEffectiveOrderMethod(product) === 'email' ? '#EA4335' : 'white',
-                                                color: getEffectiveOrderMethod(product) === 'email' ? 'white' : '#EA4335',
-                                                border: '1px solid #EA4335',
-                                                borderRadius: '4px',
-                                                textDecoration: 'none',
-                                                fontSize: '12px',
-                                                fontWeight: 500
-                                            }}
+                                        <a href={`https://mail.google.com/mail/?view=cm&fs=1&to=${order.supplierEmail}`} target="_blank" rel="noopener noreferrer"
+                                            className={getEffectiveOrderMethod(product) === 'email' ? 'btn btn-sm btn-danger-solid' : 'btn btn-sm btn-ghost'}
+                                            style={getEffectiveOrderMethod(product) === 'email' ? { backgroundColor: '#EA4335' } : {}}
                                         >
-                                            <Mail size={14} />
-                                            Email / Gmail {""}
-                                            {getEffectiveOrderMethod(product) === 'email' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
+                                            <Mail size={13} /> Gmail
+                                            {getEffectiveOrderMethod(product) === 'email' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
                                     {(order.supplierPhone || product.supplierPhone) && (
-                                        <a
-                                            href={`tel:${order.supplierPhone || product.supplierPhone}`}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                padding: '6px 12px',
-                                                backgroundColor: getEffectiveOrderMethod(product) === 'phone' ? '#ff9800' : 'white',
-                                                color: getEffectiveOrderMethod(product) === 'phone' ? 'white' : '#ff9800',
-                                                border: '1px solid #ff9800',
-                                                borderRadius: '4px',
-                                                textDecoration: 'none',
-                                                fontSize: '12px',
-                                                fontWeight: 500
-                                            }}
+                                        <a href={`tel:${order.supplierPhone || product.supplierPhone}`}
+                                            className={getEffectiveOrderMethod(product) === 'phone' ? 'btn btn-sm btn-warning' : 'btn btn-sm btn-ghost'}
                                         >
-                                            <Phone size={14} />
-                                            Anrufen {""}
-                                            {getEffectiveOrderMethod(product) === 'phone' && <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.8 }}>(Standard)</span>}
+                                            <Phone size={13} /> Anrufen
+                                            {getEffectiveOrderMethod(product) === 'phone' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
                                 </div>
@@ -889,48 +832,33 @@ export const Orders: React.FC = () => {
                                         {hasPendingQty && (
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                                                 <span><strong style={{color:'#f57c00'}}>Menge: {revs.quantity?.suggested}</strong> (vorher {revs.quantity?.original})</span>
-                                                <button 
-                                                    onClick={() => handleRevertAi(order.id, 'quantity', revs.quantity?.original)}
-                                                    style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid #ffb74d', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#f57c00' }}
-                                                >
-                                                    Menge auf {revs.quantity?.original} zurücksetzen
+                                                <button onClick={() => handleRevertAi(order.id, 'quantity', revs.quantity?.original)} className="btn btn-sm btn-ghost" style={{ fontSize: '11px' }}>
+                                                    Auf {revs.quantity?.original} zurücksetzen
                                                 </button>
                                             </div>
                                         )}
                                         {hasPendingPrice && (
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                                                 <span><strong style={{color:'#f57c00'}}>Preis: {revs.price?.suggested} €</strong> (vorher {revs.price?.original} €)</span>
-                                                <button 
-                                                    onClick={() => handleRevertAi(order.id, 'price', revs.price?.original)}
-                                                    style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid #ffb74d', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#f57c00' }}
-                                                >
-                                                    Preis zurücksetzen
+                                                <button onClick={() => handleRevertAi(order.id, 'price', revs.price?.original)} className="btn btn-sm btn-ghost" style={{ fontSize: '11px' }}>
+                                                    Zurücksetzen
                                                 </button>
                                             </div>
                                         )}
                                         {hasPendingDate && (
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                                                 <span><strong style={{color:'#f57c00'}}>Datum: {new Date(revs.date?.suggested || new Date()).toLocaleDateString('de-DE')}</strong> (vorher {new Date(revs.date?.original || new Date()).toLocaleDateString('de-DE')})</span>
-                                                <button 
-                                                    onClick={() => handleRevertAi(order.id, 'date', revs.date?.original)}
-                                                    style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid #ffb74d', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#f57c00' }}
-                                                >
-                                                    Datum zurücksetzen
+                                                <button onClick={() => handleRevertAi(order.id, 'date', revs.date?.original)} className="btn btn-sm btn-ghost" style={{ fontSize: '11px' }}>
+                                                    Zurücksetzen
                                                 </button>
                                             </div>
                                         )}
                                     </div>
                                     <div style={{ borderTop: '1px solid #ffe082', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                                        <button 
-                                            onClick={() => handleAcceptAi(order.id)}
-                                            style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #4caf50', backgroundColor: '#e8f5e9', borderRadius: '4px', cursor: 'pointer', color: '#2e7d32', fontWeight: 600 }}
-                                        >
-                                            <span style={{display: 'flex', alignItems: 'center', gap: '4px'}}>Alles beibehalten</span>
+                                        <button onClick={() => handleAcceptAi(order.id)} className="btn btn-sm btn-success">
+                                            Alles beibehalten
                                         </button>
-                                        <button 
-                                            onClick={() => handleRevertAi(order.id, 'all', 0)}
-                                            style={{ padding: '6px 12px', fontSize: '12px', border: 'none', backgroundColor: '#ffe082', borderRadius: '4px', cursor: 'pointer', color: '#ef6c00', fontWeight: 600 }}
-                                        >
+                                        <button onClick={() => handleRevertAi(order.id, 'all', 0)} className="btn btn-sm btn-warning">
                                             Alle verwerfen
                                         </button>
                                     </div>
@@ -1141,185 +1069,45 @@ export const Orders: React.FC = () => {
                         )}
                     </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '130px' }}>
                     {order.status === 'open' && (
                         <>
-                            <button
-                                onClick={() => toggleOrderStatus(order.id)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: 'none',
-                                    backgroundColor: 'var(--color-success)',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-xs)',
-                                    fontSize: 'var(--font-size-sm)',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                <CheckCircle size={16} />
-                                Erhalten
+                            <button onClick={() => toggleOrderStatus(order.id)} className="btn btn-sm btn-success">
+                                <CheckCircle size={15} /> Erhalten
                             </button>
-                            <button
-                                onClick={() => openDefectModal(order)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid #ff9800',
-                                    backgroundColor: 'white',
-                                    color: '#ff9800',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-xs)',
-                                    fontSize: 'var(--font-size-sm)',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                <AlertTriangle size={16} />
-                                Mangel melden
+                            <button onClick={() => openDefectModal(order)} className="btn btn-sm btn-warning">
+                                <AlertTriangle size={15} /> Mangel
                             </button>
                             {order.hasDefect && order.supplierEmail && (
-                                <button
-                                    onClick={() => sendDefectEmail(order)}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--color-primary)',
-                                        backgroundColor: 'white',
-                                        color: 'var(--color-primary)',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 'var(--spacing-xs)',
-                                        fontSize: 'var(--font-size-sm)',
-                                        whiteSpace: 'nowrap'
-                                    }}
-                                >
-                                    <Mail size={16} />
-                                    Email senden
+                                <button onClick={() => sendDefectEmail(order)} className="btn btn-sm btn-ghost">
+                                    <Mail size={15} /> Email senden
                                 </button>
                             )}
-                            <button
-                                onClick={() => openDeliveryDateModal(order)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    backgroundColor: 'white',
-                                    color: 'var(--color-text-main)',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-xs)',
-                                    fontSize: 'var(--font-size-sm)',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                <Calendar size={16} />
-                                Liefertermin/ -link
+                            <button onClick={() => openDeliveryDateModal(order)} className="btn btn-sm btn-ghost">
+                                <Calendar size={15} /> Liefertermin
                             </button>
-                            <button
-                                onClick={() => setEditingOrder(order)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    backgroundColor: 'white',
-                                    color: 'var(--color-text-main)',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-xs)',
-                                    fontSize: 'var(--font-size-sm)',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                <Edit2 size={16} />
-                                Bearbeiten
+                            <button onClick={() => setEditingOrder(order)} className="btn btn-sm btn-ghost">
+                                <Edit2 size={15} /> Bearbeiten
                             </button>
-                            <button
-                                onClick={() => handleRepeatOrder(order)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-primary)',
-                                    backgroundColor: 'white',
-                                    color: 'var(--color-primary)',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-xs)',
-                                    fontSize: 'var(--font-size-sm)',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                <Plus size={16} />
-                                Wiederholen
+                            <button onClick={() => handleRepeatOrder(order)} className="btn btn-sm btn-ghost" style={{ color: 'var(--color-primary)', borderColor: '#bfdbfe' }}>
+                                <Plus size={15} /> Wiederholen
                             </button>
                         </>
                     )}
                     {order.status === 'received' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-                            <button
-                                onClick={() => toggleOrderStatus(order.id)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    backgroundColor: 'white',
-                                    color: 'var(--color-text-main)',
-                                    cursor: 'pointer',
-                                    fontSize: 'var(--font-size-sm)',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
+                        <>
+                            <button onClick={() => toggleOrderStatus(order.id)} className="btn btn-sm btn-ghost">
                                 Rückgängig
                             </button>
-                            <button
-                                onClick={() => setEditingOrder(order)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    backgroundColor: 'white',
-                                    color: 'var(--color-text-main)',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-xs)',
-                                    fontSize: 'var(--font-size-sm)',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                <Edit2 size={16} />
-                                Bearbeiten
+                            <button onClick={() => setEditingOrder(order)} className="btn btn-sm btn-ghost">
+                                <Edit2 size={15} /> Bearbeiten
                             </button>
-                            <button
-                                onClick={() => handleRepeatOrder(order)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-primary)',
-                                    backgroundColor: 'white',
-                                    color: 'var(--color-primary)',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 'var(--spacing-xs)',
-                                    fontSize: 'var(--font-size-sm)',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                <Plus size={16} />
-                                Wiederholen
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                            <button onClick={() => handleRepeatOrder(order)} className="btn btn-sm btn-ghost" style={{ color: 'var(--color-primary)', borderColor: '#bfdbfe' }}>
+                                <Plus size={15} /> Wiederholen
+                            </button>
+                        </>
+                    )}
+                </div>
                 </div>
             </div>
         );
@@ -1355,9 +1143,10 @@ export const Orders: React.FC = () => {
                     )}
                     <button
                         onClick={() => toggleReceivedOrder(order.id)}
-                        style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-sm)', padding: 0, marginTop: '4px', cursor: 'pointer', textDecoration: 'underline' }}
+                        className="btn btn-sm btn-ghost"
+                        style={{ alignSelf: 'flex-start', marginTop: '4px', color: 'var(--color-primary)', borderColor: '#bfdbfe' }}
                     >
-                        Weitere Details
+                        Details anzeigen
                     </button>
                 </div>
             );
@@ -1368,10 +1157,7 @@ export const Orders: React.FC = () => {
                 {renderOrderCard(order)}
                 {!hasUnresolvedDefect && (
                     <div style={{ marginTop: '8px', textAlign: 'center' }}>
-                        <button
-                            onClick={() => toggleReceivedOrder(order.id)}
-                            style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 'var(--font-size-sm)', cursor: 'pointer', textDecoration: 'underline' }}
-                        >
+                        <button onClick={() => toggleReceivedOrder(order.id)} className="btn btn-sm btn-ghost" style={{ color: 'var(--color-primary)' }}>
                             Details ausblenden
                         </button>
                     </div>
@@ -1389,43 +1175,9 @@ export const Orders: React.FC = () => {
                 <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
 
                     {orderProposals.length > 0 && (
-
-                        <button
-
-                            onClick={handleOpenProposals}
-
-                            style={{
-
-                                backgroundColor: '#FF9800',
-
-                                color: 'white',
-
-                                border: 'none',
-
-                                padding: '10px 20px',
-
-                                borderRadius: 'var(--radius-md)',
-
-                                cursor: 'pointer',
-
-                                display: 'flex',
-
-                                alignItems: 'center',
-
-                                gap: '8px',
-
-                                fontWeight: 600,
-
-                                boxShadow: 'var(--shadow-md)'
-
-                            }}
-
-                        >
-
+                        <button onClick={handleOpenProposals} className="btn btn-warning">
                             ✨ Bestellvorschläge ({orderProposals.length})
-
                         </button>
-
                     )}
 
                     <button onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary">
@@ -1527,100 +1279,41 @@ export const Orders: React.FC = () => {
                                             <div style={{ color: 'var(--color-text-muted)' }}>
                                                 {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                                             </div>
-                                            <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', color: 'var(--color-text-main)', flexWrap: 'wrap' }}>
-                                                <Package size={18} color={iconColor} />
+                                            <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 700, color: 'var(--color-text-main)', flexWrap: 'wrap' }}>
+                                                <Package size={17} color={iconColor} />
                                                 {supplierName}
-                                                <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#e2e8f0', color: '#475569', borderRadius: '12px', fontWeight: 600 }}>
-                                                    {supplierOrders.length}
-                                                </span>
-                                                {hasDefect && (
-                                                    <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#ffe0b2', color: '#e65100', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <AlertTriangle size={12} /> Mangel
-                                                    </span>
-                                                )}
-                                                {isDelayed && (
-                                                    <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#ffcdd2', color: '#c62828', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <Clock size={12} /> Verspätet
-                                                    </span>
-                                                )}
+                                                <span className="badge badge-neutral">{supplierOrders.length}</span>
+                                                {hasDefect && <span className="badge badge-warning"><AlertTriangle size={11} /> Mangel</span>}
+                                                {isDelayed && <span className="badge badge-danger"><Clock size={11} /> Verspätet</span>}
                                                 {!isDelayed && supplierDeliveryDate && (
-                                                    <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#e3f2fd', color: '#1565c0', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <Calendar size={12} /> {new Date(supplierDeliveryDate).toLocaleDateString('de-DE')}
-                                                    </span>
+                                                    <span className="badge badge-primary"><Calendar size={11} /> {new Date(supplierDeliveryDate).toLocaleDateString('de-DE')}</span>
                                                 )}
                                             </h4>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                                             <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    openDeliveryDateModal(supplierOrders);
-                                                }}
-                                                style={{
-                                                    padding: '8px 12px',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    border: '1px solid var(--color-border)',
-                                                    backgroundColor: 'white',
-                                                    color: 'var(--color-text-main)',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    fontSize: '13px',
-                                                    fontWeight: 600
-                                                }}
+                                                onClick={(e) => { e.stopPropagation(); openDeliveryDateModal(supplierOrders); }}
+                                                className="btn btn-sm btn-ghost"
                                                 title="Liefertermin für gesamte Lieferung setzen"
                                             >
-                                                <Calendar size={16} />
-                                                Termin
+                                                <Calendar size={15} /> Termin
                                             </button>
                                             <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    openDefectModal(supplierOrders);
-                                                }}
-                                                style={{
-                                                    padding: '8px 12px',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    border: '1px solid #ff9800',
-                                                    backgroundColor: 'white',
-                                                    color: '#ff9800',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    fontSize: '13px',
-                                                    fontWeight: 600
-                                                }}
+                                                onClick={(e) => { e.stopPropagation(); openDefectModal(supplierOrders); }}
+                                                className="btn btn-sm btn-warning"
                                                 title="Mangel bei einem Produkt der Lieferung melden"
                                             >
-                                                <AlertTriangle size={16} />
-                                                Mangel
+                                                <AlertTriangle size={15} /> Mangel
                                             </button>
-                                            <button 
+                                            <button
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
-                                                    for (const o of supplierOrders) {
-                                                        await toggleOrderStatus(o.id);
-                                                    }
-                                                    setNotification({ message: `Alle ${supplierOrders.length} Bestellungen von ${supplierName} wurden als erhalten markiert.`, type: 'success' });
+                                                    for (const o of supplierOrders) { await toggleOrderStatus(o.id); }
+                                                    setNotification({ message: `Alle ${supplierOrders.length} Bestellungen von ${supplierName} als erhalten markiert.`, type: 'success' });
                                                 }}
-                                                style={{
-                                                    padding: '8px 12px',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    border: '1px solid #bfdbfe',
-                                                    backgroundColor: '#eff6ff',
-                                                    color: '#1d4ed8',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    fontSize: '13px',
-                                                    fontWeight: 600
-                                                }}
+                                                className="btn btn-sm btn-success"
                                             >
-                                                <CheckSquare size={16} />
-                                                Erhalten
+                                                <CheckSquare size={15} /> Alle erhalten
                                             </button>
                                         </div>
                                     </div>
@@ -1675,19 +1368,7 @@ export const Orders: React.FC = () => {
                         {visibleReceivedOrders.map(renderReceivedOrderCard)}
 
                         {visibleReceivedCount < receivedOrders.length && (
-                            <button
-                                onClick={() => setVisibleReceivedCount(prev => prev + 10)}
-                                style={{
-                                    padding: '10px',
-                                    marginTop: '10px',
-                                    backgroundColor: 'var(--color-surface)',
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: 'var(--radius-md)',
-                                    cursor: 'pointer',
-                                    color: 'var(--color-text-main)',
-                                    fontWeight: 500
-                                }}
-                            >
+                            <button onClick={() => setVisibleReceivedCount(prev => prev + 10)} className="btn btn-ghost" style={{ marginTop: '8px', width: '100%', justifyContent: 'center' }}>
                                 Mehr laden ({receivedOrders.length - visibleReceivedCount} verbleibend)
                             </button>
                         )}
