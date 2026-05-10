@@ -261,6 +261,92 @@ textarea:focus {
 .badge-primary { background-color: #eff6ff; color: var(--color-primary); }
 .badge-dark    { background-color: #1e293b; color: #e2e8f0; }
 
+/* ── Modals ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+.modal-box {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+}
+.modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--color-surface-elevated);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  flex-shrink: 0;
+  gap: 12px;
+}
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--color-surface-elevated);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  flex-shrink: 0;
+}
+
+/* ── Forms ── */
+.input-field {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  color: var(--color-text-main);
+  background-color: var(--color-surface);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.input-field:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.form-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Button extras ── */
+.btn-circle { border-radius: var(--radius-full) !important; padding: 8px; }
+.btn-warning { background-color: #f59e0b; color: #ffffff; }
+.btn-warning:hover:not(:disabled) { background-color: #d97706; box-shadow: var(--shadow-md); }
+.btn-danger-solid { background-color: var(--color-danger); color: #ffffff; }
+.btn-danger-solid:hover:not(:disabled) { background-color: #dc2626; box-shadow: var(--shadow-md); }
+
 /* ── Toast Animations ── */
 @keyframes toast-in  {
   from { transform: translateX(calc(100% + 24px)); opacity: 0; }

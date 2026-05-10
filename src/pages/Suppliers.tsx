@@ -226,26 +226,8 @@ export const Suppliers: React.FC = () => {
 
             <div className="page-header">
                 <h2 className="page-title">Lieferanten Netzwerk</h2>
-                <button
-                    onClick={() => handleOpenModal()}
-                    style={{
-                        backgroundColor: 'var(--color-primary)',
-                        color: 'white',
-                        border: 'none',
-                        padding: '10px 20px',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontWeight: 600,
-                        boxShadow: 'var(--shadow-md)',
-                        transition: 'transform 0.1s',
-                    }}
-                    onMouseOver={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                    onMouseOut={e => e.currentTarget.style.transform = 'none'}
-                >
-                    <Plus size={20} /> Neuer Lieferant
+                <button onClick={() => handleOpenModal()} className="btn btn-primary">
+                    <Plus size={18} /> Neuer Lieferant
                 </button>
             </div>
 
@@ -309,12 +291,12 @@ export const Suppliers: React.FC = () => {
                                         <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>👤 {supplier.contactName}</div>
                                     )}
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button onClick={() => handleOpenModal(supplier)} style={{ padding: '8px', borderRadius: '50%', backgroundColor: 'white', border: '1px solid #cbd5e1', color: '#475569', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => {e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)';}} onMouseOut={e => {e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.color = '#475569';}} title="Bearbeiten">
-                                        <Edit2 size={16} />
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button onClick={() => handleOpenModal(supplier)} className="btn btn-ghost btn-circle" title="Bearbeiten">
+                                        <Edit2 size={15} />
                                     </button>
-                                    <button onClick={() => setSupplierToDelete(supplier)} style={{ padding: '8px', borderRadius: '50%', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#ef4444', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => {e.currentTarget.style.backgroundColor = '#fee2e2';}} onMouseOut={e => {e.currentTarget.style.backgroundColor = '#fef2f2';}} title="Löschen">
-                                        <Trash2 size={16} />
+                                    <button onClick={() => setSupplierToDelete(supplier)} className="btn btn-danger btn-circle" title="Löschen">
+                                        <Trash2 size={15} />
                                     </button>
                                 </div>
                             </div>
@@ -366,29 +348,18 @@ export const Suppliers: React.FC = () => {
             </div>
 
             {isModalOpen && (
-                <div style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)',
-                    display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px'
-                }}>
-                    <div style={{
-                        backgroundColor: 'var(--color-surface)',
-                        borderRadius: 'var(--radius-xl)',
-                        width: '100%',
-                        maxWidth: '800px',
-                        maxHeight: '90vh',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)'
-                    }}>
-                        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderTopLeftRadius: 'var(--radius-xl)', borderTopRightRadius: 'var(--radius-xl)' }}>
-                            <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--color-text-main)' }}>{editingSupplier ? 'Lieferant bearbeiten' : 'Neuer Lieferant'}</h2>
-                            <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#64748b' }}>
-                                <X size={24} />
+                <div className="modal-overlay">
+                    <div className="modal-box" style={{ maxWidth: '800px' }}>
+                        <div className="modal-header">
+                            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--color-text-main)' }}>
+                                {editingSupplier ? 'Lieferant bearbeiten' : 'Neuer Lieferant'}
+                            </h2>
+                            <button onClick={() => setIsModalOpen(false)} className="btn btn-ghost btn-icon">
+                                <X size={20} />
                             </button>
                         </div>
 
-                        <div style={{ padding: '24px', overflowY: 'auto', flex: 1, backgroundColor: 'white' }}>
+                        <div className="modal-body">
                             <form id="supplierForm" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                 
                                 {/* Stammdaten Section */}
@@ -581,10 +552,10 @@ export const Suppliers: React.FC = () => {
                             </form>
                         </div>
 
-                        <div style={{ padding: '20px 24px', borderTop: '1px solid var(--color-border)', backgroundColor: '#f8fafc', borderBottomLeftRadius: 'var(--radius-xl)', borderBottomRightRadius: 'var(--radius-xl)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                            <button type="button" onClick={() => setIsModalOpen(false)} disabled={isSubmitting} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: 'white', cursor: 'pointer', fontSize: '15px', color: '#475569', fontWeight: 500 }}>Abbrechen</button>
-                            <button type="submit" form="supplierForm" disabled={isSubmitting} style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: '15px', opacity: isSubmitting ? 0.7 : 1 }}>
-                                {isSubmitting ? 'Speichert...' : 'Speichern'}
+                        <div className="modal-footer">
+                            <button type="button" onClick={() => setIsModalOpen(false)} disabled={isSubmitting} className="btn btn-ghost">Abbrechen</button>
+                            <button type="submit" form="supplierForm" disabled={isSubmitting} className="btn btn-primary">
+                                {isSubmitting ? 'Speichert…' : 'Speichern'}
                             </button>
                         </div>
                     </div>
@@ -592,16 +563,18 @@ export const Suppliers: React.FC = () => {
             )}
 
             {supplierToDelete && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100, padding: '20px' }}>
-                    <div style={{ backgroundColor: 'white', padding: '32px', borderRadius: 'var(--radius-xl)', maxWidth: '400px', width: '100%', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)', textAlign: 'center' }}>
-                        <div style={{ backgroundColor: '#fef2f2', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', color: '#ef4444' }}>
-                            <AlertTriangle size={32} />
+                <div className="modal-overlay" style={{ zIndex: 1100 }}>
+                    <div className="card" style={{ padding: '32px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
+                        <div style={{ backgroundColor: 'var(--color-danger-bg)', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', color: 'var(--color-danger)' }}>
+                            <AlertTriangle size={28} />
                         </div>
-                        <h3 style={{ margin: '0 0 12px 0', fontSize: '20px', color: 'var(--color-text-main)' }}>Lieferant löschen?</h3>
-                        <p style={{ color: '#64748b', marginBottom: '24px', fontSize: '15px', lineHeight: '1.5' }}>Möchtest du <strong>{supplierToDelete.name}</strong> wirklich löschen? Zugeordnete Produkte verlieren dadurch ihren Lieferanten, bleiben aber im Inventar erhalten.</p>
-                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                            <button onClick={() => setSupplierToDelete(null)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: 'white', cursor: 'pointer', fontWeight: 500, flex: 1 }}>Abbrechen</button>
-                            <button onClick={() => handleDelete(supplierToDelete.id)} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600, flex: 1 }}>Löschen</button>
+                        <h3 style={{ margin: '0 0 10px 0', fontSize: '19px', fontWeight: 700, color: 'var(--color-text-main)' }}>Lieferant löschen?</h3>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '24px', fontSize: '14px', lineHeight: '1.6' }}>
+                            Möchtest du <strong style={{ color: 'var(--color-text-main)' }}>{supplierToDelete.name}</strong> wirklich löschen? Zugeordnete Produkte verlieren ihren Lieferanten, bleiben aber im Inventar erhalten.
+                        </p>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button onClick={() => setSupplierToDelete(null)} className="btn btn-ghost" style={{ flex: 1 }}>Abbrechen</button>
+                            <button onClick={() => handleDelete(supplierToDelete.id)} className="btn btn-danger-solid" style={{ flex: 1 }}>Löschen</button>
                         </div>
                     </div>
                 </div>

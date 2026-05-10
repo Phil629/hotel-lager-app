@@ -248,24 +248,8 @@ export const Settings: React.FC = () => {
                     <h2 className="page-title">Einstellungen</h2>
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>Verwalten Sie Ihr Profil und Ihre App-Konfiguration.</p>
                 </div>
-                <button 
-                    onClick={handleSave}
-                    style={{ 
-                        backgroundColor: 'var(--color-primary)', 
-                        color: 'white', 
-                        border: 'none', 
-                        padding: '12px 24px', 
-                        borderRadius: 'var(--radius-md)', 
-                        cursor: 'pointer', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '8px', 
-                        fontWeight: 600,
-                        boxShadow: 'var(--shadow-sm)',
-                        transition: '0.2s transform'
-                    }}
-                >
-                    <Save size={18} /> Speichern
+                <button onClick={handleSave} className="btn btn-primary">
+                    <Save size={17} /> Speichern
                 </button>
             </div>
 

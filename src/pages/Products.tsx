@@ -575,22 +575,8 @@ export const Products: React.FC = () => {
         <div>
             <div className="page-header">
                 <h2 className="page-title">Produkte</h2>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    style={{
-                        backgroundColor: 'var(--color-primary)',
-                        color: 'white',
-                        border: 'none',
-                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                        borderRadius: 'var(--radius-md)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--spacing-sm)',
-                        fontWeight: 500
-                    }}
-                >
-                    <Plus size={20} />
-                    Neues Produkt
+                <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
+                    <Plus size={18} /> Neues Produkt
                 </button>
             </div>
 

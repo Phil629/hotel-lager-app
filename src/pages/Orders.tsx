@@ -1428,26 +1428,9 @@ export const Orders: React.FC = () => {
 
                     )}
 
-                    <button
-
-                        onClick={() => setIsCreateModalOpen(true)}
-                    style={{
-                        backgroundColor: 'var(--color-primary)',
-                        color: 'white',
-                        border: 'none',
-                        padding: '10px 20px',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontWeight: 500,
-                        boxShadow: 'var(--shadow-md)'
-                    }}
-                >
-                    <Plus size={20} /> Neue Bestellung
-
-                        </button>
+                    <button onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary">
+                        <Plus size={18} /> Neue Bestellung
+                    </button>
 
                     </div>
 
