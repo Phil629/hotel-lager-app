@@ -224,8 +224,8 @@ export const Suppliers: React.FC = () => {
                 />
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
-                <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0, fontWeight: 700, color: 'var(--color-text-main)' }}>Lieferanten Netzwerk</h2>
+            <div className="page-header">
+                <h2 className="page-title">Lieferanten Netzwerk</h2>
                 <button
                     onClick={() => handleOpenModal()}
                     style={{

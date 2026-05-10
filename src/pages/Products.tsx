@@ -573,8 +573,8 @@ export const Products: React.FC = () => {
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0 }}>Produkte</h2>
+            <div className="page-header">
+                <h2 className="page-title">Produkte</h2>
                 <button
                     onClick={() => setIsModalOpen(true)}
                     style={{

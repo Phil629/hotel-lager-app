@@ -1384,8 +1384,8 @@ export const Orders: React.FC = () => {
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
-                <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0 }}>Bestellungen</h2>
+            <div className="page-header">
+                <h2 className="page-title">Bestellungen</h2>
                 <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
 
                     {orderProposals.length > 0 && (

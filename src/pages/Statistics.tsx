@@ -220,13 +220,13 @@ export const Statistics: React.FC = () => {
                         <BarChart3 size={28} />
                     </div>
                     <div>
-                        <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0, color: 'var(--color-text-main)' }}>Statistiken & Analysen</h2>
+                        <h2 className="page-title">Statistiken & Analysen</h2>
                         <p style={{ color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>Kostenkontrolle und Verbrauchsübersicht</p>
                     </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
-                    <div style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    <div className="stat-card">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-muted)', marginBottom: '8px', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase' }}>
                             <Euro size={16} /> Ausgaben diesen Monat
                         </div>
@@ -239,7 +239,7 @@ export const Statistics: React.FC = () => {
                         </div>
                     </div>
 
-                    <div style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    <div className="stat-card">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-muted)', marginBottom: '8px', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase' }}>
                             <Calendar size={16} /> Bestellungen diesen Monat
                         </div>
@@ -253,7 +253,7 @@ export const Statistics: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) 2.5fr', gap: 'var(--spacing-xl)', alignItems: 'start' }}>
                 
                 {/* Product List Sidebar */}
-                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                <div className="card" style={{ overflow: 'hidden' }}>
                     <div style={{ padding: 'var(--spacing-md)', borderBottom: '1px solid var(--color-border)', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <LayoutGrid size={20} color="var(--color-primary)" />
                         <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', color: 'var(--color-text-main)' }}>Ausgaben nach Produkt</h3>

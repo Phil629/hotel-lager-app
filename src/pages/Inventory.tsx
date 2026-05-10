@@ -78,8 +78,8 @@ export const Inventory: React.FC = () => {
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-2xl)' }}>
-                <h2 style={{ fontSize: 'var(--font-size-2xl)', margin: 0, display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-text-main)' }}>
-                    <ArrowDownToLine size={28} color="var(--color-primary)" />
+                <h2 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ArrowDownToLine size={26} color="var(--color-primary)" />
                     Inventur-Zählung
                 </h2>
                 <p style={{ color: 'var(--color-text-muted)', margin: 0, fontSize: '15px' }}>

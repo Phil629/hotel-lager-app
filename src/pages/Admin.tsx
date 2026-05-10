@@ -119,9 +119,9 @@ export const Admin = () => {
                 />
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--spacing-xl)', flexWrap: 'wrap', gap: '16px' }}>
+            <div className="page-header" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div>
-                    <h2 style={{ fontSize: 'var(--font-size-3xl)', margin: 0, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h2 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <ShieldAlert size={28} color="#be123c" /> SaaS Administration
                     </h2>
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>Zentrale Verwaltung deiner Kunden und Abonnements.</p>

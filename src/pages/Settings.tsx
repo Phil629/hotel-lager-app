@@ -243,9 +243,9 @@ export const Settings: React.FC = () => {
                 />
             )}
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
+            <div className="page-header" style={{ alignItems: 'flex-start' }}>
                 <div>
-                    <h2 style={{ fontSize: 'var(--font-size-3xl)', margin: 0, color: 'var(--color-text)' }}>Einstellungen</h2>
+                    <h2 className="page-title">Einstellungen</h2>
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>Verwalten Sie Ihr Profil und Ihre App-Konfiguration.</p>
                 </div>
                 <button 
