@@ -108,10 +108,10 @@ export const Orders: React.FC = () => {
         const supabase = getSupabaseClient();
         if (!supabase) return;
 
-        // Listen to changes on all relevant tables
-        const channel = supabase.channel('orders_realtime')
+        // W8: eindeutiger Channel-Name pro Tab verhindert Konflikte
+        const channelName = `orders_rt_${Math.random().toString(36).slice(2, 8)}`;
+        const channel = supabase.channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                console.log('Realtime update received for orders');
                 loadOrders();
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
@@ -276,13 +276,17 @@ export const Orders: React.FC = () => {
             };
             await DataService.updateOrder(updatedOrder);
             
-            // Update Product Stock
-            const product = products.find(p => p.name === order.productName);
+            // W6: Produktsuche primär nach ID (supplierId-Snapshot), Fallback nach Name
+            const product = products.find(p => p.id === (order as any).productId)
+                         || products.find(p => p.name === order.productName);
             if (product) {
                 const stockChange = newStatus === 'received' ? order.quantity : -order.quantity;
-                const updatedProduct = { ...product, stock: Math.max(0, (product.stock || 0) + stockChange) };
+                const newStock = Math.max(0, (product.stock || 0) + stockChange);
+                const updatedProduct = { ...product, stock: newStock };
                 await DataService.updateProduct(updatedProduct);
-                loadProducts(); // Refresh products
+                loadProducts();
+            } else if (newStatus === 'received') {
+                setNotification({ message: `Bestand für „${order.productName}" konnte nicht aktualisiert werden — Produkt nicht gefunden.`, type: 'error' });
             }
 
             loadOrders();

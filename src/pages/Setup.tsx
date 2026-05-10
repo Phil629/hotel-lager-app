@@ -1,54 +1,48 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { Building2, UserPlus, ArrowRight, LogOut } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 import { StorageService } from '../services/storage';
 
 export const Setup: React.FC = () => {
+    const navigate = useNavigate();
     const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
     const [companyName, setCompanyName] = useState('');
     const [joinCode, setJoinCode] = useState('');
     const [loading, setLoading] = useState(false);
-    const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
+    const [notification, setNotification] = useState<{ message: string; type: NotificationType } | null>(null);
 
-    // If they somehow have a company already, redirect them away
     useEffect(() => {
+        if (!supabase) return;
         const checkCompany = async () => {
             const { data: { user } } = await supabase!.auth.getUser();
-            if (user) {
-                const { data } = await supabase!.from('profiles').select('company_id').eq('id', user.id).single();
-                if (data && data.company_id) {
-                    window.location.href = '/';
-                }
+            if (!user) return;
+            const { data } = await supabase!.from('profiles').select('company_id').eq('id', user.id).single();
+            if (data?.company_id) {
+                navigate('/', { replace: true });
             }
         };
         checkCompany();
-    }, []);
+    }, [navigate]);
 
     const handleCreateCompany = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!companyName.trim()) return;
+        if (!companyName.trim() || !supabase) return;
         setLoading(true);
         try {
-            const { data: { user } } = await supabase!.auth.getUser();
-            if (!user) throw new Error("Nicht eingeloggt");
-
-            // 1. Call secure RPC to create company and join
-            const { error: rpcError } = await supabase!.rpc('create_company_and_join', { 
-                company_name: companyName 
+            const { error: rpcError } = await supabase.rpc('create_company_and_join', {
+                company_name: companyName.trim()
             });
-            
             if (rpcError) throw rpcError;
 
-            // Save hotel name locally for UI consistency
             const settings = StorageService.getSettings();
-            settings.hotelName = companyName;
+            settings.hotelName = companyName.trim();
             StorageService.saveSettings(settings);
 
             setNotification({ message: 'Unternehmen erfolgreich erstellt!', type: 'success' });
-            setTimeout(() => window.location.href = '/', 1000);
+            setTimeout(() => navigate('/', { replace: true }), 1000);
         } catch (error: any) {
-            console.error(error);
             setNotification({ message: 'Fehler beim Erstellen: ' + error.message, type: 'error' });
             setLoading(false);
         }
@@ -56,42 +50,34 @@ export const Setup: React.FC = () => {
 
     const handleJoinCompany = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!joinCode.trim()) return;
+        if (!joinCode.trim() || !supabase) return;
         setLoading(true);
         try {
-            const { data: { user } } = await supabase!.auth.getUser();
-            if (!user) throw new Error("Nicht eingeloggt");
-
-            // Call secure RPC to join company by code
-            const { data: companyData, error: rpcError } = await supabase!.rpc('join_company_by_code', {
-                code: joinCode
+            const { data: companyData, error: rpcError } = await supabase.rpc('join_company_by_code', {
+                code: joinCode.trim()
             });
+            if (rpcError) throw new Error(rpcError.message || 'Einladungs-Code ungültig.');
+            if (!companyData) throw new Error('Unternehmen nicht gefunden.');
 
-            if (rpcError) throw new Error(rpcError.message || "Einladungs-Code ungültig.");
-            if (!companyData) throw new Error("Unternehmen nicht gefunden.");
-
-            // Save hotel name locally
             const settings = StorageService.getSettings();
             settings.hotelName = companyData.name;
             StorageService.saveSettings(settings);
 
-            setNotification({ message: `Erfolgreich dem Unternehmen ${companyData.name} beigetreten!`, type: 'success' });
-            setTimeout(() => window.location.href = '/', 1000);
+            setNotification({ message: `Erfolgreich dem Unternehmen „${companyData.name}" beigetreten!`, type: 'success' });
+            setTimeout(() => navigate('/', { replace: true }), 1000);
         } catch (error: any) {
-            console.error(error);
             setNotification({ message: error.message, type: 'error' });
             setLoading(false);
         }
     };
 
     const handleLogout = async () => {
-        await supabase!.auth.signOut();
-        window.location.href = '/';
+        await supabase?.auth.signOut();
     };
 
     return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', width: '100vw', backgroundColor: 'var(--color-background)', position: 'fixed', top: 0, left: 0, zIndex: 9999 }}>
-            
+
             {notification && (
                 <Notification
                     message={notification.message}
@@ -117,11 +103,11 @@ export const Setup: React.FC = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                         <button
                             onClick={() => setMode('create')}
-                            style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: '0.2s', textAlign: 'left' }}
+                            style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: '0.2s', textAlign: 'left', width: '100%' }}
                             onMouseOver={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
                             onMouseOut={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
                         >
-                            <div style={{ backgroundColor: '#eff6ff', padding: '12px', borderRadius: '50%' }}>
+                            <div style={{ backgroundColor: '#eff6ff', padding: '12px', borderRadius: '50%', flexShrink: 0 }}>
                                 <Building2 size={24} color="var(--color-primary)" />
                             </div>
                             <div style={{ flex: 1 }}>
@@ -133,11 +119,11 @@ export const Setup: React.FC = () => {
 
                         <button
                             onClick={() => setMode('join')}
-                            style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: '0.2s', textAlign: 'left' }}
+                            style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: '0.2s', textAlign: 'left', width: '100%' }}
                             onMouseOver={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
                             onMouseOut={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
                         >
-                            <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '50%' }}>
+                            <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '50%', flexShrink: 0 }}>
                                 <UserPlus size={24} color="#16a34a" />
                             </div>
                             <div style={{ flex: 1 }}>
@@ -146,7 +132,7 @@ export const Setup: React.FC = () => {
                             </div>
                             <ArrowRight color="var(--color-text-muted)" />
                         </button>
-                        
+
                         <div style={{ textAlign: 'center', marginTop: 'var(--spacing-lg)' }}>
                             <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 auto' }}>
                                 <LogOut size={16} /> Abmelden
@@ -162,9 +148,10 @@ export const Setup: React.FC = () => {
                             <input
                                 type="text"
                                 required
+                                maxLength={100}
                                 value={companyName}
                                 onChange={(e) => setCompanyName(e.target.value)}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
+                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px', boxSizing: 'border-box' }}
                                 placeholder="z.B. Hotel Sonnenschein GmbH"
                             />
                         </div>
@@ -172,7 +159,7 @@ export const Setup: React.FC = () => {
                             <button type="button" onClick={() => setMode('choose')} style={{ padding: '12px 20px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                                 Zurück
                             </button>
-                            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer' }}>
+                            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
                                 {loading ? 'Erstelle...' : 'Unternehmen anlegen'}
                             </button>
                         </div>
@@ -186,9 +173,10 @@ export const Setup: React.FC = () => {
                             <input
                                 type="text"
                                 required
+                                maxLength={8}
                                 value={joinCode}
-                                onChange={(e) => setJoinCode(e.target.value)}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px', letterSpacing: '2px' }}
+                                onChange={(e) => setJoinCode(e.target.value.toLowerCase().trim())}
+                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px', letterSpacing: '2px', boxSizing: 'border-box' }}
                                 placeholder="z.B. a1b2c3d4"
                             />
                         </div>
@@ -196,7 +184,7 @@ export const Setup: React.FC = () => {
                             <button type="button" onClick={() => setMode('choose')} style={{ padding: '12px 20px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                                 Zurück
                             </button>
-                            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px 20px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer' }}>
+                            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px 20px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
                                 {loading ? 'Prüfe...' : 'Beitreten'}
                             </button>
                         </div>

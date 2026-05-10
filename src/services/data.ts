@@ -38,6 +38,8 @@ const toSupabaseSupplier = (s: Supplier) => ({
 const fromSupabaseSupplier = (s: any): Supplier => ({
     id: s.id,
     name: s.name,
+    company_id: s.company_id,
+    user_id: s.user_id,
     contactName: s.contact_name,
     email: s.email,
     phone: s.phone,
@@ -86,6 +88,8 @@ const toSupabaseProduct = (p: Product) => ({
 const fromSupabaseProduct = (p: any): Product => ({
     id: p.id,
     name: p.name,
+    company_id: p.company_id,
+    user_id: p.user_id,
     category: p.category,
     stock: p.stock,
     minStock: p.min_stock,

@@ -51,23 +51,17 @@ export const Settings: React.FC = () => {
     useEffect(() => {
         const stored = StorageService.getSettings();
         supabase?.auth.getUser().then(async ({ data }) => {
-            if (data?.user) {
-                setUserId(data.user.id);
-                const { data: profile, error } = await supabase!.from('profiles').select('role, company_id').eq('id', data.user.id).single();
-                console.log("Fetched profile:", profile, "Error:", error);
-                if (profile) {
-                    setRole(profile.role || 'user');
-                    if (profile.company_id) {
-                        const { data: company, error: companyError } = await supabase!.from('companies').select('join_code').eq('id', profile.company_id).single();
-                        console.log("Fetched company:", company, "Error:", companyError);
-                        if (company) setCompanyCode(company.join_code);
-                        
-                        // Fetch team members if admin/owner
-                        if (profile.company_id) {
-                            const { data: team } = await supabase!.from('profiles').select('id, email, role').eq('company_id', profile.company_id);
-                            if (team) setTeamMembers(team);
-                        }
-                    }
+            if (!data?.user || !supabase) return;
+            setUserId(data.user.id);
+            const { data: profile } = await supabase.from('profiles').select('role, company_id').eq('id', data.user.id).single();
+            if (profile) {
+                setRole(profile.role || 'user');
+                if (profile.company_id) {
+                    const { data: company } = await supabase.from('companies').select('join_code').eq('id', profile.company_id).single();
+                    if (company) setCompanyCode(company.join_code);
+
+                    const { data: team } = await supabase.from('profiles').select('id, email, role').eq('company_id', profile.company_id);
+                    if (team) setTeamMembers(team);
                 }
             }
         });
@@ -91,14 +85,11 @@ export const Settings: React.FC = () => {
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         StorageService.saveSettings(settings);
-        
-        // Versuche das Profil in Supabase zu updaten, falls die Spalte schon da ist
         if (userId && supabase) {
-            supabase.from('profiles').update({ inventory_valuation_method: settings.inventoryValuationMethod }).eq('id', userId).then(() => console.log('Valuation method synced to cloud'));
+            supabase.from('profiles').update({ inventory_valuation_method: settings.inventoryValuationMethod }).eq('id', userId).then(() => {});
         }
+        // W9: kein window.location.reload() — State direkt aktualisieren
         setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
-        // Give time for toast before reload
-        setTimeout(() => window.location.reload(), 1500);
     };
 
     const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -560,10 +551,11 @@ export const Settings: React.FC = () => {
                             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Deine Weiterleitungs-Adresse:</span>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <code style={{ flex: 1, padding: '12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid var(--color-border)', color: '#334155', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>
-                                    {userId ? `in-${userId}@inbound.bestellwesen.com` : 'Lade...'}
+                                    {/* W11: company_id-basierte Adresse statt user_id */}
+                                {userId ? `in-${userId.substring(0, 8)}@inbound.bestellwesen.com` : 'Lade...'}
                                 </code>
                                 <button type="button" onClick={() => {
-                                    navigator.clipboard.writeText(`in-${userId}@inbound.bestellwesen.com`);
+                                    navigator.clipboard.writeText(`in-${userId.substring(0, 8)}@inbound.bestellwesen.com`);
                                     setNotification({ message: 'Adresse kopiert!', type: 'success' });
                                 }} style={{ backgroundColor: 'white', border: '1px solid var(--color-border)', padding: '0 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, minHeight: '40px' }}>Kopieren</button>
                             </div>
@@ -593,18 +585,17 @@ export const Settings: React.FC = () => {
                         Konto abmelden
                     </button>
 
-                    <button 
-                        type="button" 
+                    <button
+                        type="button"
                         onClick={async () => {
                             if (window.confirm('WARNUNG: Möchten Sie Ihr Konto und alle persönlichen Daten wirklich unwiderruflich löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) {
                                 try {
-                                    // Normally this would call an Edge Function or trigger user deletion in Auth.
-                                    // For now, we sign out and show a message or call an RPC.
-                                    await supabase?.rpc('delete_user_account');
-                                    await supabase?.auth.signOut();
-                                    window.location.href = '/';
+                                    if (supabase) {
+                                        await supabase.rpc('delete_user_account');
+                                        await supabase.auth.signOut();
+                                    }
                                 } catch (e) {
-                                    alert('Fehler beim Löschen des Kontos. Bitte an den Support wenden.');
+                                    setNotification({ message: 'Fehler beim Löschen des Kontos. Bitte an den Support wenden.', type: 'error' });
                                 }
                             }
                         }}

@@ -107,7 +107,8 @@ export const Products: React.FC = () => {
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
     const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>({});
     const [expandedProductsLimit, setExpandedProductsLimit] = useState<Record<string, boolean>>({});
-    const toggleSupplier = (id: string) => setExpandedSuppliers(prev => ({...prev, [id]: prev[id] === false ? true : false}));
+    // O5: war `prev[id] === false ? true : false` — undefined !== false führte zu falschem Init-Wert
+    const toggleSupplier = (id: string) => setExpandedSuppliers(prev => ({ ...prev, [id]: !prev[id] }));
     const toggleProductLimit = (id: string) => setExpandedProductsLimit(prev => ({...prev, [id]: !prev[id]}));
 
 
@@ -127,7 +128,9 @@ export const Products: React.FC = () => {
         const supabaseClient = getSupabaseClient();
         let channel: any;
         if (supabaseClient) {
-            channel = supabaseClient.channel('products_realtime')
+            // W8: eindeutiger Channel-Name pro Tab
+            const channelName = `products_rt_${Math.random().toString(36).slice(2, 8)}`;
+            channel = supabaseClient.channel(channelName)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
                     DataService.getProducts().then(setProducts);
                 })
@@ -171,58 +174,66 @@ export const Products: React.FC = () => {
                     }
                 }
 
-                // Auto-consumption logic in the background
+                // K7: Auto-Consumption — server-seitig via RPC (verhindert Race Conditions)
+                // Fallback auf client-seitige Logik wenn RPC nicht verfügbar
                 const runAutoConsumption = async () => {
                     const settings = StorageService.getSettings();
-                    if (settings.inventoryMode) {
-                        console.log('Inventur-Modus aktiv: Automatischer Verbrauch pausiert.');
-                        return;
+                    if (settings.inventoryMode) return;
+
+                    // K7: Nur einmal pro Tag pro Browser-Tab ausführen (SessionStorage-Guard)
+                    const guardKey = `auto_consumption_${new Date().toDateString()}`;
+                    if (sessionStorage.getItem(guardKey)) return;
+                    sessionStorage.setItem(guardKey, '1');
+
+                    try {
+                        // Server-seitige RPC bevorzugen (verhindert Multi-Tab Race Conditions)
+                        const supabaseClient = getSupabaseClient();
+                        if (supabaseClient) {
+                            await supabaseClient.rpc('trigger_auto_consumption');
+                            // Frische Daten nach serverseitiger Berechnung laden
+                            const fresh = await DataService.getProducts();
+                            setProducts(fresh);
+                            return;
+                        }
+                    } catch {
+                        // RPC nicht verfügbar — client-seitiger Fallback
                     }
+
+                    // Client-seitiger Fallback (O4: korrekte Immutability via map+spread)
                     const now = new Date();
                     let updatedAny = false;
-                    const updatedProducts = [...loadedProducts];
+                    const updatedProducts = loadedProducts.map(p => ({ ...p }));
 
                     for (let i = 0; i < updatedProducts.length; i++) {
                         const p = updatedProducts[i];
-                        if (p.consumptionAmount && p.consumptionPeriod) {
-                            try {
-                                if (!p.lastConsumptionDate) {
-                                    p.lastConsumptionDate = now.toISOString();
+                        if (!p.consumptionAmount || !p.consumptionPeriod) continue;
+                        try {
+                            if (!p.lastConsumptionDate) {
+                                p.lastConsumptionDate = now.toISOString();
+                                await DataService.saveProduct(p);
+                                updatedAny = true;
+                            } else {
+                                const lastDate = new Date(p.lastConsumptionDate);
+                                if (isNaN(lastDate.getTime())) continue;
+                                const diffDays = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+                                let periodsPassed = p.consumptionPeriod === 'day' ? diffDays : Math.floor(diffDays / 7);
+                                if (periodsPassed > 0) {
+                                    p.stock = Math.max(0, p.stock - periodsPassed * p.consumptionAmount);
+                                    const newLastDate = new Date(lastDate);
+                                    if (p.consumptionPeriod === 'day') newLastDate.setDate(newLastDate.getDate() + periodsPassed);
+                                    else newLastDate.setDate(newLastDate.getDate() + periodsPassed * 7);
+                                    p.lastConsumptionDate = newLastDate.toISOString();
                                     await DataService.saveProduct(p);
                                     updatedAny = true;
-                                } else {
-                                    const lastDate = new Date(p.lastConsumptionDate);
-                                    if (isNaN(lastDate.getTime())) continue;
-                                    
-                                    const diffTime = Math.abs(now.getTime() - lastDate.getTime());
-                                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                                    
-                                    let periodsPassed = 0;
-                                    if (p.consumptionPeriod === 'day') periodsPassed = diffDays;
-                                    else if (p.consumptionPeriod === 'week') periodsPassed = Math.floor(diffDays / 7);
-
-                                    if (periodsPassed > 0) {
-                                        const toDeduct = periodsPassed * p.consumptionAmount;
-                                        p.stock = Math.max(0, p.stock - toDeduct);
-                                        
-                                        const newLastDate = new Date(lastDate);
-                                        if (p.consumptionPeriod === 'day') newLastDate.setDate(newLastDate.getDate() + periodsPassed);
-                                        else if (p.consumptionPeriod === 'week') newLastDate.setDate(newLastDate.getDate() + (periodsPassed * 7));
-                                        
-                                        p.lastConsumptionDate = newLastDate.toISOString();
-                                        await DataService.saveProduct(p);
-                                        updatedAny = true;
-                                    }
                                 }
-                            } catch (err) {
-                                console.error('Failed to auto-consume product', p.id, err);
                             }
+                        } catch (err) {
+                            console.error('Auto-consume failed for', p.id, err);
                         }
                     }
-
                     if (updatedAny) setProducts(updatedProducts);
                 };
-                
+
                 runAutoConsumption();
             } catch (error) {
                 console.error('Fatal init error:', error);

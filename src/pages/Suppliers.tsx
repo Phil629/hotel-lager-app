@@ -30,7 +30,9 @@ export const Suppliers: React.FC = () => {
         const supabaseClient = getSupabaseClient();
         let channel: any;
         if (supabaseClient) {
-            channel = supabaseClient.channel('suppliers_realtime')
+            // W8: eindeutiger Channel-Name pro Tab
+            const channelName = `suppliers_rt_${Math.random().toString(36).slice(2, 8)}`;
+            channel = supabaseClient.channel(channelName)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => {
                     loadData();
                 })
@@ -412,11 +414,14 @@ export const Suppliers: React.FC = () => {
                                 </div>
                                 <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
 
-                                {/* Portal Login Infos */}
+                                {/* Portal Login Infos — K5: Passwort-Warnung */}
                                 <div>
-                                    <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <h3 style={{ margin: '0 0 8px 0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <Key size={16} /> Kunden-Login / Portal
                                     </h3>
+                                    <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        ⚠️ Passwörter werden in der Datenbank gespeichert. Nur für Portal-Zugänge mit geringem Risiko verwenden. Keine Zugangsdaten für Bankkonten oder kritische Systeme eintragen.
+                                    </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                                         <div style={{ display: 'none' }}>
                                         </div>

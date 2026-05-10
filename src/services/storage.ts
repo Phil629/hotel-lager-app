@@ -70,7 +70,7 @@ export const StorageService = {
     },
 
     saveProducts: (products: Product[]) => {
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+        try { localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); } catch { /* ignore */ }
     },
 
     getOrders: (): Order[] => {
@@ -83,26 +83,37 @@ export const StorageService = {
     },
 
     saveOrders: (orders: Order[]) => {
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+        try { localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders)); } catch { /* ignore */ }
     },
 
     getSettings: (): AppSettings => {
-        const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-        return stored ? JSON.parse(stored) : { 
-            serviceId: '', 
-            templateId: '', 
-            publicKey: '', 
-            enableStockManagement: true, 
-            inventoryMode: false,
-            hotelName: 'Mein Unternehmen',
-            currency: 'EUR',
-            currentPlan: 'pro',
-            developerMode: false
-        };
+        try {
+            const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+            return stored ? JSON.parse(stored) : {
+                serviceId: '',
+                templateId: '',
+                publicKey: '',
+                enableStockManagement: true,
+                inventoryMode: false,
+                hotelName: 'Mein Unternehmen',
+                currency: 'EUR',
+                // K4: kein 'pro' als Default — Plan kommt aus der Datenbank
+                currentPlan: 'basic',
+                developerMode: false
+            };
+        } catch {
+            // localStorage nicht verfügbar (privater Modus, iOS-Restriction)
+            return {
+                serviceId: '', templateId: '', publicKey: '',
+                enableStockManagement: true, inventoryMode: false,
+                hotelName: 'Mein Unternehmen', currency: 'EUR',
+                currentPlan: 'basic', developerMode: false
+            };
+        }
     },
 
     saveSettings: (settings: AppSettings) => {
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+        try { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); } catch { /* ignore */ }
     },
 
     getSuppliers: (): Supplier[] => {
@@ -114,6 +125,6 @@ export const StorageService = {
     },
 
     saveSuppliers: (suppliers: Supplier[]) => {
-        localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
+        try { localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers)); } catch { /* ignore */ }
     }
 };

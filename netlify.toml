@@ -4,3 +4,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+# SPA-Routing: alle Pfade auf index.html weiterleiten (K9)
+[[redirects]]
+  from = "/*"
+  to   = "/index.html"
+  status = 200

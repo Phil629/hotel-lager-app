@@ -27,6 +27,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 setUserEmail(user.email || '');
                 const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
                 setUserRole(data?.role || '');
+                // Sidebar-Admin-Link nur für SaaS-Admins (nicht für Company-Owner)
                 if (data?.role === 'admin') setIsAdmin(true);
             }
         };
