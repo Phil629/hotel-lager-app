@@ -294,15 +294,17 @@ export const DataService = {
     async markOrderReceived(orderId: string): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;
-        const { error } = await supabase.rpc('mark_order_received', { p_order_id: orderId });
+        const { data, error } = await supabase.rpc('mark_order_received', { p_order_id: orderId });
         if (error) throw error;
+        if (data && data.success === false) throw new Error(data.message || 'Unbekannter Fehler im RPC');
     },
 
     async unmarkOrderReceived(orderId: string): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;
-        const { error } = await supabase.rpc('unmark_order_received', { p_order_id: orderId });
+        const { data, error } = await supabase.rpc('unmark_order_received', { p_order_id: orderId });
         if (error) throw error;
+        if (data && data.success === false) throw new Error(data.message || 'Unbekannter Fehler im RPC');
     },
 
     async getSupplierCredentials(supplierId: string): Promise<{ loginUrl?: string; loginUsername?: string; loginPassword?: string } | null> {
