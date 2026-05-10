@@ -589,15 +589,14 @@ export const Products: React.FC = () => {
             }}>
                 <div
                     onClick={() => setShowLowStockOnly(false)}
-                    style={{ 
-                        background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', 
-                        padding: 'var(--spacing-lg)', 
-                        borderRadius: 'var(--radius-xl)', 
-                        border: !showLowStockOnly ? '2px solid var(--color-primary)' : '1px solid var(--color-border)', boxShadow: !showLowStockOnly ? '0 0 0 3px rgba(37,99,235,0.1)' : '0 4px 6px -1px rgb(0 0 0 / 0.05)', cursor: 'pointer',
-                        transition: 'transform 0.2s, box-shadow 0.2s',
+                    className="stat-card-interactive"
+                    style={{
+                        background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                        padding: 'var(--spacing-lg)',
+                        borderRadius: 'var(--radius-xl)',
+                        border: !showLowStockOnly ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                        boxShadow: !showLowStockOnly ? '0 0 0 3px rgba(37,99,235,0.1)' : 'var(--shadow-xs)',
                     }}
-                    onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05)'; }}
-                    onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)'; }}
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Produkte Gesamt</div>
@@ -610,16 +609,14 @@ export const Products: React.FC = () => {
 
                 <div
                     onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+                    className="stat-card-interactive"
                     style={{
                         background: lowStockCount > 0 ? 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)' : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
                         padding: 'var(--spacing-lg)',
                         borderRadius: 'var(--radius-xl)',
-                        border: showLowStockOnly ? '2px solid #ef4444' : (lowStockCount > 0 ? '1px solid #fca5a5' : '1px solid var(--color-border)'), boxShadow: showLowStockOnly ? '0 0 0 3px rgba(239,68,68,0.2)' : (lowStockCount > 0 ? '0 4px 6px -1px rgb(220 38 38 / 0.1)' : '0 4px 6px -1px rgb(0 0 0 / 0.05)'),
-                        cursor: 'pointer',
-                        transition: 'transform 0.2s, box-shadow 0.2s',
+                        border: showLowStockOnly ? '2px solid #ef4444' : (lowStockCount > 0 ? '1px solid #fca5a5' : '1px solid var(--color-border)'),
+                        boxShadow: showLowStockOnly ? '0 0 0 3px rgba(239,68,68,0.2)' : (lowStockCount > 0 ? '0 4px 6px -1px rgb(220 38 38 / 0.1)' : 'var(--shadow-xs)'),
                     }}
-                    onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = lowStockCount > 0 ? '0 10px 15px -3px rgb(220 38 38 / 0.15)' : '0 10px 15px -3px rgb(0 0 0 / 0.08)'; }}
-                    onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = lowStockCount > 0 ? '0 4px 6px -1px rgb(220 38 38 / 0.1)' : '0 4px 6px -1px rgb(0 0 0 / 0.05)'; }}
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <div style={{ color: lowStockCount > 0 ? '#b91c1c' : 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -632,12 +629,12 @@ export const Products: React.FC = () => {
                     <div style={{ fontSize: '32px', fontWeight: 800, color: lowStockCount > 0 ? '#991b1b' : 'inherit' }}>{lowStockCount}</div>
                 </div>
 
-                <div style={{ 
-                        background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)', 
-                        padding: 'var(--spacing-lg)', 
-                        borderRadius: 'var(--radius-xl)', 
-                        border: '1px solid #bbf7d0', 
-                        boxShadow: '0 4px 6px -1px rgb(22 101 52 / 0.05), 0 2px 4px -2px rgb(22 101 52 / 0.05)'
+                <div className="stat-card-interactive" style={{
+                        background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+                        padding: 'var(--spacing-lg)',
+                        borderRadius: 'var(--radius-xl)',
+                        border: '1px solid #bbf7d0',
+                        boxShadow: 'var(--shadow-xs)',
                     }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <div style={{ color: '#166534', fontSize: 'var(--font-size-sm)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -677,25 +674,10 @@ export const Products: React.FC = () => {
                 </div>
                 <button
                     onClick={() => setShowLowStockOnly(!showLowStockOnly)}
-                    style={{
-                        padding: '0 24px',
-                        borderRadius: 'var(--radius-full)',
-                        border: showLowStockOnly ? '2px solid #ef4444' : '1px solid var(--color-border)',
-                        backgroundColor: showLowStockOnly ? '#fef2f2' : 'white',
-                        color: showLowStockOnly ? '#b91c1c' : 'var(--color-text-main)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-                        transition: 'all 0.2s'
-                    }}
-                    onMouseOver={e => { if(!showLowStockOnly) Object.assign(e.currentTarget.style, { backgroundColor: '#f8fafc', borderColor: '#cbd5e1' }) }}
-                    onMouseOut={e => { if(!showLowStockOnly) Object.assign(e.currentTarget.style, { backgroundColor: 'white', borderColor: 'var(--color-border)' }) }}
+                    className={showLowStockOnly ? 'btn btn-danger' : 'btn btn-ghost'}
+                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '100%', minHeight: '46px' }}
                 >
-                    <AlertTriangle size={18} color={showLowStockOnly ? '#ef4444' : '#64748b'} />
+                    <AlertTriangle size={16} />
                     {showLowStockOnly ? 'Filter aufheben' : 'Kritischer Bestand'}
                 </button>
             </div>
@@ -708,21 +690,7 @@ export const Products: React.FC = () => {
                             <>
                                 <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-main)' }}>Noch keine Produkte vorhanden</h3>
                                 <p style={{ margin: '0 0 16px 0', color: 'var(--color-text-muted)' }}>Beginne damit, dein erstes Produkt für dieses Unternehmen anzulegen.</p>
-                                <button
-                                    onClick={() => setIsModalOpen(true)}
-                                    style={{
-                                        backgroundColor: 'var(--color-primary)',
-                                        color: 'white',
-                                        border: 'none',
-                                        padding: '10px 20px',
-                                        borderRadius: 'var(--radius-md)',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        fontWeight: 600,
-                                        cursor: 'pointer'
-                                    }}
-                                >
+                                <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
                                     <Plus size={18} /> Erstes Produkt anlegen
                                 </button>
                             </>
@@ -752,10 +720,10 @@ export const Products: React.FC = () => {
                                         onClick={() => toggleSupplier(supplierId)}
                                         style={{ padding: '16px 24px', backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                                     >
-                                        <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><Building2 size={20} /></div>
-                                            {supplierName} 
-                                            <span style={{ fontSize: '12px', padding: '2px 8px', backgroundColor: '#e2e8f0', borderRadius: '12px', color: '#475569', fontWeight: 600 }}>{supProds.length} Produkte</span>
+                                        <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700 }}>
+                                            <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><Building2 size={18} /></div>
+                                            {supplierName}
+                                            <span className="badge badge-neutral">{supProds.length} Produkte</span>
                                         </h2>
                                         <button style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer' }}>
                                             <ChevronDown style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', color: '#64748b' }} />
@@ -843,46 +811,40 @@ export const Products: React.FC = () => {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)' }}>
+                                                <table className="products-table">
+                                                    <thead>
                                                         <tr>
-                                                            <th style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
-                                                            <th
-                                                                onClick={() => handleSort('name')}
-                                                                style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-                                                            >
+                                                            <th></th>
+                                                            <th className="sortable" onClick={() => handleSort('name')}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                    Name {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} style={{ opacity: 0.3 }} />}
+                                                                    Name {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={13} style={{ opacity: 0.3 }} />}
                                                                 </div>
                                                             </th>
-                                                            <th
-                                                                onClick={() => handleSort('stock')}
-                                                                style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-                                                            >
+                                                            <th className="sortable" onClick={() => handleSort('stock')}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                    Bestand & Wert {sortConfig.key === 'stock' ? (sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} style={{ opacity: 0.3 }} />}
+                                                                    Bestand & Wert {sortConfig.key === 'stock' ? (sortConfig.direction === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={13} style={{ opacity: 0.3 }} />}
                                                                 </div>
                                                             </th>
-                                                            <th style={{ padding: '16px', textAlign: 'left', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kontakt / Links</th>
-                                                            <th style={{ padding: '16px', textAlign: 'center', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Aktion</th>
-                                                            <th style={{ padding: '16px', textAlign: 'right', color: '#475569', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
+                                                            <th>Kontakt / Links</th>
+                                                            <th style={{ textAlign: 'center' }}>Bestellen</th>
+                                                            <th></th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {visibleProds.map((product, index) => {
                                                             const isLastRows = index >= visibleProds.length - 2 && visibleProds.length > 3;
                                                             return (
-                                                                <tr key={product.id} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background-color 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                                                    <td style={{ padding: '16px' }}>
+                                                                <tr key={product.id} className={product.stock <= (product.minStock || 0) ? 'row-low-stock' : ''}>
+                                                                    <td>
                                                                         {product.image ? (
-                                                                            <img src={product.image} alt={product.name} style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: 'var(--radius-md)', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', border: '1px solid var(--color-border)' }} />
+                                                                            <img src={product.image} alt={product.name} style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
                                                                         ) : (
-                                                                            <div style={{ width: '48px', height: '48px', backgroundColor: '#f1f5f9', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                                                                                <ShoppingCart size={20} />
+                                                                            <div style={{ width: '44px', height: '44px', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-faint)' }}>
+                                                                                <ShoppingCart size={18} />
                                                                             </div>
                                                                         )}
                                                                     </td>
-                                                                    <td style={{ padding: '16px', minWidth: '220px' }}>
+                                                                    <td style={{ minWidth: '200px' }}>
                                                                         <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--color-text-main)', marginBottom: '2px' }}>{product.name}</div>
                                                                         <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 500 }}>
                                                                             {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
@@ -901,51 +863,56 @@ export const Products: React.FC = () => {
                                                                             <div key={n.id} style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 8px', borderRadius: '4px', marginTop: '6px', fontSize: '11px', display: 'inline-block', marginRight: '4px' }}><strong>Notiz:</strong> {n.text}</div>
                                                                         ))}
                                                                     </td>
-                                                                    <td style={{ padding: '16px' }}>
+                                                                    <td>
                                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                                             <div style={{ display: 'inline-flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', width: 'fit-content' }}>
-                                                                                <button onClick={() => handleStockUpdate(product, Math.max(0, product.stock - 1))} style={{ padding: '6px 12px', border: 'none', background: '#f8fafc', cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: '#64748b', transition: 'background 0.2s', borderRight: '1px solid var(--color-border)' }}>−</button>
-                                                                                <input type="number" value={product.stock} min={0} onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))} style={{ width: '50px', textAlign: 'center', fontSize: '15px', fontWeight: 800, border: 'none', padding: '6px 4px', color: product.stock <= (product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)', background: 'transparent', outline: 'none', MozAppearance: 'textfield' }} />
-                                                                                <button onClick={() => handleStockUpdate(product, product.stock + 1)} style={{ padding: '6px 12px', border: 'none', background: '#f8fafc', cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: 'var(--color-primary)', transition: 'background 0.2s', borderLeft: '1px solid var(--color-border)' }}>+</button>
+                                                                                <button onClick={() => handleStockUpdate(product, Math.max(0, product.stock - 1))} style={{ padding: '6px 11px', border: 'none', background: 'var(--color-surface-elevated)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-text-muted)', borderRight: '1px solid var(--color-border)' }}>−</button>
+                                                                                <input type="number" value={product.stock} min={0} onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))} style={{ width: '48px', textAlign: 'center', fontSize: '14px', fontWeight: 800, border: 'none', padding: '6px 4px', color: product.stock <= (product.minStock || 0) ? 'var(--color-danger)' : 'var(--color-text-main)', background: 'transparent', outline: 'none', MozAppearance: 'textfield' }} />
+                                                                                <button onClick={() => handleStockUpdate(product, product.stock + 1)} style={{ padding: '6px 11px', border: 'none', background: 'var(--color-surface-elevated)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-primary)', borderLeft: '1px solid var(--color-border)' }}>+</button>
                                                                             </div>
+                                                                            {product.stock <= (product.minStock || 0) && (
+                                                                                <span className="badge badge-danger" style={{ fontSize: '10.5px' }}>
+                                                                                    <AlertTriangle size={10} /> Nachbestellen
+                                                                                </span>
+                                                                            )}
                                                                             {product.price && (
-                                                                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, paddingLeft: '4px' }}>
+                                                                                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
                                                                                     ∑ {(product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                                                                                 </div>
                                                                             )}
                                                                         </div>
                                                                     </td>
-                                                                    <td style={{ padding: '16px' }}>
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    <td>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                                             {product.orderUrl && (
-                                                                                <button onClick={() => window.open(product.orderUrl, '_blank')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#1d4ed8', border: '1px solid #bfdbfe', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: '6px 10px', backgroundColor: '#eff6ff', borderRadius: '6px', width: 'fit-content' }}>
-                                                                                    <ExternalLink size={14} /> Webshop
+                                                                                <button onClick={() => window.open(product.orderUrl, '_blank')} className="btn btn-sm btn-primary" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
+                                                                                    <ExternalLink size={13} /> Webshop
                                                                                 </button>
                                                                             )}
                                                                             {(product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email) && (
-                                                                                <button onClick={() => window.location.href = `mailto:${product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '13px', padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '6px', width: 'fit-content', fontWeight: 500 }}>
-                                                                                    <Mail size={14} /> E-Mail
+                                                                                <button onClick={() => window.location.href = `mailto:${product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email}`} className="btn btn-sm btn-ghost" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
+                                                                                    <Mail size={13} /> E-Mail
                                                                                 </button>
                                                                             )}
                                                                             {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
-                                                                                <button onClick={() => window.location.href = `tel:${product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '13px', padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '6px', width: 'fit-content', fontWeight: 500 }}>
-                                                                                    <Phone size={14} /> Anrufen
+                                                                                <button onClick={() => window.location.href = `tel:${product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone}`} className="btn btn-sm btn-ghost" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
+                                                                                    <Phone size={13} /> Anrufen
                                                                                 </button>
                                                                             )}
                                                                             {!product.orderUrl && !product.emailOrderAddress && !product.supplierPhone && (
-                                                                                <div style={{ color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>Keine Info</div>
+                                                                                <span style={{ color: 'var(--color-text-faint)', fontSize: '13px', fontStyle: 'italic' }}>—</span>
                                                                             )}
                                                                         </div>
                                                                     </td>
-                                                                    <td style={{ padding: '16px', textAlign: 'center' }}>
-                                                                        <button onClick={() => handleOrderClick(product)} style={{ backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 'var(--radius-full)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'transform 0.1s' }} onMouseOver={e => e.currentTarget.style.transform='translateY(-1px)'} onMouseOut={e => e.currentTarget.style.transform='translateY(0)'}>
-                                                                            <ShoppingCart size={16} /> Bestellen
+                                                                    <td style={{ textAlign: 'center' }}>
+                                                                        <button onClick={() => handleOrderClick(product)} className="btn btn-primary btn-sm" style={{ borderRadius: 'var(--radius-full)', paddingLeft: '16px', paddingRight: '16px' }}>
+                                                                            <ShoppingCart size={15} /> Bestellen
                                                                         </button>
                                                                     </td>
-                                                                    <td style={{ padding: '16px', textAlign: 'right', position: 'relative' }}>
-                                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                                                                            <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} style={{ background: 'white', border: '1px solid var(--color-border)', color: '#475569', padding: '8px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Edit2 size={16} /></button>
-                                                                            <button onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)} style={{ background: 'white', border: '1px solid var(--color-border)', color: '#475569', padding: '8px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Settings size={16} /></button>
+                                                                    <td style={{ textAlign: 'right', position: 'relative' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                                                                            <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} className="btn btn-ghost btn-icon"><Edit2 size={15} /></button>
+                                                                            <button onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)} className="btn btn-ghost btn-icon"><Settings size={15} /></button>
                                                                         </div>
                                                                         {openSettingsId === product.id && (
                                                                             <>
@@ -965,12 +932,13 @@ export const Products: React.FC = () => {
                                             )}
                                             
                                             {hasMore && (
-                                                <div style={{ borderTop: '1px solid var(--color-border)', backgroundColor: '#f8fafc' }}>
-                                                    <button 
+                                                <div style={{ borderTop: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', padding: '4px 0' }}>
+                                                    <button
                                                         onClick={() => toggleProductLimit(supplierId)}
-                                                        style={{ width: '100%', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                                        className="btn btn-ghost"
+                                                        style={{ width: '100%', borderRadius: 0, border: 'none', justifyContent: 'center', color: 'var(--color-primary)' }}
                                                     >
-                                                        {showAll ? <><ChevronDown style={{transform:'rotate(180deg)'}} size={16}/> Wieder einklappen</> : <><ChevronDown size={16}/> Alle {supProds.length} Produkte anzeigen</>}
+                                                        {showAll ? <><ChevronDown style={{ transform: 'rotate(180deg)' }} size={15} /> Einklappen</> : <><ChevronDown size={15} /> Alle {supProds.length} Produkte anzeigen</>}
                                                     </button>
                                                 </div>
                                             )}
