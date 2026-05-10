@@ -175,7 +175,7 @@ export const DataService = {
         if (!supabase) return [];
         const { data, error } = await supabase
             .from('products')
-            .select('id,name,category,stock,min_stock,price,product_number,standard_order_quantity,ignore_order_proposals,unit,image,auto_order,supplier_id,email_order_address,email_order_subject,email_order_body,order_url,supplier_phone,notes,show_note_on_order,preferred_order_method,consumption_amount,consumption_period,last_consumption_date,last_counted_at,company_id,user_id')
+            .select('*')
             .order('name');
         if (error) {
             console.error('Supabase error:', error);
@@ -208,7 +208,7 @@ export const DataService = {
         if (!supabase) return [];
         const { data, error } = await supabase
             .from('orders')
-            .select('id,product_name,quantity,status,date,product_image,has_defect,defect_notes,defect_reported_at,defect_resolved,expected_delivery_date,supplier_name,order_number,price,supplier_email,supplier_phone,received_at,notes,ai_revisions,user_id,updated_by')
+            .select('*')
             .order('date', { ascending: false });
         if (error) {
             console.error('Supabase error:', error);
@@ -267,7 +267,7 @@ export const DataService = {
         // suppliers_safe view excludes login_password — credentials fetched separately via RPC
         const { data, error } = await supabase
             .from('suppliers_safe')
-            .select('id,name,company_id,user_id,contact_name,email,phone,url,notes,show_note_on_order,email_subject_template,email_body_template,login_url,login_username,documents,preferred_order_method,order_email,order_phone,order_url,ignore_order_proposals')
+            .select('*')
             .order('name');
         if (error) {
             console.error('Supabase error:', error);
