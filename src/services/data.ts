@@ -27,7 +27,7 @@ const toSupabaseSupplier = (s: Supplier) => ({
     notes: s.notes ? JSON.stringify(s.notes) : null,
     login_url: s.loginUrl,
     login_username: s.loginUsername,
-    login_password: s.loginPassword,
+    // login_password intentionally omitted — stored encrypted via upsert_supplier_credentials RPC
     preferred_order_method: s.preferredOrderMethod,
     order_email: s.orderEmail,
     order_phone: s.orderPhone,
@@ -173,7 +173,10 @@ export const DataService = {
     async getProducts(): Promise<Product[]> {
         const supabase = getSupabaseClient();
         if (!supabase) return [];
-        const { data, error } = await supabase.from('products').select('*').order('name');
+        const { data, error } = await supabase
+            .from('products')
+            .select('id,name,category,stock,min_stock,price,product_number,standard_order_quantity,ignore_order_proposals,unit,image,auto_order,supplier_id,email_order_address,email_order_subject,email_order_body,order_url,supplier_phone,notes,show_note_on_order,preferred_order_method,consumption_amount,consumption_period,last_consumption_date,last_counted_at,company_id,user_id')
+            .order('name');
         if (error) {
             console.error('Supabase error:', error);
             throw error;
@@ -203,22 +206,36 @@ export const DataService = {
     async getOrders(): Promise<Order[]> {
         const supabase = getSupabaseClient();
         if (!supabase) return [];
-        const { data, error } = await supabase.from('orders').select('*').order('date', { ascending: false });
+        const { data, error } = await supabase
+            .from('orders')
+            .select('id,product_name,quantity,status,date,product_image,has_defect,defect_notes,defect_reported_at,defect_resolved,expected_delivery_date,supplier_name,order_number,price,supplier_email,supplier_phone,received_at,notes,ai_revisions,user_id,updated_by')
+            .order('date', { ascending: false });
         if (error) {
             console.error('Supabase error:', error);
             throw error;
         }
-        
-        // Fetch profiles to map emails
-        const { data: profilesData } = await supabase.from('profiles').select('id, email');
-        const profilesMap = new Map((profilesData || []).map(p => [p.id, p.email]));
-        
-        return (data || []).map(o => {
-            const mapped = fromSupabaseOrder(o);
-            if (mapped.user_id) mapped.creatorEmail = profilesMap.get(mapped.user_id);
-            if (mapped.updated_by) mapped.updaterEmail = profilesMap.get(mapped.updated_by);
-            return mapped;
-        });
+
+        const orders = (data || []).map(fromSupabaseOrder);
+
+        // Only fetch profiles when there are orders that reference users
+        const userIds = [...new Set([
+            ...orders.map(o => o.user_id).filter(Boolean),
+            ...orders.map(o => o.updated_by).filter(Boolean),
+        ])] as string[];
+
+        if (userIds.length > 0) {
+            const { data: profilesData } = await supabase
+                .from('profiles')
+                .select('id,email')
+                .in('id', userIds);
+            const profilesMap = new Map((profilesData || []).map(p => [p.id, p.email]));
+            for (const o of orders) {
+                if (o.user_id) o.creatorEmail = profilesMap.get(o.user_id);
+                if (o.updated_by) o.updaterEmail = profilesMap.get(o.updated_by);
+            }
+        }
+
+        return orders;
     },
 
     async saveOrder(order: Order): Promise<void> {
@@ -247,7 +264,11 @@ export const DataService = {
     async getSuppliers(): Promise<Supplier[]> {
         const supabase = getSupabaseClient();
         if (!supabase) return [];
-        const { data, error } = await supabase.from('suppliers').select('*').order('name');
+        // suppliers_safe view excludes login_password — credentials fetched separately via RPC
+        const { data, error } = await supabase
+            .from('suppliers_safe')
+            .select('id,name,company_id,user_id,contact_name,email,phone,url,notes,show_note_on_order,email_subject_template,email_body_template,login_url,login_username,documents,preferred_order_method,order_email,order_phone,order_url,ignore_order_proposals')
+            .order('name');
         if (error) {
             console.error('Supabase error:', error);
             throw error;
@@ -268,5 +289,44 @@ export const DataService = {
         if (!supabase) return;
         const { error } = await supabase.from('suppliers').delete().eq('id', id);
         if (error) throw error;
-    }
+    },
+
+    async markOrderReceived(orderId: string): Promise<void> {
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const { error } = await supabase.rpc('mark_order_received', { p_order_id: orderId });
+        if (error) throw error;
+    },
+
+    async unmarkOrderReceived(orderId: string): Promise<void> {
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const { error } = await supabase.rpc('unmark_order_received', { p_order_id: orderId });
+        if (error) throw error;
+    },
+
+    async getSupplierCredentials(supplierId: string): Promise<{ loginUrl?: string; loginUsername?: string; loginPassword?: string } | null> {
+        const supabase = getSupabaseClient();
+        if (!supabase) return null;
+        const { data, error } = await supabase.rpc('get_supplier_credentials', { p_supplier_id: supplierId });
+        if (error) throw error;
+        if (!data) return null;
+        return {
+            loginUrl: data.login_url,
+            loginUsername: data.login_username,
+            loginPassword: data.login_password,
+        };
+    },
+
+    async saveSupplierCredentials(supplierId: string, credentials: { loginUrl?: string; loginUsername?: string; loginPassword?: string }): Promise<void> {
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const { error } = await supabase.rpc('upsert_supplier_credentials', {
+            p_supplier_id: supplierId,
+            p_login_url: credentials.loginUrl || null,
+            p_login_username: credentials.loginUsername || null,
+            p_login_password: credentials.loginPassword || null,
+        });
+        if (error) throw error;
+    },
 };

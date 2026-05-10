@@ -1,5 +1,5 @@
 import { generateId } from "../utils";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
@@ -100,6 +100,12 @@ export const Orders: React.FC = () => {
     // Collapsible Details State
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
+    const rtDebounce = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+    const debounced = (key: string, fn: () => void, ms = 300) => {
+        clearTimeout(rtDebounce.current[key]);
+        rtDebounce.current[key] = setTimeout(fn, ms);
+    };
+
     useEffect(() => {
         loadOrders();
         loadProducts();
@@ -112,17 +118,18 @@ export const Orders: React.FC = () => {
         const channelName = `orders_rt_${Math.random().toString(36).slice(2, 8)}`;
         const channel = supabase.channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                loadOrders();
+                debounced('orders', loadOrders);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-                loadProducts();
+                debounced('products', loadProducts);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => {
-                loadSuppliers();
+                debounced('suppliers', loadSuppliers);
             })
             .subscribe();
 
         return () => {
+            Object.values(rtDebounce.current).forEach(clearTimeout);
             supabase.removeChannel(channel);
         };
     }, []);
@@ -267,29 +274,21 @@ export const Orders: React.FC = () => {
 
     const toggleOrderStatus = async (id: string) => {
         const order = orders.find(o => o.id === id);
-        if (order) {
-            const newStatus = order.status === 'open' ? 'received' : 'open';
-            const updatedOrder: Order = {
-                ...order,
-                status: newStatus as 'open' | 'received',
-                receivedAt: newStatus === 'received' ? new Date().toISOString() : undefined
-            };
-            await DataService.updateOrder(updatedOrder);
-            
-            // W6: Produktsuche primär nach ID (supplierId-Snapshot), Fallback nach Name
-            const product = products.find(p => p.id === (order as any).productId)
-                         || products.find(p => p.name === order.productName);
-            if (product) {
-                const stockChange = newStatus === 'received' ? order.quantity : -order.quantity;
-                const newStock = Math.max(0, (product.stock || 0) + stockChange);
-                const updatedProduct = { ...product, stock: newStock };
-                await DataService.updateProduct(updatedProduct);
-                loadProducts();
-            } else if (newStatus === 'received') {
-                setNotification({ message: `Bestand für „${order.productName}" konnte nicht aktualisiert werden — Produkt nicht gefunden.`, type: 'error' });
+        if (!order) return;
+        try {
+            if (order.status === 'open') {
+                // mark_order_received: atomically sets status + received_at + updates product stock
+                await DataService.markOrderReceived(id);
+            } else {
+                // unmark_order_received: atomically reverts status and stock
+                await DataService.unmarkOrderReceived(id);
             }
-
+            // Realtime will trigger reload; also load immediately for responsiveness
             loadOrders();
+            loadProducts();
+        } catch (err) {
+            console.error('toggleOrderStatus error:', err);
+            setNotification({ message: `Fehler beim Aktualisieren der Bestellung: ${err instanceof Error ? err.message : String(err)}`, type: 'error' });
         }
     };
 

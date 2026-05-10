@@ -9,7 +9,8 @@ import { Notification, type NotificationType } from '../components/Notification'
 export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
-    
+    const [userRole, setUserRole] = useState<string>('');
+
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -23,6 +24,19 @@ export const Suppliers: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        const supabaseClient = getSupabaseClient();
+        if (supabaseClient) {
+            supabaseClient.auth.getUser().then(({ data: { user } }) => {
+                if (user) {
+                    supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle().then(({ data }) => {
+                        setUserRole(data?.role || '');
+                    });
+                }
+            });
+        }
+    }, []);
 
     useEffect(() => {
         loadData();
@@ -70,12 +84,28 @@ export const Suppliers: React.FC = () => {
         }
     };
 
-    const handleOpenModal = (supplier?: Supplier) => {
+    const handleOpenModal = async (supplier?: Supplier) => {
         setShowPassword(false);
         if (supplier) {
             setEditingSupplier(supplier);
             setFormData(supplier);
             setSelectedProductIds(products.filter(p => p.supplierId === supplier.id).map(p => p.id));
+            // Load encrypted credentials only for admin/owner
+            if (userRole === 'owner' || userRole === 'admin') {
+                try {
+                    const creds = await DataService.getSupplierCredentials(supplier.id);
+                    if (creds) {
+                        setFormData(prev => ({
+                            ...prev,
+                            loginUrl: creds.loginUrl ?? prev.loginUrl,
+                            loginUsername: creds.loginUsername ?? prev.loginUsername,
+                            loginPassword: creds.loginPassword,
+                        }));
+                    }
+                } catch {
+                    // Credentials not available — silently ignore
+                }
+            }
         } else {
             setEditingSupplier(null);
             setFormData({ name: '', contactName: '', email: '', phone: '', url: '', notes: [], documents: [], preferredOrderMethod: 'email' });
@@ -121,6 +151,15 @@ export const Suppliers: React.FC = () => {
             } as Supplier;
 
             await DataService.saveSupplier(supplierToSave);
+
+            // Save credentials encrypted via RPC (admin/owner only)
+            if ((userRole === 'owner' || userRole === 'admin') && (formData.loginUsername || formData.loginPassword)) {
+                await DataService.saveSupplierCredentials(targetSupplierId, {
+                    loginUrl: formData.loginUrl,
+                    loginUsername: formData.loginUsername,
+                    loginPassword: formData.loginPassword,
+                });
+            }
 
             // Update assigned products
             const productUpdates = products.filter(product => {
@@ -414,17 +453,16 @@ export const Suppliers: React.FC = () => {
                                 </div>
                                 <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
 
-                                {/* Portal Login Infos — K5: Passwort-Warnung */}
+                                {/* Portal Login Infos — nur für Inhaber/Admin sichtbar */}
+                                {(userRole === 'owner' || userRole === 'admin') && (
                                 <div>
                                     <h3 style={{ margin: '0 0 8px 0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <Key size={16} /> Kunden-Login / Portal
                                     </h3>
                                     <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        ⚠️ Passwörter werden in der Datenbank gespeichert. Nur für Portal-Zugänge mit geringem Risiko verwenden. Keine Zugangsdaten für Bankkonten oder kritische Systeme eintragen.
+                                        ⚠️ Passwörter werden verschlüsselt gespeichert und sind nur für Inhaber und Administratoren sichtbar.
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                        <div style={{ display: 'none' }}>
-                                        </div>
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Benutzername / Kundennummer</label>
                                             <input type="text" value={formData.loginUsername || ''} onChange={e => setFormData({ ...formData, loginUsername: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="MaxMuster123" />
@@ -440,6 +478,7 @@ export const Suppliers: React.FC = () => {
                                         </div>
                                     </div>
                                 </div>
+                                )}
                                 
                                 <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
 

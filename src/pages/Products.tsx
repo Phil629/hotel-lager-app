@@ -1,5 +1,5 @@
 import { generateId } from "../utils";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
@@ -121,6 +121,12 @@ export const Products: React.FC = () => {
     const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'stock' | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
     const [searchParams] = useSearchParams();
 
+    const rtDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const debouncedReloadProducts = () => {
+        if (rtDebounce.current) clearTimeout(rtDebounce.current);
+        rtDebounce.current = setTimeout(() => DataService.getProducts().then(setProducts), 300);
+    };
+
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
@@ -131,17 +137,14 @@ export const Products: React.FC = () => {
             // W8: eindeutiger Channel-Name pro Tab
             const channelName = `products_rt_${Math.random().toString(36).slice(2, 8)}`;
             channel = supabaseClient.channel(channelName)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-                    DataService.getProducts().then(setProducts);
-                })
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                    DataService.getProducts().then(setProducts);
-                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, debouncedReloadProducts)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, debouncedReloadProducts)
                 .subscribe();
         }
 
         return () => {
             window.removeEventListener('resize', handleResize);
+            if (rtDebounce.current) clearTimeout(rtDebounce.current);
             if (channel && supabaseClient) {
                 supabaseClient.removeChannel(channel);
             }
@@ -537,7 +540,7 @@ export const Products: React.FC = () => {
         setSortConfig({ key, direction });
     };
 
-    const filteredProducts = products.filter(p => {
+    const filteredProducts = useMemo(() => products.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesLowStock = showLowStockOnly ? p.stock <= (p.minStock || 0) : true;
         return matchesSearch && matchesLowStock;
@@ -557,10 +560,16 @@ export const Products: React.FC = () => {
         }
 
         return 0;
-    });
+    }), [products, searchTerm, showLowStockOnly, sortConfig]);
 
-    const totalValue = products.reduce((sum, p) => sum + (p.stock * (p.price || 0)), 0);
-    const lowStockCount = products.filter(p => p.stock <= (p.minStock || 0)).length;
+    const totalValue = useMemo(
+        () => products.reduce((sum, p) => sum + (p.stock * (p.price || 0)), 0),
+        [products]
+    );
+    const lowStockCount = useMemo(
+        () => products.filter(p => p.stock <= (p.minStock || 0)).length,
+        [products]
+    );
 
     return (
         <div>
