@@ -984,31 +984,10 @@ export const Products: React.FC = () => {
             }
             {
                 isModalOpen && (
-                    <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.5)',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        zIndex: 1000,
-                        padding: 'var(--spacing-md)'
-                    }}>
-                        <div style={{
-                            backgroundColor: 'var(--color-surface)',
-                            borderRadius: 'var(--radius-lg)',
-                            width: '100%',
-                            maxWidth: '650px',
-                            maxHeight: '90vh',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            boxShadow: 'var(--shadow-lg)'
-                        }}>
+                    <div className="modal-overlay">
+                        <div className="modal-box" style={{ maxWidth: '650px' }}>
                             {/* Modal Header */}
-                            <div style={{ padding: 'var(--spacing-lg)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className="modal-header">
                                 <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{editingId ? '✏️ Produkt bearbeiten' : '✨ Neues Produkt anlegen'}</h2>
                                 <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
                                     <X size={24} color="var(--color-text-muted)" />
@@ -1075,7 +1054,7 @@ export const Products: React.FC = () => {
                             </div>
 
                             {/* Scrollable Content */}
-                            <div style={{ padding: 'var(--spacing-lg)', overflowY: 'auto', flex: 1, backgroundColor: 'var(--color-background)' }}>
+                            <div className="modal-body" style={{ backgroundColor: 'var(--color-background)' }}>
                                 <form id="product-form" onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                     
                                     {/* TAB: BASIC */}
@@ -1369,11 +1348,11 @@ export const Products: React.FC = () => {
                             </div>
 
                             {/* Modal Footer (Sticky) */}
-                            <div style={{ padding: 'var(--spacing-lg)', borderTop: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', borderBottomLeftRadius: 'var(--radius-lg)', borderBottomRightRadius: 'var(--radius-lg)' }}>
-                                <button type="button" onClick={closeModal} style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'transparent', color: 'var(--color-text-main)', cursor: 'pointer', fontWeight: 500 }}>
+                            <div className="modal-footer">
+                                <button type="button" onClick={closeModal} className="btn btn-ghost">
                                     Abbrechen
                                 </button>
-                                <button form="product-form" type="submit" disabled={isLoading} style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, opacity: isLoading ? 0.7 : 1 }}>
+                                <button form="product-form" type="submit" disabled={isLoading} className="btn btn-primary" style={{ opacity: isLoading ? 0.7 : 1 }}>
                                     {isLoading ? 'Speichert...' : '💾 ' + (editingId ? 'Änderungen speichern' : 'Produkt anlegen')}
                                 </button>
                             </div>
@@ -1383,56 +1362,21 @@ export const Products: React.FC = () => {
             }
 
             { deleteConfirmId && (
-                    <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.5)',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        zIndex: 1200
-                    }}>
-                        <div style={{
-                            backgroundColor: 'var(--color-surface)',
-                            padding: 'var(--spacing-xl)',
-                            borderRadius: 'var(--radius-lg)',
-                            width: '100%',
-                            maxWidth: '400px',
-                            boxShadow: 'var(--shadow-lg)',
-                            textAlign: 'center'
-                        }}>
+                    <div className="modal-overlay" style={{ zIndex: 1200 }}>
+                        <div className="card" style={{ padding: 'var(--spacing-xl)', maxWidth: '400px', textAlign: 'center' }}>
                             <h3 style={{ marginTop: 0 }}>Produkt löschen?</h3>
                             <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-lg)' }}>
                                 Möchten Sie dieses Produkt wirklich unwiderruflich löschen?
                             </p>
                             <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--spacing-md)' }}>
-                                <button
-                                    onClick={() => setDeleteConfirmId(null)}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--color-border)',
-                                        backgroundColor: 'transparent',
-                                        cursor: 'pointer'
-                                    }}
-                                >
+                                <button onClick={() => setDeleteConfirmId(null)} className="btn btn-ghost">
                                     Abbrechen
                                 </button>
                                 <button
                                     onClick={confirmDelete}
                                     disabled={isLoading}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: 'none',
-                                        backgroundColor: 'var(--color-danger)',
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        opacity: isLoading ? 0.7 : 1
-                                    }}
+                                    className="btn btn-danger-solid"
+                                    style={{ opacity: isLoading ? 0.7 : 1 }}
                                 >
                                     {isLoading ? 'Löscht...' : 'Ja, löschen'}
                                 </button>
