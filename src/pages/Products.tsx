@@ -1027,68 +1027,77 @@ export const Products: React.FC = () => {
                                     
                                     {/* TAB: BASIC */}
                                     {activeModalTab === 'basic' && (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--spacing-md)' }}>
-                                                <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Name *</label>
-                                                    <input
-                                                        required
-                                                        value={newProduct.name || ''}
-                                                        onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
-                                                        style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: !newProduct.name ? '1px solid var(--color-danger)' : '1px solid var(--color-border)' }}
-                                                    />
-                                                </div>
-                                            </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
 
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
-                                                <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Kategorie</label>
-                                                    {isCustomCategoryMode ? (
-                                                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                                                            <input
-                                                                value={newProduct.category || ''}
-                                                                onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
-                                                                placeholder="Eigene..."
-                                                                autoFocus
-                                                                style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
-                                                            />
-                                                            <button type="button" onClick={() => { setIsCustomCategoryMode(false); setNewProduct({ ...newProduct, category: '' }); }} style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: '0 10px' }}><X size={18} /></button>
+                                            {/* Section: Stammdaten */}
+                                            <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                                <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stammdaten</p>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Name *</label>
+                                                        <input
+                                                            required
+                                                            value={newProduct.name || ''}
+                                                            onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
+                                                            className="input-field"
+                                                            style={!newProduct.name ? { borderColor: 'var(--color-danger)' } : {}}
+                                                        />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                                        <div className="form-group">
+                                                            <label className="form-label">Kategorie</label>
+                                                            {isCustomCategoryMode ? (
+                                                                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                                                                    <input
+                                                                        value={newProduct.category || ''}
+                                                                        onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+                                                                        placeholder="Eigene..."
+                                                                        autoFocus
+                                                                        className="input-field"
+                                                                    />
+                                                                    <button type="button" onClick={() => { setIsCustomCategoryMode(false); setNewProduct({ ...newProduct, category: '' }); }} className="btn btn-ghost btn-icon"><X size={16} /></button>
+                                                                </div>
+                                                            ) : (
+                                                                <select
+                                                                    value={newProduct.category || ''}
+                                                                    onChange={e => {
+                                                                        if (e.target.value === 'custom') { setIsCustomCategoryMode(true); setNewProduct({ ...newProduct, category: '' }); }
+                                                                        else { setNewProduct({ ...newProduct, category: e.target.value }); }
+                                                                    }}
+                                                                    className="input-field"
+                                                                >
+                                                                    <option value="">-- Leer --</option>
+                                                                    {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                                                    <option value="custom">Eigene eingeben...</option>
+                                                                </select>
+                                                            )}
                                                         </div>
-                                                    ) : (
-                                                        <select
-                                                            value={newProduct.category || ''}
-                                                            onChange={e => {
-                                                                if (e.target.value === 'custom') { setIsCustomCategoryMode(true); setNewProduct({ ...newProduct, category: '' }); } 
-                                                                else { setNewProduct({ ...newProduct, category: e.target.value }); }
-                                                            }}
-                                                            style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'white' }}
-                                                        >
-                                                            <option value="">-- Leer --</option>
-                                                            {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                                                            <option value="custom">Eigene eingeben...</option>
-                                                        </select>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Produktnummer</label>
-                                                    <input
-                                                        value={newProduct.productNumber || ''}
-                                                        onChange={e => setNewProduct({ ...newProduct, productNumber: e.target.value })}
-                                                        placeholder="z.B. 12345-AB"
-                                                        style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
-                                                    />
+                                                        <div className="form-group">
+                                                            <label className="form-label">Produktnummer</label>
+                                                            <input
+                                                                value={newProduct.productNumber || ''}
+                                                                onChange={e => setNewProduct({ ...newProduct, productNumber: e.target.value })}
+                                                                placeholder="z.B. 12345-AB"
+                                                                className="input-field"
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            <div>
-                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Produktbild</label>
+                                            {/* Section: Produktbild */}
+                                            <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                                <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Produktbild</p>
+                                                <div className="form-group">
+                                                <label className="form-label" style={{ display: 'none' }}>Produktbild</label>
                                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                     <input
                                                         type="url"
                                                         placeholder="https://... (URL einfügen)"
                                                         value={newProduct.image || ''}
                                                         onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
-                                                        style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
+                                                        className="input-field"
+                                                        style={{ flex: 1 }}
                                                     />
                                                     <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>oder</span>
                                                     <label style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '10px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1134,19 +1143,20 @@ export const Products: React.FC = () => {
                                                 )}
                                             </div>
 
-                                            <div>
-                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Produkt-Notizen</label>
+                                            {/* Section: Notizen */}
+                                            <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                                <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notizen</p>
                                                 {(newProduct.notes || []).map((note, idx) => (
-                                                    <div key={note.id} style={{ marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', backgroundColor: 'white' }}>
+                                                    <div key={note.id} style={{ marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-surface-elevated)' }}>
                                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                                                             <textarea
                                                                 rows={2}
                                                                 value={note.text}
                                                                 onChange={e => { const updated = [...(newProduct.notes || [])]; updated[idx].text = e.target.value; setNewProduct({ ...newProduct, notes: updated }); }}
                                                                 placeholder="Notiz eingeben..."
-                                                                style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
+                                                                className="input-field"
                                                             />
-                                                            <button type="button" onClick={() => { const updated = (newProduct.notes || []).filter((_, i) => i !== idx); setNewProduct({ ...newProduct, notes: updated }); }} style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer' }}><X size={18} /></button>
+                                                            <button type="button" onClick={() => { const updated = (newProduct.notes || []).filter((_, i) => i !== idx); setNewProduct({ ...newProduct, notes: updated }); }} className="btn btn-ghost btn-icon" style={{ color: 'var(--color-danger)', flexShrink: 0 }}><X size={18} /></button>
                                                         </div>
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
                                                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
@@ -1160,8 +1170,8 @@ export const Products: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 ))}
-                                                <button type="button" onClick={() => { const updated = [...(newProduct.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }]; setNewProduct({ ...newProduct, notes: updated }); }} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
-                                                    <Plus size={16} /> Weitere Notiz hinzufügen
+                                                <button type="button" onClick={() => { const updated = [...(newProduct.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }]; setNewProduct({ ...newProduct, notes: updated }); }} className="btn btn-ghost btn-sm" style={{ padding: '6px 0' }}>
+                                                    <Plus size={14} /> Notiz hinzufügen
                                                 </button>
                                             </div>
                                         </div>
@@ -1183,33 +1193,39 @@ export const Products: React.FC = () => {
 
                                     {/* TAB: INVENTORY */}
                                     {activeModalTab === 'inventory' && (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--spacing-md)' }}>
-                                                <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Bestand</label>
-                                                    <input type="number" value={newProduct.stock || 0} onChange={e => setNewProduct({ ...newProduct, stock: Number(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
-                                                </div>
-                                                <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Einheit</label>
-                                                    <input value={newProduct.unit || ''} onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })} placeholder="Stück, Liter..." style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
-                                                </div>
-                                                <div>
-                                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Preis (Netto €)</label>
-                                                    <input type="number" step="0.01" value={newProduct.price || ''} onChange={e => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) || 0 })} placeholder="0.00" style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
+
+                                            {/* Section: Bestand & Einheit */}
+                                            <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                                <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Bestand & Einheit</p>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Bestand</label>
+                                                        <input type="number" value={newProduct.stock || 0} onChange={e => setNewProduct({ ...newProduct, stock: Number(e.target.value) })} className="input-field" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Einheit</label>
+                                                        <input value={newProduct.unit || ''} onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })} placeholder="Stück, Liter..." className="input-field" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Preis (Netto €)</label>
+                                                        <input type="number" step="0.01" value={newProduct.price || ''} onChange={e => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) || 0 })} placeholder="0.00" className="input-field" />
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            <div style={{ padding: 'var(--spacing-md)', backgroundColor: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
-                                                <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-primary)' }}>Bestell-Logistik (Autopilot)</h4>
+                                            {/* Section: Autopilot */}
+                                            <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                                <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Bestell-Autopilot</p>
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-md)' }}>
-                                                    <div>
-                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Meldebestand (Untergrenze)</label>
-                                                        <input type="number" value={newProduct.minStock || 0} onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
-                                                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Ab hier schlägt der Autopilot an.</span>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Meldebestand (Untergrenze)</label>
+                                                        <input type="number" value={newProduct.minStock || 0} onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })} className="input-field" />
+                                                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>Ab hier schlägt der Autopilot an.</span>
                                                     </div>
-                                                    <div>
-                                                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Standard Bestellmenge</label>
-                                                        <input type="number" value={newProduct.standardOrderQuantity || ''} onChange={e => setNewProduct({ ...newProduct, standardOrderQuantity: e.target.value ? Number(e.target.value) : undefined })} placeholder="Optional" style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+                                                    <div className="form-group">
+                                                        <label className="form-label">Standard Bestellmenge</label>
+                                                        <input type="number" value={newProduct.standardOrderQuantity || ''} onChange={e => setNewProduct({ ...newProduct, standardOrderQuantity: e.target.value ? Number(e.target.value) : undefined })} placeholder="Optional" className="input-field" />
                                                     </div>
                                                 </div>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
@@ -1218,15 +1234,19 @@ export const Products: React.FC = () => {
                                                 </label>
                                             </div>
 
-                                            <div>
-                                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Automatischer System-Verbrauch</label>
-                                                <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <input type="number" step="0.01" min="0" value={newProduct.consumptionAmount || ''} onChange={e => setNewProduct({ ...newProduct, consumptionAmount: parseFloat(e.target.value) || undefined })} placeholder="Menge abziehen..." style={{ width: '50%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
-                                                    <select value={newProduct.consumptionPeriod || ''} onChange={e => setNewProduct({ ...newProduct, consumptionPeriod: e.target.value as 'day' | 'week' | undefined })} style={{ width: '50%', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'white' }}>
-                                                        <option value="">-- Zyklus --</option>
-                                                        <option value="day">pro Tag</option>
-                                                        <option value="week">pro Woche</option>
-                                                    </select>
+                                            {/* Section: Verbrauchssteuerung */}
+                                            <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                                <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Verbrauchssteuerung</p>
+                                                <div className="form-group">
+                                                    <label className="form-label">Automatischer System-Verbrauch</label>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <input type="number" step="0.01" min="0" value={newProduct.consumptionAmount || ''} onChange={e => setNewProduct({ ...newProduct, consumptionAmount: parseFloat(e.target.value) || undefined })} placeholder="Menge abziehen..." className="input-field" />
+                                                        <select value={newProduct.consumptionPeriod || ''} onChange={e => setNewProduct({ ...newProduct, consumptionPeriod: e.target.value as 'day' | 'week' | undefined })} className="input-field" style={{ width: 'auto', minWidth: '140px' }}>
+                                                            <option value="">-- Zyklus --</option>
+                                                            <option value="day">pro Tag</option>
+                                                            <option value="week">pro Woche</option>
+                                                        </select>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

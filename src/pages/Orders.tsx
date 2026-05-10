@@ -1379,16 +1379,16 @@ export const Orders: React.FC = () => {
             {/* Create Order Modal */}
             {isCreateModalOpen && (
                 <div className="modal-overlay">
-                    <div className="modal-box" style={{ maxWidth: '600px', padding: 'var(--spacing-xl)', overflowY: 'auto' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-                            <h3 style={{ margin: 0 }}>Neue Bestellung</h3>
-                            <button onClick={() => setIsCreateModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                <X size={24} />
+                    <div className="modal-box" style={{ maxWidth: '600px' }}>
+                        <div className="modal-header">
+                            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Neue Bestellung</h3>
+                            <button onClick={() => setIsCreateModalOpen(false)} className="btn btn-ghost btn-icon">
+                                <X size={20} />
                             </button>
                         </div>
 
                         {/* Tabs */}
-                        <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 'var(--spacing-lg)' }}>
+                        <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)' }}>
                             <button
                                 onClick={() => setCreateTab('existing')}
                                 style={{
@@ -1419,6 +1419,7 @@ export const Orders: React.FC = () => {
                             </button>
                         </div>
 
+                        <div className="modal-body">
                         {createTab === 'existing' ? (
                             <>
                                 <div style={{ position: 'relative', marginBottom: 'var(--spacing-md)' }}>
@@ -1763,11 +1764,6 @@ export const Orders: React.FC = () => {
                                             </div>
                                         )}
 
-                                <div style={{ position: "sticky", bottom: "-24px", backgroundColor: "var(--color-surface)", padding: "16px 0 0 0", marginTop: "16px", borderTop: "1px solid var(--color-border)", zIndex: 10 }}>
-                                    <button onClick={handleCreateOrder} className="btn btn-primary" style={{ width: '100%' }}>
-                                        Bestellung anlegen
-                                    </button>
-                                </div>
                                     </div>
                                 )}
                             </>
@@ -1944,11 +1940,13 @@ export const Orders: React.FC = () => {
                                         style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'inherit' }}
                                     />
                                 </div>
-                                <button onClick={handleCreateOrder} className="btn btn-primary" style={{ width: '100%', marginTop: 'var(--spacing-sm)' }}>
-                                    Bestellung anlegen
-                                </button>
                             </div>
                         )}
+                        </div>{/* modal-body */}
+                        <div className="modal-footer">
+                            <button onClick={() => setIsCreateModalOpen(false)} className="btn btn-ghost">Abbrechen</button>
+                            <button onClick={handleCreateOrder} className="btn btn-primary">Bestellung anlegen</button>
+                        </div>
                     </div>
                 </div>
             )}
