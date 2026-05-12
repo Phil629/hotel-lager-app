@@ -233,7 +233,7 @@ export const Statistics: React.FC = () => {
                         <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--color-text-main)' }}>
                             {globalStats.totalSpentThisMonth.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px', fontSize: '13px', color: globalStats.spendDifference > 0 ? '#ef4444' : '#10b981', fontWeight: 500 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px', fontSize: '13px', color: globalStats.spendDifference > 0 ? 'var(--color-danger)' : 'var(--color-success)', fontWeight: 500 }}>
                             {globalStats.spendDifference > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                             {Math.abs(globalStats.spendDifference).toFixed(1)}% im Vergleich zum Vormonat
                         </div>
@@ -254,7 +254,7 @@ export const Statistics: React.FC = () => {
                 
                 {/* Product List Sidebar */}
                 <div className="card" style={{ overflow: 'hidden' }}>
-                    <div style={{ padding: 'var(--spacing-md)', borderBottom: '1px solid var(--color-border)', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ padding: 'var(--spacing-md)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <LayoutGrid size={20} color="var(--color-primary)" />
                         <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', color: 'var(--color-text-main)' }}>Ausgaben nach Produkt</h3>
                     </div>
@@ -268,27 +268,27 @@ export const Statistics: React.FC = () => {
                                 
                                 return (
                                     <div key={supplierId}>
-                                        <div 
+                                        <div
                                             onClick={() => setExpandedSuppliers(prev => ({...prev, [supplierId]: !prev[supplierId]}))}
                                             style={{
                                                 padding: '12px 16px',
-                                                backgroundColor: '#f1f5f9',
+                                                backgroundColor: 'var(--color-background)',
                                                 borderBottom: '1px solid var(--color-border)',
-                                                borderTop: '1px solid white',
+                                                borderTop: '1px solid var(--color-surface)',
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'space-between',
                                                 fontWeight: 600,
-                                                color: '#334155'
+                                                color: 'var(--color-text-secondary)'
                                             }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <Building2 size={16} color="#64748b" />
+                                                <Building2 size={16} color="var(--color-text-muted)" />
                                                 {supplier?.name || 'Ohne Lieferant'}
-                                                <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 'normal' }}>({supplierProds.length})</span>
+                                                <span style={{ fontSize: '11px', color: 'var(--color-text-faint)', fontWeight: 'normal' }}>({supplierProds.length})</span>
                                             </div>
-                                            {isExpanded ? <ChevronDown size={16} color="#64748b" /> : <ChevronRight size={16} color="#64748b" />}
+                                            {isExpanded ? <ChevronDown size={16} color="var(--color-text-muted)" /> : <ChevronRight size={16} color="var(--color-text-muted)" />}
                                         </div>
                                         
                                         {isExpanded && (
@@ -302,7 +302,7 @@ export const Statistics: React.FC = () => {
                                                             paddingLeft: '24px',
                                                             borderBottom: '1px solid var(--color-border)',
                                                             cursor: 'pointer',
-                                                            backgroundColor: selectedProductId === stat.id ? '#eff6ff' : 'white',
+                                                            backgroundColor: selectedProductId === stat.id ? '#eff6ff' : 'var(--color-surface)',
                                                             borderLeft: selectedProductId === stat.id ? '4px solid var(--color-primary)' : '4px solid transparent',
                                                             transition: 'all 0.15s ease'
                                                         }}
@@ -310,7 +310,7 @@ export const Statistics: React.FC = () => {
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>{stat.name}</div>
                                                             {stat.isVolatile && (
-                                                                <div title="Starke Preisschwankungen erkannt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#fef2f2', color: '#ef4444' }}>
+                                                                <div title="Starke Preisschwankungen erkannt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
                                                                     <AlertCircle size={12} />
                                                                 </div>
                                                             )}
@@ -362,7 +362,7 @@ export const Statistics: React.FC = () => {
                                     fontSize: '15px',
                                     fontWeight: 600,
                                     cursor: 'pointer',
-                                    color: activeTab === 'consumption' ? 'var(--color-primary)' : '#64748b',
+                                    color: activeTab === 'consumption' ? 'var(--color-primary)' : 'var(--color-text-muted)',
                                     borderBottom: activeTab === 'consumption' ? '3px solid var(--color-primary)' : '3px solid transparent',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -381,8 +381,8 @@ export const Statistics: React.FC = () => {
                                     fontSize: '15px',
                                     fontWeight: 600,
                                     cursor: 'pointer',
-                                    color: activeTab === 'price' ? '#10b981' : '#64748b', // Success green for price
-                                    borderBottom: activeTab === 'price' ? '3px solid #10b981' : '3px solid transparent',
+                                    color: activeTab === 'price' ? 'var(--color-success)' : 'var(--color-text-muted)',
+                                    borderBottom: activeTab === 'price' ? '3px solid var(--color-success)' : '3px solid transparent',
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '8px',
@@ -406,11 +406,11 @@ export const Statistics: React.FC = () => {
                                                 <span style={{ fontSize: '14px', color: '#1e3a8a', fontWeight: 500 }}>
                                                     Ø Verbrauch: <strong>{selectedProductData.suggestedWeekly} {selectedProductData.unit} / Woche</strong>
                                                 </span>
-                                                <button 
+                                                <button
                                                     onClick={() => handleAdoptSuggestion(selectedProductData, selectedProductData.suggestedWeekly)}
                                                     disabled={isSaving}
                                                     title="Als automatischen Verbrauch übernehmen"
-                                                    style={{ border: 'none', background: 'var(--color-primary)', color: 'white', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                                                    className="btn btn-primary btn-sm"
                                                 >
                                                     Übernehmen
                                                 </button>
@@ -445,8 +445,8 @@ export const Statistics: React.FC = () => {
                                     <h4 style={{ margin: '0 0 16px 0', fontSize: '16px', color: 'var(--color-text-main)' }}>Aktuell eingestellter Auto-Verbrauch</h4>
                                     
                                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Menge einstellen</label>
+                                        <div className="form-group" style={{ flex: 1 }}>
+                                            <label className="form-label">Menge einstellen</label>
                                             <input
                                                 type="number"
                                                 step="0.1"
@@ -454,15 +454,15 @@ export const Statistics: React.FC = () => {
                                                 value={editConsumptionAmount}
                                                 onChange={e => setEditConsumptionAmount(parseFloat(e.target.value) || '')}
                                                 placeholder="Menge (z.B. 1)"
-                                                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }}
+                                                className="input-field"
                                             />
                                         </div>
-                                        <div style={{ flex: 1 }}>
-                                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Zeitraum einstellen</label>
+                                        <div className="form-group" style={{ flex: 1 }}>
+                                            <label className="form-label">Zeitraum einstellen</label>
                                             <select
                                                 value={editConsumptionPeriod}
                                                 onChange={e => setEditConsumptionPeriod(e.target.value as 'day' | 'week' | '')}
-                                                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }}
+                                                className="input-field"
                                             >
                                                 <option value="">-- Keiner --</option>
                                                 <option value="day">pro Tag</option>
@@ -473,17 +473,7 @@ export const Statistics: React.FC = () => {
                                             <button
                                                 onClick={handleSaveManualConsumption}
                                                 disabled={isSaving || (editConsumptionAmount !== '' && editConsumptionPeriod === '') || (editConsumptionAmount === '' && editConsumptionPeriod !== '')}
-                                                style={{
-                                                    padding: '10px 20px',
-                                                    borderRadius: '8px',
-                                                    border: 'none',
-                                                    backgroundColor: 'var(--color-success)',
-                                                    color: 'white',
-                                                    fontWeight: 600,
-                                                    fontSize: '15px',
-                                                    cursor: isSaving ? 'not-allowed' : 'pointer',
-                                                    opacity: (isSaving || (editConsumptionAmount !== '' && editConsumptionPeriod === '') || (editConsumptionAmount === '' && editConsumptionPeriod !== '')) ? 0.6 : 1
-                                                }}
+                                                className="btn btn-success"
                                             >
                                                 {isSaving ? 'Speichert...' : 'Speichern'}
                                             </button>
@@ -505,22 +495,22 @@ export const Statistics: React.FC = () => {
                         {activeTab === 'price' && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Durchschnittspreis</div>
+                                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                        <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Durchschnittspreis</div>
                                         <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-text-main)' }}>{selectedProductData.averagePrice.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
-                                        <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>pro {selectedProductData.unit}</div>
+                                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-faint)', marginTop: '4px' }}>pro {selectedProductData.unit}</div>
                                     </div>
-                                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Letzter Preis</div>
+                                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                        <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Letzter Preis</div>
                                         <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-text-main)' }}>{selectedProductData.lastPrice.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                                     </div>
-                                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Niedrigster Preis</div>
-                                        <div style={{ fontSize: '24px', fontWeight: 700, color: '#10b981' }}>{selectedProductData.minPrice.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                        <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Niedrigster Preis</div>
+                                        <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-success)' }}>{selectedProductData.minPrice.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                                     </div>
-                                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Höchster Preis</div>
-                                        <div style={{ fontSize: '24px', fontWeight: 700, color: '#ef4444' }}>{selectedProductData.maxPrice.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                        <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Höchster Preis</div>
+                                        <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-danger)' }}>{selectedProductData.maxPrice.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                                     </div>
                                 </div>
 
@@ -528,9 +518,9 @@ export const Statistics: React.FC = () => {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                                         <h4 style={{ margin: 0, fontSize: '18px', color: 'var(--color-text-main)' }}>Preisentwicklung (pro {selectedProductData.unit})</h4>
                                         {selectedProductData.isVolatile && (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontSize: '13px', fontWeight: 600, backgroundColor: '#fef2f2', padding: '6px 12px', borderRadius: '999px' }}>
-                                                <AlertCircle size={16} /> Hohe Preisschwankung
-                                            </div>
+                                            <span className="badge badge-danger">
+                                                <AlertCircle size={14} /> Hohe Preisschwankung
+                                            </span>
                                         )}
                                     </div>
 
