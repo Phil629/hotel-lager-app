@@ -2,11 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
 import { DataService } from '../services/data';
-import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check, LogOut, Users, UserPlus, Sun } from 'lucide-react';
+import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check, LogOut, Users, UserPlus, Sun, AlertTriangle } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 import type { AppSettings } from '../types';
+
+interface ConfirmState {
+    message: string;
+    confirmLabel: string;
+    variant: 'danger' | 'warning';
+    onConfirm: () => Promise<void>;
+}
 
 const SectionCard = ({ children }: { children: React.ReactNode }) => (
     <div className="card" style={{ padding: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)' }}>
@@ -40,6 +47,7 @@ export const Settings: React.FC = () => {
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     const devClickCount = useRef(0);
     const devTimeout = useRef<number | null>(null);
+    const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
     useEffect(() => {
         const stored = StorageService.getSettings();
@@ -559,29 +567,33 @@ export const Settings: React.FC = () => {
                     <div style={{ display: 'flex', gap: 'var(--spacing-sm)', flexWrap: 'wrap' }}>
                         <button
                             type="button"
-                            onClick={async () => {
-                                if (window.confirm('Möchten Sie sich wirklich abmelden?')) {
-                                    await supabase?.auth.signOut();
-                                }
-                            }}
+                            onClick={() => setConfirm({
+                                message: 'Möchten Sie sich wirklich abmelden?',
+                                confirmLabel: 'Abmelden',
+                                variant: 'danger',
+                                onConfirm: async () => { await supabase?.auth.signOut(); },
+                            })}
                             className="btn btn-danger-solid"
                         >
                             Konto abmelden
                         </button>
                         <button
                             type="button"
-                            onClick={async () => {
-                                if (window.confirm('WARNUNG: Möchten Sie Ihr Konto und alle persönlichen Daten wirklich unwiderruflich löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) {
+                            onClick={() => setConfirm({
+                                message: 'WARNUNG: Möchten Sie Ihr Konto und alle persönlichen Daten wirklich unwiderruflich löschen? Diese Aktion kann nicht rückgängig gemacht werden!',
+                                confirmLabel: 'Unwiderruflich löschen',
+                                variant: 'danger',
+                                onConfirm: async () => {
                                     try {
                                         if (supabase) {
                                             await supabase.rpc('delete_user_account');
                                             await supabase.auth.signOut();
                                         }
-                                    } catch (e) {
+                                    } catch {
                                         setNotification({ message: 'Fehler beim Löschen des Kontos. Bitte an den Support wenden.', type: 'error' });
                                     }
-                                }
-                            }}
+                                },
+                            })}
                             className="btn btn-danger"
                         >
                             Konto & Daten unwiderruflich löschen
@@ -663,6 +675,29 @@ export const Settings: React.FC = () => {
                     </div>
                 )}
             </form>
+
+            {confirm && (
+                <div className="modal-overlay" onClick={() => setConfirm(null)}>
+                    <div className="modal-box" style={{ maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <AlertTriangle color="var(--color-danger)" size={20} />
+                            <h3>Bestätigung erforderlich</h3>
+                        </div>
+                        <div className="modal-body">
+                            <p>{confirm.message}</p>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-ghost" onClick={() => setConfirm(null)}>Abbrechen</button>
+                            <button
+                                className="btn btn-danger-solid"
+                                onClick={async () => { await confirm.onConfirm(); setConfirm(null); }}
+                            >
+                                {confirm.confirmLabel}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
