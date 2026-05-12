@@ -255,7 +255,7 @@ export const Settings: React.FC = () => {
                         <Building2 size={22} color="var(--color-primary)" /> Unternehmensprofil
                     </h3>
 
-                    <div style={{ padding: 'var(--spacing-md)', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1', marginBottom: 'var(--spacing-lg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginBottom: 'var(--spacing-lg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                             <strong style={{ display: 'block', color: 'var(--color-text-main)', fontSize: '15px' }}>Aktuelles Abonnement</strong>
                             <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Ihre Features sind basierend auf diesem Plan freigeschaltet. Wenden Sie sich an den Support, um Ihren Plan zu ändern.</span>
@@ -391,7 +391,7 @@ export const Settings: React.FC = () => {
                         <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
                             <SettingsIcon size={22} color="var(--color-primary)" /> Funktionen & Tarife
                         </h3>
-                        <div style={{ backgroundColor: '#f0fdf4', color: '#166534', padding: '6px 12px', borderRadius: '20px', fontWeight: 600, fontSize: '14px', border: '1px solid #bbf7d0' }}>
+                        <div style={{ backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '6px 12px', borderRadius: '20px', fontWeight: 600, fontSize: '14px', border: '1px solid var(--color-border)' }}>
                             Aktiver Plan: {settings.currentPlan?.toUpperCase() || 'PRO'}
                         </div>
                     </div>
@@ -401,25 +401,25 @@ export const Settings: React.FC = () => {
                         <div style={{ padding: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', opacity: settings.currentPlan === 'basic' ? 1 : 0.6 }}>
                             <div style={{ fontWeight: 700, fontSize: '18px', marginBottom: '8px' }}>Basic</div>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="#22c55e" /> Bestellwesen manuell</li>
-                                <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="#22c55e" /> Lieferanten-DB</li>
+                                <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-success)" /> Bestellwesen manuell</li>
+                                <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-success)" /> Lieferanten-DB</li>
                             </ul>
                         </div>
                         {/* Standard Plan */}
                         <div style={{ padding: 'var(--spacing-md)', border: '1px solid', borderColor: settings.currentPlan === 'standard' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: 'var(--radius-md)', opacity: settings.currentPlan === 'basic' ? 0.4 : (settings.currentPlan === 'standard' ? 1 : 0.6) }}>
                             <div style={{ fontWeight: 700, fontSize: '18px', marginBottom: '8px' }}>Standard</div>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="#22c55e" /> Basic Funktionen</li>
+                                <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-success)" /> Basic Funktionen</li>
                                 <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-primary)" /> Inventur-Modus</li>
                                 <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-primary)" /> Automatische Warnungen</li>
                                 <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-primary)" /> Statistiken</li>
                             </ul>
                         </div>
                         {/* Pro Plan */}
-                        <div style={{ padding: 'var(--spacing-md)', border: '2px solid', borderColor: settings.currentPlan === 'pro' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: 'var(--radius-md)', opacity: settings.currentPlan === 'pro' ? 1 : 0.4, backgroundColor: settings.currentPlan === 'pro' ? '#f8fafc' : 'transparent' }}>
+                        <div style={{ padding: 'var(--spacing-md)', border: '2px solid', borderColor: settings.currentPlan === 'pro' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: 'var(--radius-md)', opacity: settings.currentPlan === 'pro' ? 1 : 0.4, backgroundColor: settings.currentPlan === 'pro' ? 'var(--color-surface-elevated)' : 'transparent' }}>
                             <div style={{ fontWeight: 700, fontSize: '18px', marginBottom: '8px', color: 'var(--color-primary)' }}>Pro</div>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="#22c55e" /> Standard Funktionen</li>
+                                <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-success)" /> Standard Funktionen</li>
                                 <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-primary)" /> Autom. KI-Verbrauch</li>
                                 <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-primary)" /> Personalisierte E-Mails</li>
                             </ul>
@@ -515,23 +515,23 @@ export const Settings: React.FC = () => {
                         <Mail size={22} color="var(--color-primary)" /> Automatisierungen & Integrationen
                     </h3>
                     
-                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)' }}>
+                    <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)' }}>
                         <h4 style={{ margin: '0 0 12px 0', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={18} color="#0284c7" /> Auto-Bestellungen (Outbound)</h4>
                         <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: '1.5' }}>
                             Dein Account nutzt unsere verschlüsselte SaaS E-Mail Schnittstelle. Bestellungen an Lieferanten werden direkt und sicher über unsere Edge Functions verschickt.
                         </p>
                     </div>
 
-                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)' }}>
-                        <h4 style={{ margin: '0 0 12px 0', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}><Upload size={18} /> Bestätigungsleser (Inbound)</h4>
-                        <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#166534', lineHeight: '1.5' }}>
+                    <div style={{ backgroundColor: 'var(--color-success-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)' }}>
+                        <h4 style={{ margin: '0 0 12px 0', color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '6px' }}><Upload size={18} /> Bestätigungsleser (Inbound)</h4>
+                        <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--color-success)', lineHeight: '1.5' }}>
                             Leite Lieferantenbestätigungen automatisch an dein Postfach weiter. Unsere KI liest die PDFs/Texte aus und korrigiert Bestände sowie Preise vollautomatisch!
                         </p>
                         
-                        <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px dashed #bbf7d0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ backgroundColor: 'var(--color-surface)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--color-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Deine Weiterleitungs-Adresse:</span>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                <code style={{ flex: 1, padding: '12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid var(--color-border)', color: '#334155', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>
+                                <code style={{ flex: 1, padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: '4px', border: '1px solid var(--color-border)', color: 'var(--color-text-main)', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>
                                     {/* W11: company_id-basierte Adresse statt user_id */}
                                 {userId ? `in-${userId.substring(0, 8)}@inbound.bestellwesen.com` : 'Lade...'}
                                 </code>
