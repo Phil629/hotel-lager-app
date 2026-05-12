@@ -128,19 +128,19 @@ export const Admin = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '16px' }}>
-                    <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', minWidth: '150px' }}>
+                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', minWidth: '150px' }}>
                         <div style={{ color: 'var(--color-text-muted)', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <UserCheck size={16} /> AKTIVE KUNDEN
                         </div>
-                        <div style={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', marginTop: '4px' }}>
+                        <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-text-main)', marginTop: '4px' }}>
                             {profiles.filter(p => !p.is_banned).length}
                         </div>
                     </div>
-                    <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', minWidth: '150px' }}>
+                    <div style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', minWidth: '150px' }}>
                         <div style={{ color: 'var(--color-text-muted)', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <TrendingUp size={16} /> MONATSUMSATZ (MRR)
                         </div>
-                        <div style={{ fontSize: '24px', fontWeight: 700, color: '#16a34a', marginTop: '4px' }}>
+                        <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-success)', marginTop: '4px' }}>
                             {mrr} €
                         </div>
                     </div>
@@ -150,14 +150,14 @@ export const Admin = () => {
             <div style={{ display: 'flex', gap: '8px', marginBottom: 'var(--spacing-lg)' }}>
                 <button
                     onClick={() => setActiveTab('users')}
-                    style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: activeTab === 'users' ? '#be123c' : 'white', color: activeTab === 'users' ? 'white' : 'var(--color-text-main)', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                    style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: activeTab === 'users' ? '#be123c' : 'var(--color-surface)', color: activeTab === 'users' ? 'white' : 'var(--color-text-main)', fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-xs)' }}
                 >
                     <Users size={18} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                     Unternehmensprofile ({profiles.length})
                 </button>
                 <button
                     onClick={() => setActiveTab('tickets')}
-                    style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: activeTab === 'tickets' ? '#be123c' : 'white', color: activeTab === 'tickets' ? 'white' : 'var(--color-text-main)', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                    style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: activeTab === 'tickets' ? '#be123c' : 'var(--color-surface)', color: activeTab === 'tickets' ? 'white' : 'var(--color-text-main)', fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-xs)' }}
                 >
                     <Ticket size={18} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                     Support-Anfragen
@@ -169,21 +169,21 @@ export const Admin = () => {
             ) : activeTab === 'users' ? (
                 <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))' }}>
                     {profiles.map(p => (
-                        <div key={p.id} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-lg)', padding: '20px', border: p.is_banned ? '2px solid #ef4444' : '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative' }}>
+                        <div key={p.id} style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: '20px', border: p.is_banned ? `2px solid var(--color-danger)` : '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative' }}>
 
                             {p.is_banned && (
-                                <div style={{ position: 'absolute', top: 12, right: 12, backgroundColor: '#fef2f2', color: '#ef4444', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <div style={{ position: 'absolute', top: 12, right: 12, backgroundColor: 'var(--color-danger-bg)', color: 'var(--color-danger)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Ban size={12} /> GESPERRT
                                 </div>
                             )}
 
                             <div>
-                                <h3 style={{ margin: 0, fontSize: '16px', color: '#0f172a', paddingRight: '80px', wordBreak: 'break-all' }}>{p.email}</h3>
+                                <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--color-text-main)', paddingRight: '80px', wordBreak: 'break-all' }}>{p.email}</h3>
                                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
                                     Mitglied seit: {new Date(p.created_at).toLocaleDateString('de-DE')}
                                 </p>
                                 {p.company_id && (
-                                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
                                         Company-ID: <code style={{ fontSize: '11px' }}>{p.company_id}</code>
                                     </p>
                                 )}
@@ -193,7 +193,7 @@ export const Admin = () => {
                                 <select
                                     value={p.plan || 'free'}
                                     onChange={(e) => updatePlan(p.id, e.target.value)}
-                                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: '#f8fafc', fontWeight: 600, color: p.plan === 'pro' ? '#7e22ce' : '#334155', cursor: 'pointer' }}
+                                    style={{ padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', fontWeight: 600, color: p.plan === 'pro' ? '#7e22ce' : 'var(--color-text-secondary)', cursor: 'pointer' }}
                                 >
                                     <option value="free">Free (0€)</option>
                                     <option value="basic">Basic (19€)</option>
@@ -201,27 +201,28 @@ export const Admin = () => {
                                     <option value="pro">Pro (39€)</option>
                                 </select>
 
-                                <span style={{ backgroundColor: p.role === 'admin' ? '#be123c' : '#e2e8f0', color: p.role === 'admin' ? 'white' : '#475569', padding: '6px 10px', borderRadius: '4px', fontSize: '13px', fontWeight: 600 }}>
+                                <span style={{ backgroundColor: p.role === 'admin' ? '#be123c' : 'var(--color-border)', color: p.role === 'admin' ? 'white' : 'var(--color-text-muted)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', fontSize: '13px', fontWeight: 600 }}>
                                     {(p.role || 'user').toUpperCase()}
                                 </span>
                             </div>
 
                             <div style={{ marginTop: '8px' }}>
-                                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Interne Notizen:</label>
+                                <label className="form-label">Interne Notizen:</label>
                                 <textarea
                                     defaultValue={p.admin_notes || ''}
                                     onBlur={(e) => updateNote(p.id, e.target.value)}
                                     placeholder="Notizen zum Kunden (speichert beim Verlassen des Feldes)..."
-                                    style={{ width: '100%', height: '60px', padding: '8px', borderRadius: '4px', border: '1px solid var(--color-border)', fontSize: '13px', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                                    className="input-field"
+                                    style={{ height: '60px', resize: 'none', fontSize: 'var(--font-size-sm)' }}
                                 />
                             </div>
 
                             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                                <button onClick={() => toggleRole(p.id, p.role)} style={{ background: 'none', border: 'none', color: '#0284c7', cursor: 'pointer', textDecoration: 'underline', fontSize: '13px', padding: 0 }}>
+                                <button onClick={() => toggleRole(p.id, p.role)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline', fontSize: '13px', padding: 0 }}>
                                     Admin-Rechte {p.role === 'admin' ? 'entziehen' : 'geben'}
                                 </button>
 
-                                <button onClick={() => toggleBan(p.id, p.is_banned)} style={{ background: 'none', border: 'none', color: p.is_banned ? '#16a34a' : '#ef4444', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <button onClick={() => toggleBan(p.id, p.is_banned)} style={{ background: 'none', border: 'none', color: p.is_banned ? 'var(--color-success)' : 'var(--color-danger)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Ban size={14} /> {p.is_banned ? 'Entsperren' : 'Sperren'}
                                 </button>
                             </div>
@@ -234,23 +235,23 @@ export const Admin = () => {
                     )}
                 </div>
             ) : (
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                <div className="card" style={{ padding: 'var(--spacing-lg)' }}>
                     {tickets.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>Keine Support-Tickets vorhanden.</div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                             {tickets.map(t => (
                                 <div key={t.id} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
-                                    <div style={{ padding: '12px 16px', backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ padding: '12px 16px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <strong>{t.subject}</strong>
-                                        <span style={{ backgroundColor: t.status === 'open' ? '#fef08a' : '#bbf7d0', color: t.status === 'open' ? '#854d0e' : '#166534', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
+                                        <span className={`badge ${t.status === 'open' ? 'badge-warning' : 'badge-success'}`}>
                                             {t.status.toUpperCase()}
                                         </span>
                                     </div>
                                     <div style={{ padding: '16px', color: 'var(--color-text-main)' }}>{t.message}</div>
-                                    <div style={{ padding: '12px 16px', backgroundColor: '#f8fafc', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <div style={{ padding: '12px 16px', backgroundColor: 'var(--color-surface-elevated)', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end' }}>
                                         {t.status === 'open' && (
-                                            <button onClick={() => updateTicketStatus(t.id, 'closed')} style={{ backgroundColor: '#22c55e', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                                            <button onClick={() => updateTicketStatus(t.id, 'closed')} className="btn btn-success btn-sm">
                                                 <CheckCircle size={16} /> Als gelöst markieren
                                             </button>
                                         )}

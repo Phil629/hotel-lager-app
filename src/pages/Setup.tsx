@@ -103,9 +103,8 @@ export const Setup: React.FC = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                         <button
                             onClick={() => setMode('create')}
-                            style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: '0.2s', textAlign: 'left', width: '100%' }}
-                            onMouseOver={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
-                            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
+                            className="choice-option"
+                            style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left', width: '100%' }}
                         >
                             <div style={{ backgroundColor: '#eff6ff', padding: '12px', borderRadius: '50%', flexShrink: 0 }}>
                                 <Building2 size={24} color="var(--color-primary)" />
@@ -119,12 +118,11 @@ export const Setup: React.FC = () => {
 
                         <button
                             onClick={() => setMode('join')}
-                            style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: '0.2s', textAlign: 'left', width: '100%' }}
-                            onMouseOver={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
-                            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
+                            className="choice-option"
+                            style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left', width: '100%' }}
                         >
-                            <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '50%', flexShrink: 0 }}>
-                                <UserPlus size={24} color="#16a34a" />
+                            <div style={{ backgroundColor: 'var(--color-success-bg)', padding: '12px', borderRadius: '50%', flexShrink: 0 }}>
+                                <UserPlus size={24} color="var(--color-success)" />
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 'bold', fontSize: '16px', color: 'var(--color-text-main)' }}>Einem Unternehmen beitreten</div>
@@ -151,15 +149,16 @@ export const Setup: React.FC = () => {
                                 maxLength={100}
                                 value={companyName}
                                 onChange={(e) => setCompanyName(e.target.value)}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px', boxSizing: 'border-box' }}
+                                className="input-field"
+                                style={{ padding: '12px' }}
                                 placeholder="z.B. Hotel Sonnenschein GmbH"
                             />
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
-                            <button type="button" onClick={() => setMode('choose')} style={{ padding: '12px 20px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+                            <button type="button" onClick={() => setMode('choose')} className="btn btn-ghost">
                                 Zurück
                             </button>
-                            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+                            <button type="submit" disabled={loading} className="btn btn-primary" style={{ flex: 1 }}>
                                 {loading ? 'Erstelle...' : 'Unternehmen anlegen'}
                             </button>
                         </div>
@@ -176,15 +175,16 @@ export const Setup: React.FC = () => {
                                 maxLength={8}
                                 value={joinCode}
                                 onChange={(e) => setJoinCode(e.target.value.toLowerCase().trim())}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px', letterSpacing: '2px', boxSizing: 'border-box' }}
+                                className="input-field"
+                                style={{ padding: '12px', letterSpacing: '2px' }}
                                 placeholder="z.B. a1b2c3d4"
                             />
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
-                            <button type="button" onClick={() => setMode('choose')} style={{ padding: '12px 20px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+                            <button type="button" onClick={() => setMode('choose')} className="btn btn-ghost">
                                 Zurück
                             </button>
-                            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px 20px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+                            <button type="submit" disabled={loading} className="btn btn-success" style={{ flex: 1 }}>
                                 {loading ? 'Prüfe...' : 'Beitreten'}
                             </button>
                         </div>

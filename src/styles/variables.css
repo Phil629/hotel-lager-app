@@ -349,6 +349,13 @@ textarea:focus {
 .btn-danger-solid { background-color: var(--color-danger); color: #ffffff; }
 .btn-danger-solid:hover:not(:disabled) { background-color: #dc2626; box-shadow: var(--shadow-md); }
 
+/* ── Setup Choice Buttons ── */
+.choice-option {
+  border: 1px solid var(--color-border);
+  transition: border-color 0.2s;
+}
+.choice-option:hover { border-color: var(--color-primary); }
+
 /* ── Interactive Stat Cards ── */
 .stat-card-interactive {
   cursor: pointer;

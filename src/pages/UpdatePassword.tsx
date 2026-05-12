@@ -64,14 +64,14 @@ export const UpdatePassword: React.FC<UpdatePasswordProps> = ({ onSuccess }) => 
                 </div>
 
                 {error && (
-                    <div style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', border: '1px solid #fca5a5' }}>
+                    <div style={{ padding: '12px', backgroundColor: 'var(--color-danger-bg)', color: '#b91c1c', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', border: '1px solid #fca5a5' }}>
                         {error}
                     </div>
                 )}
 
                 {success ? (
                     <div style={{ textAlign: 'center', padding: 'var(--spacing-xl) 0' }}>
-                        <CheckCircle size={48} color="#22c55e" style={{ margin: '0 auto var(--spacing-md)' }} />
+                        <CheckCircle size={48} color="var(--color-success)" style={{ margin: '0 auto var(--spacing-md)' }} />
                         <h3 style={{ color: '#166534', margin: '0 0 8px 0' }}>Passwort erfolgreich geändert!</h3>
                         <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>Du wirst in Kürze weitergeleitet...</p>
                     </div>
@@ -87,7 +87,8 @@ export const UpdatePassword: React.FC<UpdatePasswordProps> = ({ onSuccess }) => 
                                 autoComplete="new-password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
+                                className="input-field"
+                                style={{ padding: '12px' }}
                                 placeholder="Mindestens 6 Zeichen"
                             />
                         </div>
@@ -102,7 +103,8 @@ export const UpdatePassword: React.FC<UpdatePasswordProps> = ({ onSuccess }) => 
                                 autoComplete="new-password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
+                                className="input-field"
+                                style={{ padding: '12px' }}
                                 placeholder="Passwort wiederholen"
                             />
                         </div>
@@ -110,23 +112,8 @@ export const UpdatePassword: React.FC<UpdatePasswordProps> = ({ onSuccess }) => 
                         <button
                             type="submit"
                             disabled={loading}
-                            style={{
-                                width: '100%',
-                                padding: '14px',
-                                backgroundColor: 'var(--color-primary)',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: 'var(--radius-md)',
-                                fontSize: '16px',
-                                fontWeight: 600,
-                                cursor: loading ? 'not-allowed' : 'pointer',
-                                opacity: loading ? 0.7 : 1,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                boxShadow: 'var(--shadow-sm)'
-                            }}
+                            className="btn btn-primary"
+                            style={{ width: '100%', padding: '14px', fontSize: '16px' }}
                         >
                             <Save size={20} />
                             {loading ? 'Wird gespeichert...' : 'Passwort speichern'}

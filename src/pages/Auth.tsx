@@ -65,13 +65,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                 </div>
 
                 {error && (
-                    <div style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', border: '1px solid #fca5a5' }}>
+                    <div style={{ padding: '12px', backgroundColor: 'var(--color-danger-bg)', color: '#b91c1c', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', border: '1px solid #fca5a5' }}>
                         {error}
                     </div>
                 )}
 
                 {message && (
-                    <div style={{ padding: '12px', backgroundColor: '#dcfce3', color: '#166534', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', border: '1px solid #bbf7d0' }}>
+                    <div style={{ padding: '12px', backgroundColor: 'var(--color-success-bg)', color: '#166534', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', border: '1px solid #bbf7d0' }}>
                         {message}
                     </div>
                 )}
@@ -87,7 +87,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                             autoComplete={isLogin ? "username" : "email"}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
+                            className="input-field"
+                            style={{ padding: '12px' }}
                             placeholder="mail@unternehmen.de"
                         />
                     </div>
@@ -103,7 +104,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                                 autoComplete={isLogin ? "current-password" : "new-password"}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '15px' }}
+                                className="input-field"
+                                style={{ padding: '12px' }}
                                 placeholder="Mindestens 6 Zeichen"
                             />
                             {isLogin && (
@@ -123,23 +125,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                     <button
                         type="submit"
                         disabled={loading}
-                        style={{
-                            width: '100%',
-                            padding: '14px',
-                            backgroundColor: 'var(--color-primary)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: 'var(--radius-md)',
-                            fontSize: '16px',
-                            fontWeight: 600,
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            opacity: loading ? 0.7 : 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            boxShadow: 'var(--shadow-sm)'
-                        }}
+                        className="btn btn-primary"
+                        style={{ width: '100%', padding: '14px', fontSize: '16px' }}
                     >
                         {isResetPassword ? <Mail size={20} /> : (isLogin ? <LogIn size={20} /> : <UserPlus size={20} />)}
                         {loading ? 'Wird verarbeitet...' : (isResetPassword ? 'Link senden' : (isLogin ? 'Anmelden' : 'Registrieren'))}
