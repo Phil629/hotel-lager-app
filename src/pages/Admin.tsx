@@ -1,15 +1,43 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Users, Ticket, CheckCircle, ShieldAlert, Ban, TrendingUp, UserCheck } from 'lucide-react';
+import { Users, Ticket, CheckCircle, ShieldAlert, Ban, TrendingUp, UserCheck, AlertTriangle } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
+
+interface AdminProfile {
+    id: string;
+    email: string;
+    created_at: string;
+    is_banned: boolean;
+    role: string;
+    company_id: string | null;
+    admin_notes: string | null;
+    plan: string;
+    subscription_id: string | undefined;
+}
+
+interface SupportTicket {
+    id: string;
+    subject: string;
+    message: string;
+    status: string;
+    created_at: string;
+}
+
+interface ConfirmState {
+    message: string;
+    confirmLabel: string;
+    variant: 'danger' | 'success';
+    onConfirm: () => Promise<void>;
+}
 
 export const Admin = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'tickets'>('users');
-    const [profiles, setProfiles] = useState<any[]>([]);
-    const [tickets, setTickets] = useState<any[]>([]);
+    const [profiles, setProfiles] = useState<AdminProfile[]>([]);
+    const [tickets, setTickets] = useState<SupportTicket[]>([]);
     const [loading, setLoading] = useState(true);
     const [notification, setNotification] = useState<{ message: string; type: NotificationType } | null>(null);
     const [mrr, setMrr] = useState(0);
+    const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
     useEffect(() => {
         fetchAdminData();
@@ -25,8 +53,8 @@ export const Admin = () => {
 
                 const { data: subs } = await supabase.from('subscriptions').select('*');
 
-                const merged = (data || []).map(p => {
-                    const s = subs?.find(x => x.user_id === p.id);
+                const merged: AdminProfile[] = (data || []).map(p => {
+                    const s = subs?.find((x: any) => x.user_id === p.id);
                     return { ...p, plan: s?.plan || 'free', subscription_id: s?.id };
                 });
 
@@ -50,32 +78,43 @@ export const Admin = () => {
         }
     };
 
-    const toggleRole = async (id: string, currentRole: string) => {
-        if (!supabase) return;
+    const toggleRole = (id: string, currentRole: string) => {
         const newRole = currentRole === 'admin' ? 'user' : 'admin';
-        if (!window.confirm(`Soll der Nutzer wirklich den Status ${newRole.toUpperCase()} erhalten?`)) return;
-        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id);
-        if (error) {
-            setNotification({ message: 'Fehler beim Ändern der Rolle: ' + error.message, type: 'error' });
-        } else {
-            setNotification({ message: 'Rolle erfolgreich geändert.', type: 'success' });
-            fetchAdminData();
-        }
+        setConfirm({
+            message: `Soll der Nutzer wirklich den Status ${newRole.toUpperCase()} erhalten?`,
+            confirmLabel: 'Ja, Rolle ändern',
+            variant: 'danger',
+            onConfirm: async () => {
+                if (!supabase) return;
+                const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id);
+                if (error) {
+                    setNotification({ message: 'Fehler beim Ändern der Rolle: ' + error.message, type: 'error' });
+                } else {
+                    setNotification({ message: 'Rolle erfolgreich geändert.', type: 'success' });
+                    fetchAdminData();
+                }
+            },
+        });
     };
 
-    const toggleBan = async (id: string, is_banned: boolean) => {
-        if (!supabase) return;
-        const confirmText = is_banned
-            ? 'Möchtest du den Zugang für diesen Nutzer wieder FREIGEBEN?'
-            : 'Möchtest du den Zugang für diesen Nutzer SPERREN? Der Nutzer wird beim nächsten Laden ausgeloggt.';
-        if (!window.confirm(confirmText)) return;
-        const { error } = await supabase.from('profiles').update({ is_banned: !is_banned }).eq('id', id);
-        if (error) {
-            setNotification({ message: 'Fehler beim Sperren: ' + error.message, type: 'error' });
-        } else {
-            setNotification({ message: is_banned ? 'Konto entsperrt.' : 'Konto gesperrt.', type: 'success' });
-            fetchAdminData();
-        }
+    const toggleBan = (id: string, is_banned: boolean) => {
+        setConfirm({
+            message: is_banned
+                ? 'Möchtest du den Zugang für diesen Nutzer wieder FREIGEBEN?'
+                : 'Möchtest du den Zugang für diesen Nutzer SPERREN? Der Nutzer wird beim nächsten Laden ausgeloggt.',
+            confirmLabel: is_banned ? 'Freigeben' : 'Sperren',
+            variant: is_banned ? 'success' : 'danger',
+            onConfirm: async () => {
+                if (!supabase) return;
+                const { error } = await supabase.from('profiles').update({ is_banned: !is_banned }).eq('id', id);
+                if (error) {
+                    setNotification({ message: 'Fehler beim Sperren: ' + error.message, type: 'error' });
+                } else {
+                    setNotification({ message: is_banned ? 'Konto entsperrt.' : 'Konto gesperrt.', type: 'success' });
+                    fetchAdminData();
+                }
+            },
+        });
     };
 
     const updateNote = async (id: string, note: string) => {
@@ -117,6 +156,32 @@ export const Admin = () => {
                     type={notification.type}
                     onClose={() => setNotification(null)}
                 />
+            )}
+
+            {/* Confirmation Modal */}
+            {confirm && (
+                <div className="modal-overlay" onClick={() => setConfirm(null)}>
+                    <div className="modal-box" style={{ maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <AlertTriangle size={20} color={confirm.variant === 'danger' ? 'var(--color-danger)' : 'var(--color-success)'} />
+                                <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Bestätigung erforderlich</h3>
+                            </div>
+                        </div>
+                        <div className="modal-body">
+                            <p style={{ margin: 0, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>{confirm.message}</p>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-ghost" onClick={() => setConfirm(null)}>Abbrechen</button>
+                            <button
+                                className={`btn ${confirm.variant === 'danger' ? 'btn-danger-solid' : 'btn-success'}`}
+                                onClick={async () => { await confirm.onConfirm(); setConfirm(null); }}
+                            >
+                                {confirm.confirmLabel}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             <div className="page-header" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
