@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Product, Order } from '../types';
 import { DataService } from '../services/data';
-import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap, ChevronDown, ChevronRight, RotateCcw, Save } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -22,6 +22,11 @@ interface Anomaly {
 interface MonthlyBarData {
     date: string;
     menge: number;
+}
+
+interface InlineEdit {
+    amount: number | '';
+    period: 'day' | 'week';
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -49,6 +54,25 @@ const ChartTooltip = ({ active, payload, label, unit }: {
 };
 
 const periodLabel = (p: Product) => p.consumptionPeriod === 'day' ? 'pro Tag' : 'pro Woche';
+
+const getRunwayDays = (p: Product): number | null => {
+    const amount = p.consumptionAmount ?? 0;
+    if (!amount || !p.consumptionPeriod) return null;
+    const dailyRate = p.consumptionPeriod === 'day' ? amount : amount / 7;
+    if (dailyRate <= 0) return null;
+    return Math.floor(p.stock / dailyRate);
+};
+
+const RunwayBadge: React.FC<{ product: Product }> = ({ product }) => {
+    const days = getRunwayDays(product);
+    if (days === null) return null;
+    const [cls, label] =
+        days <= 0  ? ['badge-danger',   'Leer']
+        : days <= 3  ? ['badge-danger',   `${days}d`]
+        : days <= 7  ? ['badge-warning',  `${days}d`]
+        : ['badge-neutral', `${days}d`];
+    return <span className={`badge ${cls}`} title={`Bestand reicht noch ca. ${days} Tage`}>{label}</span>;
+};
 
 // ── Mini Chart (last 8 months of orders for one product) ─────────────────────
 
@@ -97,7 +121,9 @@ export const Consumption: React.FC = () => {
     const [orders, setOrders]     = useState<Order[]>([]);
     const [loading, setLoading]   = useState(true);
     const [saving, setSaving]     = useState<string | null>(null);
+    const [batchSaving, setBatchSaving] = useState(false);
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+    const [inlineEdits, setInlineEdits] = useState<Record<string, InlineEdit>>({});
 
     const loadData = async () => {
         const [p, o] = await Promise.all([DataService.getProducts(), DataService.getOrders()]);
@@ -113,6 +139,24 @@ export const Consumption: React.FC = () => {
             return next;
         });
 
+    const handleTogglePilotExpand = (p: Product) => {
+        const key = `pilot-${p.id}`;
+        setExpandedRows(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+                // initialize inline edit state on first open
+                setInlineEdits(edits => ({
+                    ...edits,
+                    [p.id]: { amount: p.consumptionAmount ?? '', period: p.consumptionPeriod ?? 'week' },
+                }));
+            }
+            return next;
+        });
+    };
+
     // ── Per-product stats ────────────────────────────────────────────────────
 
     const productStats = useMemo((): ProductStat[] => {
@@ -123,8 +167,8 @@ export const Consumption: React.FC = () => {
 
             if (productOrders.length < 2) return { product, suggestedWeekly: 0, actualWeeklyRate: 0 };
 
-            const first   = new Date(productOrders[0].date);
-            const last    = new Date(productOrders[productOrders.length - 1].date);
+            const first    = new Date(productOrders[0].date);
+            const last     = new Date(productOrders[productOrders.length - 1].date);
             const diffDays  = Math.max(1, Math.floor((last.getTime() - first.getTime()) / 86_400_000));
             const diffWeeks = diffDays / 7;
             const consumed  = productOrders.slice(0, -1).reduce((s, o) => s + o.quantity, 0);
@@ -176,6 +220,16 @@ export const Consumption: React.FC = () => {
         } finally { setSaving(null); }
     };
 
+    const handleAdoptAll = async () => {
+        setBatchSaving(true);
+        try {
+            await Promise.all(suggestions.map(stat =>
+                DataService.saveProduct({ ...stat.product, consumptionAmount: stat.suggestedWeekly, consumptionPeriod: 'week', lastConsumptionDate: new Date().toISOString() })
+            ));
+            await loadData();
+        } finally { setBatchSaving(false); }
+    };
+
     const handleIgnore = async (product: Product) => {
         setSaving(product.id);
         try {
@@ -192,13 +246,23 @@ export const Consumption: React.FC = () => {
         } finally { setSaving(null); }
     };
 
+    const handleSaveInline = async (product: Product) => {
+        const edit = inlineEdits[product.id];
+        if (!edit || edit.amount === '') return;
+        setSaving(`inline-${product.id}`);
+        try {
+            await DataService.saveProduct({ ...product, consumptionAmount: Number(edit.amount), consumptionPeriod: edit.period });
+            await loadData();
+        } finally { setSaving(null); }
+    };
+
     if (loading) return (
         <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Lade Autopilot-Daten…</div>
     );
 
-    // ── Shared expand-row style ───────────────────────────────────────────────
+    // ── Suggestion expand panel ───────────────────────────────────────────────
 
-    const expandPanel = (productName: string, unit: string) => (
+    const suggestionExpandPanel = (productName: string, unit: string) => (
         <tr>
             <td colSpan={3} style={{ padding: '0 var(--spacing-xl) var(--spacing-md) var(--spacing-xl)', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)' }}>
                 <div style={{ paddingTop: 'var(--spacing-sm)' }}>
@@ -210,6 +274,67 @@ export const Consumption: React.FC = () => {
             </td>
         </tr>
     );
+
+    // ── Pilot expand panel with inline edit ───────────────────────────────────
+
+    const pilotExpandPanel = (p: Product) => {
+        const edit = inlineEdits[p.id] ?? { amount: p.consumptionAmount ?? '', period: p.consumptionPeriod ?? 'week' };
+        const isDirty = edit.amount !== (p.consumptionAmount ?? '') || edit.period !== (p.consumptionPeriod ?? 'week');
+        const isSavingThis = saving === `inline-${p.id}`;
+        return (
+            <tr>
+                <td colSpan={4} style={{ padding: '0 var(--spacing-xl) var(--spacing-md) var(--spacing-xl)', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)' }}>
+                    <div style={{ paddingTop: 'var(--spacing-sm)', display: 'grid', gridTemplateColumns: '1fr auto', gap: 'var(--spacing-xl)', alignItems: 'start' }}>
+                        {/* Chart */}
+                        <div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                                Bestellhistorie (letzte 8 Monate) — {p.name}
+                            </div>
+                            <ProductMiniChart productName={p.name} unit={p.unit} orders={orders} />
+                        </div>
+                        {/* Inline edit */}
+                        <div style={{ minWidth: '200px', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                Autopilot anpassen
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Menge</label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step="0.1"
+                                    value={edit.amount}
+                                    onChange={e => setInlineEdits(prev => ({ ...prev, [p.id]: { ...edit, amount: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ width: '100%', padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-main)', fontSize: '14px', fontWeight: 500 }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Zeitraum</label>
+                                <select
+                                    value={edit.period}
+                                    onChange={e => setInlineEdits(prev => ({ ...prev, [p.id]: { ...edit, period: e.target.value as 'day' | 'week' } }))}
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ width: '100%', padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-main)', fontSize: '14px' }}
+                                >
+                                    <option value="week">pro Woche</option>
+                                    <option value="day">pro Tag</option>
+                                </select>
+                            </div>
+                            <button
+                                className="btn btn-primary btn-sm"
+                                disabled={!isDirty || edit.amount === '' || isSavingThis}
+                                onClick={e => { e.stopPropagation(); handleSaveInline(p); }}
+                                style={{ width: '100%', justifyContent: 'center' }}
+                            >
+                                <Save size={13} /> {isSavingThis ? 'Speichern…' : 'Speichern'}
+                            </button>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        );
+    };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2xl)', paddingBottom: '40px' }}>
@@ -267,7 +392,21 @@ export const Consumption: React.FC = () => {
                     <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Bot size={16} color="var(--color-primary)" /> Aktionsbedarf: KI-Vorschläge
                     </h3>
-                    {suggestions.length > 0 && <span className="badge badge-warning">{suggestions.length} offen</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {suggestions.length > 0 && (
+                            <>
+                                <span className="badge badge-warning">{suggestions.length} offen</span>
+                                <button
+                                    className="btn btn-success btn-sm"
+                                    onClick={handleAdoptAll}
+                                    disabled={batchSaving}
+                                >
+                                    <CheckCircle2 size={13} />
+                                    {batchSaving ? 'Wird übernommen…' : `Alle übernehmen (${suggestions.length})`}
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 {suggestions.length > 0 ? (
@@ -309,16 +448,16 @@ export const Consumption: React.FC = () => {
                                             </td>
                                             <td onClick={e => e.stopPropagation()} style={{ textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleIgnore(stat.product)} disabled={saving === stat.product.id} title="Dauerhaft ignorieren">
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleIgnore(stat.product)} disabled={saving === stat.product.id || batchSaving} title="Dauerhaft ignorieren">
                                                         <X size={13} /> Ignorieren
                                                     </button>
-                                                    <button className="btn btn-success btn-sm" onClick={() => handleAdopt(stat)} disabled={saving === stat.product.id}>
+                                                    <button className="btn btn-success btn-sm" onClick={() => handleAdopt(stat)} disabled={saving === stat.product.id || batchSaving}>
                                                         <CheckCircle2 size={13} /> Übernehmen
                                                     </button>
                                                 </div>
                                             </td>
                                         </tr>
-                                        {isOpen && expandPanel(stat.product.name, stat.product.unit)}
+                                        {isOpen && suggestionExpandPanel(stat.product.name, stat.product.unit)}
                                     </React.Fragment>
                                 );
                             })}
@@ -331,7 +470,7 @@ export const Consumption: React.FC = () => {
                 )}
             </div>
 
-            {/* ── Active Autopilots (expandable) ── */}
+            {/* ── Active Autopilots (expandable, with runway + inline edit) ── */}
             <div className="card" style={{ overflow: 'hidden' }}>
                 <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)' }}>
                     <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -345,6 +484,7 @@ export const Consumption: React.FC = () => {
                             <tr>
                                 <th>Produkt</th>
                                 <th>Eingestellter Verbrauch</th>
+                                <th style={{ textAlign: 'center' }}>Reicht noch</th>
                                 <th style={{ textAlign: 'center' }}>Status</th>
                             </tr>
                         </thead>
@@ -355,7 +495,7 @@ export const Consumption: React.FC = () => {
                                 return (
                                     <React.Fragment key={p.id}>
                                         <tr
-                                            onClick={() => toggleExpand(`pilot-${p.id}`)}
+                                            onClick={() => handleTogglePilotExpand(p)}
                                             style={{ cursor: 'pointer', backgroundColor: isOpen ? 'var(--color-surface-elevated)' : undefined }}
                                         >
                                             <td>
@@ -376,6 +516,9 @@ export const Consumption: React.FC = () => {
                                                     {p.consumptionAmount} {p.unit} {periodLabel(p)}
                                                 </span>
                                             </td>
+                                            <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                                                <RunwayBadge product={p} />
+                                            </td>
                                             <td style={{ textAlign: 'center' }}>
                                                 {anomaly ? (
                                                     <span className="badge badge-warning" title={`Autopilot: ${anomaly.autoWeekly} ${p.unit}/Wo — Bestellhistorie: ${anomaly.actualWeekly} ${p.unit}/Wo`}>
@@ -386,7 +529,7 @@ export const Consumption: React.FC = () => {
                                                 )}
                                             </td>
                                         </tr>
-                                        {isOpen && expandPanel(p.name, p.unit)}
+                                        {isOpen && pilotExpandPanel(p)}
                                     </React.Fragment>
                                 );
                             })}
