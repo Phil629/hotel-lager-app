@@ -11,9 +11,9 @@ export interface NotificationProps {
 }
 
 const CONFIG = {
-    success: { icon: CheckCircle, accent: '#22c55e', color: '#15803d', label: 'Erfolg' },
-    error:   { icon: AlertTriangle, accent: '#ef4444', color: '#b91c1c', label: 'Fehler' },
-    info:    { icon: Info, accent: '#3b82f6', color: '#1d4ed8', label: 'Info' },
+    success: { icon: CheckCircle, accent: 'var(--color-success)', bg: 'rgba(34, 197, 94, 0.09)',  color: '#15803d', label: 'Erfolg' },
+    error:   { icon: AlertTriangle, accent: 'var(--color-danger)',  bg: 'rgba(239, 68, 68, 0.09)', color: '#b91c1c', label: 'Fehler' },
+    info:    { icon: Info,          accent: 'var(--color-primary)', bg: 'rgba(37, 99, 235, 0.09)', color: '#1d4ed8', label: 'Info' },
 } as const;
 
 export const Notification: React.FC<NotificationProps> = ({
@@ -37,7 +37,7 @@ export const Notification: React.FC<NotificationProps> = ({
         return () => clearTimeout(t);
     }, [duration, onClose]);
 
-    const { icon: Icon, accent, color, label } = CONFIG[type];
+    const { icon: Icon, accent, bg, color, label } = CONFIG[type];
 
     return (
         <div style={{
@@ -64,7 +64,7 @@ export const Notification: React.FC<NotificationProps> = ({
                 height: '36px',
                 marginLeft: '14px',
                 borderRadius: '50%',
-                backgroundColor: `${accent}18`,
+                backgroundColor: bg,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -98,23 +98,8 @@ export const Notification: React.FC<NotificationProps> = ({
             {/* Close button */}
             <button
                 onClick={dismiss}
-                style={{
-                    flexShrink: 0,
-                    marginRight: '4px',
-                    marginTop: '2px',
-                    background: 'none',
-                    border: 'none',
-                    padding: '4px',
-                    cursor: 'pointer',
-                    color: 'var(--color-text-faint)',
-                    borderRadius: 'var(--radius-sm)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'color 0.15s',
-                }}
-                onMouseOver={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
-                onMouseOut={e => e.currentTarget.style.color = 'var(--color-text-faint)'}
+                className="toast-close"
+                style={{ marginRight: '4px', marginTop: '2px' }}
             >
                 <X size={15} />
             </button>

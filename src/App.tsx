@@ -96,7 +96,7 @@ function App() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f1f5f9' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'var(--color-background)' }}>
         Lade Anwendung...
       </div>
     );
@@ -105,7 +105,7 @@ function App() {
   // K3: Schöne Ban-Meldung statt alert()
   if (isBanned) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#fff1f2', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'var(--color-danger-bg)', flexDirection: 'column', gap: '16px' }}>
         <div style={{ fontSize: '48px' }}>🚫</div>
         <h2 style={{ color: '#be123c', margin: 0 }}>Konto gesperrt</h2>
         <p style={{ color: '#9f1239', maxWidth: '400px', textAlign: 'center' }}>

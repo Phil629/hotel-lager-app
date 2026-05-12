@@ -390,6 +390,22 @@ textarea:focus {
 .products-table tbody tr.row-low-stock td:first-child { box-shadow: inset 4px 0 0 0 var(--color-danger); }
 .products-table tbody td { padding: 14px 16px; vertical-align: middle; }
 
+/* ── Toast Close Button ── */
+.toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--color-text-faint);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+.toast-close:hover { color: var(--color-text-muted); }
+
 /* ── Toast Animations ── */
 @keyframes toast-in  {
   from { transform: translateX(calc(100% + 24px)); opacity: 0; }

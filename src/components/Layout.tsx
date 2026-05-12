@@ -71,7 +71,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                             style={{ height: '34px', width: '34px', objectFit: 'contain', borderRadius: '8px', flexShrink: 0 }}
                         />
                         <span style={{
-                            color: '#f1f5f9',
+                            color: 'var(--sidebar-text-active)',
                             fontWeight: 700,
                             fontSize: '15px',
                             lineHeight: 1.3,
@@ -171,7 +171,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
                     {StorageService.getSettings().inventoryMode && location.pathname !== '/inventory' && (
                         <div style={{
-                            backgroundColor: '#fff7ed',
+                            backgroundColor: 'var(--color-warning-bg)',
                             border: '1px solid #fdba74',
                             padding: '14px 20px',
                             borderRadius: 'var(--radius-lg)',
