@@ -127,4 +127,5 @@ export interface AppSettings {
   developerMode?: boolean; // Toggle to show advanced settings
   preferredEmailClient?: 'all' | 'mailto' | 'gmail';
   inventoryValuationMethod?: 'latest' | 'average';
+  theme?: 'light' | 'dark';
 }

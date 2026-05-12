@@ -81,7 +81,7 @@
   /* ── Surfaces ── */
   --color-background:       #0f172a;
   --color-surface:          #1e293b;
-  --color-surface-elevated: #334155;
+  --color-surface-elevated: #263347;
   --color-border:           #334155;
   --color-border-strong:    #475569;
 
@@ -90,6 +90,27 @@
   --color-text-secondary:   #cbd5e1;
   --color-text-muted:       #94a3b8;
   --color-text-faint:       #64748b;
+
+  /* ── Shadows (darker on dark bg) ── */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.35), 0 1px 2px -1px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+}
+
+/* ── Dark mode badge text contrast ── */
+[data-theme="dark"] .badge-success { color: #4ade80; }
+[data-theme="dark"] .badge-warning { color: #fbbf24; }
+[data-theme="dark"] .badge-danger  { color: #fca5a5; }
+[data-theme="dark"] .badge-primary { background-color: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+
+/* ── Dark mode button overrides ── */
+[data-theme="dark"] .btn-danger {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+[data-theme="dark"] .btn-danger:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.6);
 }
 
 /* ── Global Base ── */
