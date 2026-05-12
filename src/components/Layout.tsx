@@ -1,9 +1,21 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, ShoppingCart, Settings, Users, BarChart3, ClipboardList, ShieldAlert } from 'lucide-react';
+import { Package, ShoppingCart, Settings, Users, BarChart3, ClipboardList, ShieldAlert, WifiOff } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
 import { useState, useEffect } from 'react';
+
+function useOnlineStatus() {
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    useEffect(() => {
+        const on = () => setIsOnline(true);
+        const off = () => setIsOnline(false);
+        window.addEventListener('online', on);
+        window.addEventListener('offline', off);
+        return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+    }, []);
+    return isOnline;
+}
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -11,6 +23,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const location = useLocation();
+    const isOnline = useOnlineStatus();
 
     const settings = StorageService.getSettings();
     const [isAdmin, setIsAdmin] = useState(false);
@@ -169,6 +182,24 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             {/* ── Main Content ── */}
             <main style={{ flex: 1, padding: 'var(--spacing-xl)', overflowY: 'auto', minWidth: 0 }}>
                 <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+                    {!isOnline && (
+                        <div style={{
+                            backgroundColor: 'var(--color-surface-elevated)',
+                            border: '1px solid var(--color-border-strong)',
+                            padding: '10px 20px',
+                            borderRadius: 'var(--radius-lg)',
+                            marginBottom: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            boxShadow: 'var(--shadow-sm)',
+                        }}>
+                            <WifiOff size={16} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
+                            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                Keine Internetverbindung — die App läuft im Offline-Modus. Änderungen werden nicht synchronisiert.
+                            </span>
+                        </div>
+                    )}
                     {StorageService.getSettings().inventoryMode && location.pathname !== '/inventory' && (
                         <div style={{
                             backgroundColor: 'var(--color-warning-bg)',
