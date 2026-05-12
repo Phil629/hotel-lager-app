@@ -232,31 +232,14 @@ export const Suppliers: React.FC = () => {
             </div>
 
             <div style={{ position: 'relative', marginBottom: 'var(--spacing-2xl)' }}>
-                <Search size={22} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-faint)', pointerEvents: 'none' }} />
                 <input
                     type="text"
                     placeholder="Lieferanten schnell finden..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{
-                        width: '100%',
-                        padding: '14px 14px 14px 50px',
-                        borderRadius: 'var(--radius-lg)',
-                        border: '1px solid var(--color-border)',
-                        fontSize: '16px',
-                        backgroundColor: 'var(--color-surface)',
-                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                        transition: 'border-color 0.2s, box-shadow 0.2s',
-                        outline: 'none'
-                    }}
-                    onFocus={e => {
-                        e.target.style.borderColor = 'var(--color-primary)';
-                        e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                    }}
-                    onBlur={e => {
-                        e.target.style.borderColor = 'var(--color-border)';
-                        e.target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
-                    }}
+                    className="input-field"
+                    style={{ paddingLeft: '42px', fontSize: '15px' }}
                 />
             </div>
 
@@ -265,24 +248,7 @@ export const Suppliers: React.FC = () => {
                     const linkedProductsCount = products.filter(p => p.supplierId === supplier.id).length;
 
                     return (
-                        <div key={supplier.id} style={{
-                            backgroundColor: 'var(--color-surface)',
-                            borderRadius: 'var(--radius-xl)',
-                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            overflow: 'hidden',
-                            border: '1px solid #e2e8f0',
-                            transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                        }}
-                        onMouseOver={e => {
-                            e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.boxShadow = '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)';
-                        }}
-                        onMouseOut={e => {
-                            e.currentTarget.style.transform = 'none';
-                            e.currentTarget.style.boxShadow = '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)';
-                        }}>
+                        <div key={supplier.id} className="card stat-card-interactive" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                             {/* Header */}
                             <div style={{ padding: 'var(--spacing-lg) var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <div>
@@ -323,10 +289,10 @@ export const Suppliers: React.FC = () => {
                                 )}
 
                                 <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f1f5f9', padding: '6px 12px', borderRadius: '9999px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>
-                                        <Package size={14} />
+                                    <span className="badge badge-neutral">
+                                        <Package size={12} />
                                         {linkedProductsCount} {linkedProductsCount === 1 ? 'Produkt' : 'Produkte'}
-                                    </div>
+                                    </span>
                                     {supplier.documents && supplier.documents.length > 0 && (
                                          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                                              + {supplier.documents.length} Dokumente
@@ -359,90 +325,81 @@ export const Suppliers: React.FC = () => {
                             </button>
                         </div>
 
-                        <div className="modal-body">
-                            <form id="supplierForm" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                
-                                {/* Stammdaten Section */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    <h3 style={{ margin: '0 0 4px 0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em' }}>Stammdaten</h3>
-                                    
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Firmenname *</label>
-                                        <input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} required />
-                                    </div>
+                        <div className="modal-body" style={{ backgroundColor: 'var(--color-background)' }}>
+                            <form id="supplierForm" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Ansprechpartner</label>
-                                            <input type="text" value={formData.contactName || ''} onChange={e => setFormData({ ...formData, contactName: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} />
+                                {/* Section: Stammdaten */}
+                                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                    <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stammdaten</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                        <div className="form-group">
+                                            <label className="form-label">Firmenname *</label>
+                                            <input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="input-field" required />
                                         </div>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Telefon</label>
-                                            <input type="tel" value={formData.phone || ''} onChange={e => setFormData({ ...formData, phone: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} />
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                            <div className="form-group">
+                                                <label className="form-label">Ansprechpartner</label>
+                                                <input type="text" value={formData.contactName || ''} onChange={e => setFormData({ ...formData, contactName: e.target.value })} className="input-field" />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Telefon</label>
+                                                <input type="tel" value={formData.phone || ''} onChange={e => setFormData({ ...formData, phone: e.target.value })} className="input-field" />
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Email Adresse (Bestellung)</label>
-                                            <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} />
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                            <div className="form-group">
+                                                <label className="form-label">Email (Bestellung)</label>
+                                                <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="input-field" />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Webseite / Portal URL</label>
+                                                <input type="text" value={formData.url || ''} onChange={e => setFormData({ ...formData, url: e.target.value })} className="input-field" placeholder="www.beispiel.de" />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Webseite / Login-Portal URL</label>
-                                            <input type="text" value={formData.url || ''} onChange={e => setFormData({ ...formData, url: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="www.beispiel.de" />
-                                        </div>
-                                    </div>
-
-                                    <div style={{ marginTop: '16px' }}>
-                                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>Standard Bestellweg für diesen Lieferanten</label>
-                                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                                                <input type="radio" name="pom_supplier" value="email" checked={formData.preferredOrderMethod === 'email' || !formData.preferredOrderMethod} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'email' })} /> <Mail size={16}/> Email
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                                                <input type="radio" name="pom_supplier" value="link" checked={formData.preferredOrderMethod === 'link'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'link' })} /> <ExternalLink size={16}/> Webshop (Link)
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                                                <input type="radio" name="pom_supplier" value="phone" checked={formData.preferredOrderMethod === 'phone'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'phone' })} /> <Phone size={16}/> Telefon
-                                            </label>
+                                        <div className="form-group">
+                                            <label className="form-label">Standard Bestellweg</label>
+                                            <div style={{ display: 'flex', gap: 'var(--spacing-md)', flexWrap: 'wrap', backgroundColor: 'var(--color-surface-elevated)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                    <input type="radio" name="pom_supplier" value="email" checked={formData.preferredOrderMethod === 'email' || !formData.preferredOrderMethod} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'email' })} /> <Mail size={14}/> Email
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                    <input type="radio" name="pom_supplier" value="link" checked={formData.preferredOrderMethod === 'link'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'link' })} /> <ExternalLink size={14}/> Webshop (Link)
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                    <input type="radio" name="pom_supplier" value="phone" checked={formData.preferredOrderMethod === 'phone'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'phone' })} /> <Phone size={14}/> Telefon
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', backgroundColor: '#fff3cd', padding: '12px', borderRadius: '8px', border: '1px solid #ffeeba' }}>
-                                    <input 
-                                        type="checkbox" 
-                                        id="ignoreProposals" 
-                                        checked={!!formData.ignoreOrderProposals}
-                                        onChange={e => setFormData({ ...formData, ignoreOrderProposals: e.target.checked })}
-                                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                                    />
-                                    <label htmlFor="ignoreProposals" style={{ fontSize: '14px', fontWeight: 600, color: '#856404', cursor: 'pointer' }}>
+                                {/* Autopilot exclude */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--color-warning-bg)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid #fcd34d' }}>
+                                    <input type="checkbox" id="ignoreProposals" checked={!!formData.ignoreOrderProposals} onChange={e => setFormData({ ...formData, ignoreOrderProposals: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }} />
+                                    <label htmlFor="ignoreProposals" style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: '#92400e', cursor: 'pointer' }}>
                                         Diesen Lieferanten aus allen Bestellvorschlägen ausschließen
                                     </label>
                                 </div>
-                                <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
 
-                                {/* Portal Login Infos — nur für Inhaber/Admin sichtbar */}
+                                {/* Section: Portal Login — admin/owner only */}
                                 {(userRole === 'owner' || userRole === 'admin') && (
-                                <div>
-                                    <h3 style={{ margin: '0 0 8px 0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <Key size={16} /> Kunden-Login / Portal
-                                    </h3>
-                                    <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                    <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <Key size={13} /> Kunden-Login / Portal
+                                    </p>
+                                    <div style={{ backgroundColor: 'var(--color-warning-bg)', border: '1px solid #fcd34d', borderRadius: 'var(--radius-md)', padding: '10px var(--spacing-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', color: '#92400e' }}>
                                         ⚠️ Passwörter werden verschlüsselt gespeichert und sind nur für Inhaber und Administratoren sichtbar.
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Benutzername / Kundennummer</label>
-                                            <input type="text" value={formData.loginUsername || ''} onChange={e => setFormData({ ...formData, loginUsername: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="MaxMuster123" />
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                        <div className="form-group">
+                                            <label className="form-label">Benutzername / Kundennummer</label>
+                                            <input type="text" value={formData.loginUsername || ''} onChange={e => setFormData({ ...formData, loginUsername: e.target.value })} className="input-field" placeholder="MaxMuster123" />
                                         </div>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Passwort</label>
+                                        <div className="form-group">
+                                            <label className="form-label">Passwort</label>
                                             <div style={{ position: 'relative' }}>
-                                                <input type={showPassword ? "text" : "password"} value={formData.loginPassword || ''} onChange={e => setFormData({ ...formData, loginPassword: e.target.value })} style={{ width: '100%', padding: '10px 40px 10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px' }} placeholder="••••••••" />
-                                                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                                                <input type={showPassword ? "text" : "password"} value={formData.loginPassword || ''} onChange={e => setFormData({ ...formData, loginPassword: e.target.value })} className="input-field" style={{ paddingRight: '40px' }} placeholder="••••••••" />
+                                                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-faint)' }}>
                                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                                 </button>
                                             </div>
@@ -450,96 +407,78 @@ export const Suppliers: React.FC = () => {
                                     </div>
                                 </div>
                                 )}
-                                
-                                <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
 
-                                {/* Zusatz-Infos / Notizen */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    <h3 style={{ margin: '0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em' }}>Zusatz-Infos & Notizen</h3>
-                                    
-                                    <div>
-                                        <button type="button" onClick={() => setFormData({ ...formData, notes: [...(formData.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }] })} style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', color: 'var(--color-primary)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', padding: '10px', borderRadius: '8px', width: '100%' }}>+ Notiz hinzufügen</button>
-                                        
-                                        {(formData.notes || []).map((note, idx) => (
-                                            <div key={note.id} style={{ marginTop: '12px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
-                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                                                    <textarea rows={2} value={note.text} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].text = e.target.value; setFormData({ ...formData, notes: updated }); }} placeholder="Wichtig zu wissen..." style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontFamily: 'inherit' }} />
-                                                    <button type="button" onClick={() => setFormData({ ...formData, notes: (formData.notes || []).filter((_, i) => i !== idx) })} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><X size={18} /></button>
-                                                </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px', padding: '12px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                                        <input type="checkbox" checked={note.showOnOrderCreation} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].showOnOrderCreation = e.target.checked; setFormData({ ...formData, notes: updated }); }} />
-                                                        <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>Beim Anlegen einer Bestellung anzeigen</span>
-                                                    </label>
-                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                                        <input type="checkbox" checked={note.showOnOpenOrders} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].showOnOpenOrders = e.target.checked; setFormData({ ...formData, notes: updated }); }} />
-                                                        <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>Bei offenen Bestellungen anzeigen</span>
-                                                    </label>
-                                                </div>
+                                {/* Section: Notizen */}
+                                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                    <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notizen</p>
+                                    <button type="button" onClick={() => setFormData({ ...formData, notes: [...(formData.notes || []), { id: generateId(), text: '', showOnOrderCreation: false, showOnOpenOrders: false }] })} className="btn btn-ghost btn-sm" style={{ width: '100%', marginBottom: 'var(--spacing-sm)' }}>+ Notiz hinzufügen</button>
+                                    {(formData.notes || []).map((note, idx) => (
+                                        <div key={note.id} style={{ marginBottom: 'var(--spacing-sm)', padding: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-surface-elevated)' }}>
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                                <textarea rows={2} value={note.text} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].text = e.target.value; setFormData({ ...formData, notes: updated }); }} placeholder="Wichtig zu wissen..." className="input-field" />
+                                                <button type="button" onClick={() => setFormData({ ...formData, notes: (formData.notes || []).filter((_, i) => i !== idx) })} className="btn btn-ghost btn-icon" style={{ color: 'var(--color-danger)', flexShrink: 0 }}><X size={18} /></button>
                                             </div>
-                                        ))}
-                                    </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                                                    <input type="checkbox" checked={note.showOnOrderCreation} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].showOnOrderCreation = e.target.checked; setFormData({ ...formData, notes: updated }); }} />
+                                                    Beim Anlegen einer Bestellung anzeigen
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                                                    <input type="checkbox" checked={note.showOnOpenOrders} onChange={e => { const updated = [...(formData.notes || [])]; updated[idx].showOnOpenOrders = e.target.checked; setFormData({ ...formData, notes: updated }); }} />
+                                                    Bei offenen Bestellungen anzeigen
+                                                </label>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
 
-                                <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '8px 0' }}></div>
-
-                                {/* Produkt Zuweisung Section */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    <div>
-                                        <h3 style={{ margin: '0 0 4px 0', fontSize: '15px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            Zugeordnete Produkte ({selectedProductIds.length})
-                                        </h3>
-                                        <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: 'var(--color-text-muted)' }}>Wähle die Produkte aus, die standardmäßig bei diesem Lieferanten bestellt werden sollen.</p>
-                                    </div>
-
-                                    <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#f8fafc', padding: '8px' }}>
+                                {/* Section: Produkt-Zuweisung */}
+                                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                    <p style={{ margin: '0 0 4px 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                        Zugeordnete Produkte ({selectedProductIds.length})
+                                    </p>
+                                    <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Wähle die Produkte aus, die standardmäßig bei diesem Lieferanten bestellt werden sollen.</p>
+                                    <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-surface-elevated)', padding: '8px' }}>
                                         {products.length === 0 ? (
-                                            <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>Es existieren noch keine Produkte im Inventar.</div>
+                                            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Es existieren noch keine Produkte im Inventar.</div>
                                         ) : (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                {/* Group: Already assigned to this supplier */}
                                                 {alreadyAssignedProducts.length > 0 && (
                                                     <div style={{ marginBottom: '8px' }}>
-                                                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', padding: '4px 8px' }}>BEREITS ZUGEORDNET</div>
+                                                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-faint)', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Bereits zugeordnet</div>
                                                         {alreadyAssignedProducts.map(p => (
-                                                            <label key={p.id} style={{ display: 'flex', alignItems: 'center', padding: '8px', borderRadius: '6px', cursor: 'pointer', transition: 'background-color 0.2s', backgroundColor: selectedProductIds.includes(p.id) ? '#eff6ff' : 'transparent' }} onMouseOver={e => {if(!selectedProductIds.includes(p.id)) e.currentTarget.style.backgroundColor = '#f1f5f9'}} onMouseOut={e => {if(!selectedProductIds.includes(p.id)) e.currentTarget.style.backgroundColor = 'transparent'}}>
-                                                                {selectedProductIds.includes(p.id) ? <CheckSquare size={18} color="var(--color-primary)" style={{ marginRight: '12px' }} /> : <Square size={18} color="#cbd5e1" style={{ marginRight: '12px' }} />}
+                                                            <label key={p.id} style={{ display: 'flex', alignItems: 'center', padding: '8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', backgroundColor: selectedProductIds.includes(p.id) ? '#eff6ff' : 'transparent' }}>
+                                                                {selectedProductIds.includes(p.id) ? <CheckSquare size={18} color="var(--color-primary)" style={{ marginRight: '12px', flexShrink: 0 }} /> : <Square size={18} color="var(--color-border-strong)" style={{ marginRight: '12px', flexShrink: 0 }} />}
                                                                 <input type="checkbox" checked={selectedProductIds.includes(p.id)} onChange={() => toggleProductSelection(p.id)} style={{ display: 'none' }} />
-                                                                <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-text-main)' }}>{p.name} {p.productNumber ? <span style={{ color: '#94a3b8', fontSize: '12px' }}>({p.productNumber})</span> : ''}</span>
+                                                                <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: 'var(--color-text-main)' }}>{p.name}{p.productNumber ? <span style={{ color: 'var(--color-text-faint)', fontSize: '12px' }}> ({p.productNumber})</span> : ''}</span>
                                                             </label>
                                                         ))}
                                                     </div>
                                                 )}
-
-                                                {/* Group: Unassigned */}
                                                 {unassignedProducts.length > 0 && (
                                                     <div style={{ marginBottom: '8px' }}>
-                                                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', padding: '4px 8px' }}>FREIE PRODUKTE</div>
+                                                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-faint)', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Freie Produkte</div>
                                                         {unassignedProducts.map(p => (
-                                                            <label key={p.id} style={{ display: 'flex', alignItems: 'center', padding: '8px', borderRadius: '6px', cursor: 'pointer', transition: 'background-color 0.2s', backgroundColor: selectedProductIds.includes(p.id) ? '#eff6ff' : 'transparent' }} onMouseOver={e => {if(!selectedProductIds.includes(p.id)) e.currentTarget.style.backgroundColor = '#f1f5f9'}} onMouseOut={e => {if(!selectedProductIds.includes(p.id)) e.currentTarget.style.backgroundColor = 'transparent'}}>
-                                                                {selectedProductIds.includes(p.id) ? <CheckSquare size={18} color="var(--color-primary)" style={{ marginRight: '12px' }} /> : <Square size={18} color="#cbd5e1" style={{ marginRight: '12px' }} />}
+                                                            <label key={p.id} style={{ display: 'flex', alignItems: 'center', padding: '8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', backgroundColor: selectedProductIds.includes(p.id) ? '#eff6ff' : 'transparent' }}>
+                                                                {selectedProductIds.includes(p.id) ? <CheckSquare size={18} color="var(--color-primary)" style={{ marginRight: '12px', flexShrink: 0 }} /> : <Square size={18} color="var(--color-border-strong)" style={{ marginRight: '12px', flexShrink: 0 }} />}
                                                                 <input type="checkbox" checked={selectedProductIds.includes(p.id)} onChange={() => toggleProductSelection(p.id)} style={{ display: 'none' }} />
-                                                                <span style={{ fontSize: '14px', fontWeight: 400, color: 'var(--color-text-main)' }}>{p.name}</span>
+                                                                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}>{p.name}</span>
                                                             </label>
                                                         ))}
                                                     </div>
                                                 )}
-
-                                                {/* Group: Assigned to Others */}
                                                 {assignedToOthersProducts.length > 0 && (
                                                     <div>
-                                                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', padding: '4px 8px' }}>ANDEREN LIEFERANTEN ZUGEORDNET</div>
+                                                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-faint)', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Anderen Lieferanten zugeordnet</div>
                                                         {assignedToOthersProducts.map(p => {
                                                             const otherSupplier = suppliers.find(s => s.id === p.supplierId);
                                                             return (
-                                                            <label key={p.id} style={{ display: 'flex', alignItems: 'center', padding: '8px', borderRadius: '6px', cursor: 'pointer', transition: 'background-color 0.2s', backgroundColor: selectedProductIds.includes(p.id) ? '#eff6ff' : 'transparent' }} onMouseOver={e => {if(!selectedProductIds.includes(p.id)) e.currentTarget.style.backgroundColor = '#f1f5f9'}} onMouseOut={e => {if(!selectedProductIds.includes(p.id)) e.currentTarget.style.backgroundColor = 'transparent'}}>
-                                                                {selectedProductIds.includes(p.id) ? <CheckSquare size={18} color="var(--color-primary)" style={{ marginRight: '12px' }} /> : <Square size={18} color="#cbd5e1" style={{ marginRight: '12px' }} />}
+                                                            <label key={p.id} style={{ display: 'flex', alignItems: 'center', padding: '8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', backgroundColor: selectedProductIds.includes(p.id) ? '#eff6ff' : 'transparent' }}>
+                                                                {selectedProductIds.includes(p.id) ? <CheckSquare size={18} color="var(--color-primary)" style={{ marginRight: '12px', flexShrink: 0 }} /> : <Square size={18} color="var(--color-border-strong)" style={{ marginRight: '12px', flexShrink: 0 }} />}
                                                                 <input type="checkbox" checked={selectedProductIds.includes(p.id)} onChange={() => toggleProductSelection(p.id)} style={{ display: 'none' }} />
                                                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                                    <span style={{ fontSize: '14px', fontWeight: 400, color: 'var(--color-text-main)' }}>{p.name}</span>
-                                                                    <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 500 }}>
-                                                                        ⚠️ Aktuell bei: {otherSupplier?.name || 'Unbekannt'}
-                                                                    </span>
+                                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}>{p.name}</span>
+                                                                    <span className="badge badge-warning" style={{ fontSize: '11px', marginTop: '2px', width: 'fit-content' }}>⚠️ Aktuell bei: {otherSupplier?.name || 'Unbekannt'}</span>
                                                                 </div>
                                                             </label>
                                                         )})}
