@@ -340,6 +340,17 @@ export const Products: React.FC = () => {
             ignoreOrderProposals: newProduct.ignoreOrderProposals || false
         };
 
+        // Reset consumption date if the user changed the consumption settings,
+        // so it doesn't deduct retroactively from an old date.
+        const originalProduct = editingId ? products.find(p => p.id === editingId) : null;
+        const consumptionChanged = !originalProduct || 
+            originalProduct.consumptionAmount !== productData.consumptionAmount || 
+            originalProduct.consumptionPeriod !== productData.consumptionPeriod;
+            
+        if (consumptionChanged && productData.consumptionAmount) {
+            productData.lastConsumptionDate = new Date().toISOString();
+        }
+
         setIsLoading(true);
         try {
             await DataService.saveProduct(productData);
