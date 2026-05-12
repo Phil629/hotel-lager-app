@@ -9,14 +9,7 @@ import { Notification, type NotificationType } from '../components/Notification'
 import type { AppSettings } from '../types';
 
 const SectionCard = ({ children }: { children: React.ReactNode }) => (
-    <div style={{
-        backgroundColor: 'var(--color-surface)',
-        padding: 'var(--spacing-xl)',
-        borderRadius: 'var(--radius-xl)',
-        boxShadow: 'var(--shadow-md)',
-        border: '1px solid var(--color-border)',
-        marginBottom: 'var(--spacing-lg)'
-    }}>
+    <div className="card" style={{ padding: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)' }}>
         {children}
     </div>
 );
@@ -273,41 +266,28 @@ export const Settings: React.FC = () => {
                     </div>
                     
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--spacing-xl)', marginTop: 'var(--spacing-lg)' }}>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 600 }}>Unternehmensname</label>
-                            <input
-                                type="text"
-                                value={settings.hotelName}
-                                onChange={e => setSettings({ ...settings, hotelName: e.target.value })}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}
-                            />
+                        <div className="form-group">
+                            <label className="form-label">Unternehmensname</label>
+                            <input type="text" value={settings.hotelName} onChange={e => setSettings({ ...settings, hotelName: e.target.value })} className="input-field" />
                         </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 600 }}>Währung</label>
-                            <select
-                                value={settings.currency}
-                                onChange={e => setSettings({ ...settings, currency: e.target.value })}
-                                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}
-                            >
+                        <div className="form-group">
+                            <label className="form-label">Währung</label>
+                            <select value={settings.currency} onChange={e => setSettings({ ...settings, currency: e.target.value })} className="input-field">
                                 <option value="EUR">Euro (€)</option>
                                 <option value="CHF">Schweizer Franken (CHF)</option>
                                 <option value="USD">US Dollar ($)</option>
                             </select>
                         </div>
                     </div>
-                    
-                    <div style={{ marginTop: 'var(--spacing-xl)' }}>
-                        <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 600 }}>E-Mail Programm für Bestellungen</label>
-                        <select
-                            value={settings.preferredEmailClient || 'all'}
-                            onChange={e => setSettings({ ...settings, preferredEmailClient: e.target.value as any })}
-                            style={{ width: '100%', maxWidth: '300px', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}
-                        >
+
+                    <div style={{ marginTop: 'var(--spacing-xl)' }} className="form-group">
+                        <label className="form-label">E-Mail Programm für Bestellungen</label>
+                        <select value={settings.preferredEmailClient || 'all'} onChange={e => setSettings({ ...settings, preferredEmailClient: e.target.value as any })} className="input-field" style={{ maxWidth: '360px' }}>
                             <option value="all">Auswahl anzeigen (Gmail & Lokales Programm)</option>
                             <option value="gmail">Immer in Gmail (Browser) öffnen</option>
                             <option value="mailto">Immer lokales Programm (Outlook, Apple Mail) nutzen</option>
                         </select>
-                        <p style={{ fontSize: '13px', color: '#64748b', margin: '6px 0 0 0' }}>Legt fest, welche Buttons beim Generieren von Bestell-Mails sichtbar sind.</p>
+                        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', margin: '6px 0 0 0' }}>Legt fest, welche Buttons beim Generieren von Bestell-Mails sichtbar sind.</p>
                     </div>
 
                     <div style={{ marginTop: 'var(--spacing-xl)' }}>
@@ -331,19 +311,8 @@ export const Settings: React.FC = () => {
                                 )}
                             </div>
                             <div>
-                                <label style={{
-                                    backgroundColor: 'white',
-                                    border: '1px solid var(--color-border)',
-                                    padding: '8px 16px',
-                                    borderRadius: 'var(--radius-md)',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    fontWeight: 500,
-                                    color: 'var(--color-text)'
-                                }}>
-                                    <Upload size={18} /> {isUploading ? 'Lädt...' : 'Logo vom PC auswählen'}
+                                <label className="btn btn-ghost">
+                                    <Upload size={16} /> {isUploading ? 'Lädt...' : 'Logo vom PC auswählen'}
                                     <input 
                                         type="file" 
                                         accept="image/*" 
@@ -382,15 +351,8 @@ export const Settings: React.FC = () => {
                             <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-text)' }}>Mitarbeiter einladen</h4>
                             <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px', fontSize: '14px' }}>Gib die E-Mail-Adresse ein, um eine automatische Einladung zu versenden.</p>
                             <form onSubmit={handleInviteEmployee} style={{ display: 'flex', gap: '8px' }}>
-                                <input
-                                    type="email"
-                                    required
-                                    placeholder="E-Mail Adresse"
-                                    value={inviteEmail}
-                                    onChange={(e) => setInviteEmail(e.target.value)}
-                                    style={{ flex: 1, padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
-                                />
-                                <button type="submit" style={{ backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+                                <input type="email" required placeholder="E-Mail Adresse" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="input-field" style={{ flex: 1 }} />
+                                <button type="submit" className="btn btn-primary">
                                     <Mail size={16} /> Einladen
                                 </button>
                             </form>
@@ -409,7 +371,7 @@ export const Settings: React.FC = () => {
                                             </div>
                                             <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{member.email}</span>
                                         </div>
-                                        <span style={{ fontSize: '12px', textTransform: 'uppercase', backgroundColor: '#e2e8f0', color: '#475569', padding: '4px 8px', borderRadius: '12px', fontWeight: 600 }}>{member.role}</span>
+                                        <span className="badge badge-neutral" style={{ textTransform: 'uppercase' }}>{member.role}</span>
                                     </li>
                                 ))}
                             </ul>
@@ -505,8 +467,8 @@ export const Settings: React.FC = () => {
                     </div>
                     
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--spacing-xl)' }}>
-                        <button type="submit" style={{ backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
-                            <Save size={18} /> Einstellungen speichern
+                        <button type="submit" className="btn btn-primary">
+                            <Save size={17} /> Einstellungen speichern
                         </button>
                     </div>
                 </SectionCard>
@@ -541,7 +503,7 @@ export const Settings: React.FC = () => {
                                 <button type="button" onClick={() => {
                                     navigator.clipboard.writeText(`in-${userId.substring(0, 8)}@inbound.bestellwesen.com`);
                                     setNotification({ message: 'Adresse kopiert!', type: 'success' });
-                                }} style={{ backgroundColor: 'white', border: '1px solid var(--color-border)', padding: '0 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, minHeight: '40px' }}>Kopieren</button>
+                                }} className="btn btn-ghost">Kopieren</button>
                             </div>
                             <small style={{ color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>Tipp: Richte in deinem E-Mail Postfach (z.B. Gmail/Outlook) eine Filter-Regel ein, die Mails von Lieferanten automatisch an diese Adresse weiterleitet.</small>
                         </div>
@@ -550,43 +512,46 @@ export const Settings: React.FC = () => {
 
                 
                 {/* Logout Zone */}
-                <div style={{ marginTop: 'var(--spacing-2xl)', padding: 'var(--spacing-lg)', backgroundColor: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 'var(--radius-lg)' }}>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#be123c', marginTop: 0 }}>
-                        <LogOut size={20} /> Abmelden
-                    </h3>
-                    <p style={{ color: '#9f1239', fontSize: '14px', marginBottom: 'var(--spacing-md)' }}>
-                        Sie können sich jederzeit wieder einloggen. Ihre Daten bleiben sicher gespeichert.
-                    </p>
-                    <button 
-                        type="button" 
-                        onClick={async () => {
-                            if (window.confirm('Möchten Sie sich wirklich abmelden?')) {
-                                await supabase?.auth.signOut();
-                            }
-                        }}
-                        style={{ backgroundColor: '#e11d48', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600 }}
-                    >
-                        Konto abmelden
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={async () => {
-                            if (window.confirm('WARNUNG: Möchten Sie Ihr Konto und alle persönlichen Daten wirklich unwiderruflich löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) {
-                                try {
-                                    if (supabase) {
-                                        await supabase.rpc('delete_user_account');
-                                        await supabase.auth.signOut();
-                                    }
-                                } catch (e) {
-                                    setNotification({ message: 'Fehler beim Löschen des Kontos. Bitte an den Support wenden.', type: 'error' });
+                <div style={{ marginTop: 'var(--spacing-2xl)', padding: 'var(--spacing-lg)', backgroundColor: 'var(--color-danger-bg)', border: '1px solid #fecdd3', borderRadius: 'var(--radius-lg)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                    <div>
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#be123c', marginTop: 0, marginBottom: '4px' }}>
+                            <LogOut size={18} /> Abmelden
+                        </h3>
+                        <p style={{ color: '#9f1239', fontSize: 'var(--font-size-sm)', margin: 0 }}>
+                            Sie können sich jederzeit wieder einloggen. Ihre Daten bleiben sicher gespeichert.
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 'var(--spacing-sm)', flexWrap: 'wrap' }}>
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (window.confirm('Möchten Sie sich wirklich abmelden?')) {
+                                    await supabase?.auth.signOut();
                                 }
-                            }
-                        }}
-                        style={{ backgroundColor: 'transparent', color: '#e11d48', border: '1px solid #e11d48', padding: '10px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600, marginTop: '16px', display: 'block' }}
-                    >
-                        Konto & Daten unwiderruflich löschen
-                    </button>
+                            }}
+                            className="btn btn-danger-solid"
+                        >
+                            Konto abmelden
+                        </button>
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (window.confirm('WARNUNG: Möchten Sie Ihr Konto und alle persönlichen Daten wirklich unwiderruflich löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) {
+                                    try {
+                                        if (supabase) {
+                                            await supabase.rpc('delete_user_account');
+                                            await supabase.auth.signOut();
+                                        }
+                                    } catch (e) {
+                                        setNotification({ message: 'Fehler beim Löschen des Kontos. Bitte an den Support wenden.', type: 'error' });
+                                    }
+                                }
+                            }}
+                            className="btn btn-danger"
+                        >
+                            Konto & Daten unwiderruflich löschen
+                        </button>
+                    </div>
                 </div>
 
                 {/* Secret Developer Mode Toggle */}

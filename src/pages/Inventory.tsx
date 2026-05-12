@@ -87,40 +87,34 @@ export const Inventory: React.FC = () => {
                 </p>
 
                 {/* Progress Bar */}
-                <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border)', marginTop: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                <div className="card" style={{ padding: '16px', marginTop: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
                         <span>Fortschritt</span>
-                        <span>{totalCounted} von {products.length} Produkten gezählt ({progress}%)</span>
+                        <span style={{ color: 'var(--color-text-muted)' }}>{totalCounted} von {products.length} Produkten gezählt ({progress}%)</span>
                     </div>
-                    <div style={{ height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: progress === 100 ? '#10b981' : 'var(--color-primary)', transition: 'width 0.3s ease' }}></div>
+                    <div style={{ height: '8px', backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: progress === 100 ? 'var(--color-success)' : 'var(--color-primary)', transition: 'width 0.3s ease' }}></div>
                     </div>
                 </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '16px', marginBottom: 'var(--spacing-xl)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)', flexWrap: 'wrap' }}>
                 <div style={{ position: 'relative', flex: '1 1 300px' }}>
-                    <Search size={22} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-faint)', pointerEvents: 'none' }} />
                     <input
                         type="text"
                         placeholder="Suchen nach Namen oder Kategorien..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{
-                            width: '100%', padding: '16px 16px 16px 50px', borderRadius: 'var(--radius-lg)',
-                            border: '1px solid var(--color-border)', fontSize: '16px', backgroundColor: 'white',
-                            boxShadow: 'var(--shadow-sm)', outline: 'none'
-                        }}
+                        className="input-field"
+                        style={{ paddingLeft: '42px', fontSize: '15px' }}
                     />
                 </div>
-                <select 
-                    value={sortBy} 
+                <select
+                    value={sortBy}
                     onChange={e => setSortBy(e.target.value as any)}
-                    style={{
-                        padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)',
-                        fontSize: '16px', backgroundColor: 'white', boxShadow: 'var(--shadow-sm)', outline: 'none',
-                        cursor: 'pointer', flex: '0 0 auto'
-                    }}
+                    className="input-field"
+                    style={{ flex: '0 0 auto' }}
                 >
                     <option value="category">Nach Kategorie gruppiert</option>
                     <option value="date_asc">Am längsten nicht gezählt</option>
@@ -133,23 +127,24 @@ export const Inventory: React.FC = () => {
                     const renderProduct = (product: Product) => {
                         const isChecked = checkedMap[product.id];
                         return (
-                            <div key={product.id} style={{ 
+                            <div key={product.id} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                padding: '12px 16px', backgroundColor: isChecked ? '#f0fdf4' : 'white',
-                                borderRadius: 'var(--radius-lg)', boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                padding: '12px 16px',
+                                backgroundColor: isChecked ? 'var(--color-success-bg)' : 'var(--color-surface)',
+                                borderRadius: 'var(--radius-lg)',
+                                boxShadow: 'var(--shadow-xs)',
                                 border: `1px solid ${isChecked ? '#bbf7d0' : 'var(--color-border)'}`,
                                 transition: 'all 0.2s ease', gap: '16px', flexWrap: 'wrap'
                             }}>
-                                
                                 {/* Left: Info */}
                                 <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 200px' }}>
-                                    <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text-main)', lineHeight: 1.2 }}>{product.name}</span>
+                                    <span style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--color-text-main)', lineHeight: 1.2 }}>{product.name}</span>
                                     {product.productNumber && (
-                                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>Art: {product.productNumber}</span>
+                                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-faint)' }}>Art: {product.productNumber}</span>
                                     )}
-                                    <span style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Einheit: {product.unit}</span>
+                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginTop: '4px' }}>Einheit: {product.unit}</span>
                                     {product.lastCountedAt && (
-                                        <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+                                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-faint)', marginTop: '4px' }}>
                                             Gezählt: {new Date(product.lastCountedAt).toLocaleDateString('de-DE')} um {new Date(product.lastCountedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
                                         </span>
                                     )}
@@ -157,47 +152,44 @@ export const Inventory: React.FC = () => {
 
                                 {/* Right: Controls & Checkmark */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
-                                    
                                     {/* Quantity Controls */}
-                                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'white' }}>
-                                        <button 
+                                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border-strong)', borderRadius: 'var(--radius-md)', overflow: 'hidden', backgroundColor: 'var(--color-surface)' }}>
+                                        <button
                                             type="button"
                                             onClick={() => handleUpdateStock(product, product.stock - 1)}
-                                            style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', borderRight: '1px solid #cbd5e1', color: '#1e293b' }}
+                                            style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: 'var(--color-surface-elevated)', cursor: 'pointer', borderRight: '1px solid var(--color-border-strong)', color: 'var(--color-text-secondary)' }}
                                         >
-                                            <Minus size={22} color="#1e293b" />
+                                            <Minus size={20} />
                                         </button>
-                                        
-                                        <input 
+                                        <input
                                             type="number"
                                             value={product.stock}
                                             onChange={(e) => {
                                                 const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
                                                 handleUpdateStock(product, val);
                                             }}
-                                            style={{ 
-                                                width: '60px', height: '44px', textAlign: 'center', fontSize: '18px', fontWeight: 700, 
+                                            style={{
+                                                width: '60px', height: '44px', textAlign: 'center', fontSize: '18px', fontWeight: 700,
                                                 border: 'none', backgroundColor: 'transparent', outline: 'none', color: 'var(--color-text-main)',
                                                 appearance: 'none', MozAppearance: 'textfield'
                                             }}
                                         />
-
-                                        <button 
+                                        <button
                                             type="button"
                                             onClick={() => handleUpdateStock(product, product.stock + 1)}
-                                            style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', borderLeft: '1px solid #cbd5e1', color: '#1e293b' }}
+                                            style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', backgroundColor: 'var(--color-surface-elevated)', cursor: 'pointer', borderLeft: '1px solid var(--color-border-strong)', color: 'var(--color-text-secondary)' }}
                                         >
-                                            <Plus size={22} color="#1e293b" />
+                                            <Plus size={20} />
                                         </button>
                                     </div>
 
-                                    <div style={{ width: '1px', height: '30px', backgroundColor: '#e2e8f0', margin: '0 8px' }}></div>
+                                    <div style={{ width: '1px', height: '30px', backgroundColor: 'var(--color-border)', margin: '0 4px' }}></div>
 
                                     {/* Checkmark Button */}
-                                    <button 
+                                    <button
                                         type="button"
                                         onClick={() => handleToggleChecked(product.id)}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: isChecked ? '#22c55e' : '#94a3b8' }}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: isChecked ? 'var(--color-success)' : 'var(--color-text-faint)' }}
                                     >
                                         {isChecked ? <CheckCircle2 size={32} /> : <Circle size={32} />}
                                     </button>
@@ -213,12 +205,14 @@ export const Inventory: React.FC = () => {
 
                             return (
                                 <div key={category}>
-                                    <h3 style={{ 
-                                        fontSize: '18px', margin: '0 0 12px 0', padding: '4px 8px', color: '#475569', 
-                                        borderBottom: '2px solid #e2e8f0', display: 'flex', justifyContent: 'space-between'
+                                    <h3 style={{
+                                        fontSize: 'var(--font-size-base)', margin: '0 0 12px 0', padding: '4px 0',
+                                        color: 'var(--color-text-secondary)', fontWeight: 700,
+                                        borderBottom: '2px solid var(--color-border)', display: 'flex', justifyContent: 'space-between',
+                                        textTransform: 'uppercase', letterSpacing: '0.05em'
                                     }}>
                                         {category}
-                                        <span style={{ fontSize: '14px', fontWeight: 'normal', color: '#94a3b8' }}>
+                                        <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'normal', color: 'var(--color-text-faint)' }}>
                                             {categoryProducts.filter(p => checkedMap[p.id]).length} / {categoryProducts.length}
                                         </span>
                                     </h3>
@@ -251,7 +245,7 @@ export const Inventory: React.FC = () => {
                 })()}
 
                 {filteredProducts.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-muted)' }}>
                         Keine Produkte für die Zählung gefunden.
                     </div>
                 )}
