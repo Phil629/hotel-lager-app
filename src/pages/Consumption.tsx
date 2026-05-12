@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Product, Order } from '../types';
 import { DataService } from '../services/data';
-import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap } from 'lucide-react';
+import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ProductStat {
     product: Product;
@@ -16,94 +19,146 @@ interface Anomaly {
     ratio: number;
 }
 
-const EmptyState = ({
-    icon: Icon,
-    title,
-    text,
-}: {
-    icon: React.ElementType;
-    title: string;
-    text: string;
+interface MonthlyBarData {
+    date: string;
+    menge: number;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const EmptyState = ({ icon: Icon, title, text }: {
+    icon: React.ElementType; title: string; text: string;
 }) => (
-    <div style={{
-        padding: '40px 24px',
-        textAlign: 'center',
-        color: 'var(--color-text-muted)',
-        border: '1px dashed var(--color-border)',
-        borderRadius: 'var(--radius-lg)',
-    }}>
-        <Icon size={32} style={{ opacity: 0.25, marginBottom: '10px', display: 'block', margin: '0 auto 10px' }} />
+    <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--color-text-muted)', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-lg)' }}>
+        <Icon size={32} style={{ opacity: 0.25, display: 'block', margin: '0 auto 10px' }} />
         <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>{title}</div>
         <div style={{ fontSize: '13px' }}>{text}</div>
     </div>
 );
 
-const periodLabel = (p: Product) =>
-    p.consumptionPeriod === 'day' ? 'pro Tag' : 'pro Woche';
+const ChartTooltip = ({ active, payload, label, unit }: {
+    active?: boolean; payload?: { value: number }[]; label?: string; unit: string;
+}) => {
+    if (!active || !payload?.length) return null;
+    return (
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', boxShadow: 'var(--shadow-md)' }}>
+            <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '2px', fontSize: '13px' }}>{label}</div>
+            <div style={{ color: 'var(--color-primary)', fontSize: '13px' }}>{payload[0].value} {unit}</div>
+        </div>
+    );
+};
+
+const periodLabel = (p: Product) => p.consumptionPeriod === 'day' ? 'pro Tag' : 'pro Woche';
+
+// ── Mini Chart (last 8 months of orders for one product) ─────────────────────
+
+const ProductMiniChart: React.FC<{ productName: string; unit: string; orders: Order[] }> = ({ productName, unit, orders }) => {
+    const data = useMemo((): MonthlyBarData[] => {
+        return Array.from({ length: 8 }, (_, i) => {
+            const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (7 - i));
+            const mo = d.getMonth(), yr = d.getFullYear();
+            const label = d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+            const menge = orders
+                .filter(o => {
+                    const od = new Date(o.date);
+                    return o.productName === productName && od.getMonth() === mo && od.getFullYear() === yr;
+                })
+                .reduce((s, o) => s + o.quantity, 0);
+            return { date: label, menge };
+        });
+    }, [productName, orders]);
+
+    const hasData = data.some(d => d.menge > 0);
+    if (!hasData) return (
+        <div style={{ textAlign: 'center', color: 'var(--color-text-faint)', fontSize: '13px', padding: '16px 0' }}>
+            Noch keine Bestellhistorie für dieses Produkt vorhanden.
+        </div>
+    );
+
+    return (
+        <div style={{ height: '160px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }} dy={6} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }} width={28} />
+                    <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ fill: 'rgba(37,99,235,0.06)' }} />
+                    <Bar dataKey="menge" fill="var(--color-primary)" radius={[3, 3, 0, 0]} />
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export const Consumption: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState<string | null>(null);
+    const [orders, setOrders]     = useState<Order[]>([]);
+    const [loading, setLoading]   = useState(true);
+    const [saving, setSaving]     = useState<string | null>(null);
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
     const loadData = async () => {
         const [p, o] = await Promise.all([DataService.getProducts(), DataService.getOrders()]);
-        setProducts(p);
-        setOrders(o);
-        setLoading(false);
+        setProducts(p); setOrders(o); setLoading(false);
     };
 
     useEffect(() => { loadData(); }, []);
 
-    // ── Per-product consumption stats ────────────────────────────────────────
+    const toggleExpand = (id: string) =>
+        setExpandedRows(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+
+    // ── Per-product stats ────────────────────────────────────────────────────
+
     const productStats = useMemo((): ProductStat[] => {
         return products.map(product => {
             const productOrders = orders
                 .filter(o => o.productName === product.name)
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-            if (productOrders.length < 2) {
-                return { product, suggestedWeekly: 0, actualWeeklyRate: 0 };
-            }
+            if (productOrders.length < 2) return { product, suggestedWeekly: 0, actualWeeklyRate: 0 };
 
-            const first = new Date(productOrders[0].date);
-            const last = new Date(productOrders[productOrders.length - 1].date);
-            const diffDays = Math.max(1, Math.floor((last.getTime() - first.getTime()) / 86_400_000));
+            const first   = new Date(productOrders[0].date);
+            const last    = new Date(productOrders[productOrders.length - 1].date);
+            const diffDays  = Math.max(1, Math.floor((last.getTime() - first.getTime()) / 86_400_000));
             const diffWeeks = diffDays / 7;
-
-            // suggestedWeekly: rate from all orders except the last (= what was consumed between orders)
-            const consumed = productOrders.slice(0, -1).reduce((s, o) => s + o.quantity, 0);
-            const suggestedWeekly = Number((consumed / diffDays * 7).toFixed(1));
-
-            // actualWeeklyRate: total ordered across the whole span
+            const consumed  = productOrders.slice(0, -1).reduce((s, o) => s + o.quantity, 0);
             const totalOrdered = productOrders.reduce((s, o) => s + o.quantity, 0);
-            const actualWeeklyRate = Number((totalOrdered / diffWeeks).toFixed(1));
 
-            return { product, suggestedWeekly, actualWeeklyRate };
+            return {
+                product,
+                suggestedWeekly: Number((consumed / diffDays * 7).toFixed(1)),
+                actualWeeklyRate: Number((totalOrdered / diffWeeks).toFixed(1)),
+            };
         });
     }, [products, orders]);
 
     // ── Derived lists ────────────────────────────────────────────────────────
+
     const activePilots = useMemo(
         () => products.filter(p => (p.consumptionAmount ?? 0) > 0 && p.consumptionPeriod),
         [products],
     );
 
     const suggestions = useMemo(
-        () => productStats.filter(
-            s => s.suggestedWeekly > 0 && !(s.product.consumptionAmount ?? 0) && !s.product.ignoreOrderProposals,
-        ),
+        () => productStats.filter(s => s.suggestedWeekly > 0 && !(s.product.consumptionAmount ?? 0) && !s.product.ignoreOrderProposals),
         [productStats],
+    );
+
+    const ignoredProducts = useMemo(
+        () => products.filter(p => p.ignoreOrderProposals),
+        [products],
     );
 
     const anomalies = useMemo((): Anomaly[] => {
         return activePilots.map(p => {
-            const autoWeekly = p.consumptionPeriod === 'day'
-                ? (p.consumptionAmount ?? 0) * 7
-                : (p.consumptionAmount ?? 0);
-            const stat = productStats.find(s => s.product.id === p.id);
-            const actualWeekly = stat?.actualWeeklyRate ?? 0;
+            const autoWeekly   = p.consumptionPeriod === 'day' ? (p.consumptionAmount ?? 0) * 7 : (p.consumptionAmount ?? 0);
+            const actualWeekly = productStats.find(s => s.product.id === p.id)?.actualWeeklyRate ?? 0;
             if (autoWeekly === 0 || actualWeekly === 0) return null;
             const ratio = actualWeekly / autoWeekly;
             if (ratio >= 0.5 && ratio <= 1.5) return null;
@@ -112,19 +167,13 @@ export const Consumption: React.FC = () => {
     }, [activePilots, productStats]);
 
     // ── Actions ──────────────────────────────────────────────────────────────
+
     const handleAdopt = async (stat: ProductStat) => {
         setSaving(stat.product.id);
         try {
-            await DataService.saveProduct({
-                ...stat.product,
-                consumptionAmount: stat.suggestedWeekly,
-                consumptionPeriod: 'week',
-                lastConsumptionDate: new Date().toISOString(),
-            });
+            await DataService.saveProduct({ ...stat.product, consumptionAmount: stat.suggestedWeekly, consumptionPeriod: 'week', lastConsumptionDate: new Date().toISOString() });
             await loadData();
-        } finally {
-            setSaving(null);
-        }
+        } finally { setSaving(null); }
     };
 
     const handleIgnore = async (product: Product) => {
@@ -132,18 +181,35 @@ export const Consumption: React.FC = () => {
         try {
             await DataService.saveProduct({ ...product, ignoreOrderProposals: true });
             await loadData();
-        } finally {
-            setSaving(null);
-        }
+        } finally { setSaving(null); }
     };
 
-    if (loading) {
-        return (
-            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                Lade Autopilot-Daten…
-            </div>
-        );
-    }
+    const handleRestore = async (product: Product) => {
+        setSaving(product.id);
+        try {
+            await DataService.saveProduct({ ...product, ignoreOrderProposals: false });
+            await loadData();
+        } finally { setSaving(null); }
+    };
+
+    if (loading) return (
+        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Lade Autopilot-Daten…</div>
+    );
+
+    // ── Shared expand-row style ───────────────────────────────────────────────
+
+    const expandPanel = (productName: string, unit: string) => (
+        <tr>
+            <td colSpan={3} style={{ padding: '0 var(--spacing-xl) var(--spacing-md) var(--spacing-xl)', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)' }}>
+                <div style={{ paddingTop: 'var(--spacing-sm)' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                        Bestellhistorie (letzte 8 Monate) — {productName}
+                    </div>
+                    <ProductMiniChart productName={productName} unit={unit} orders={orders} />
+                </div>
+            </td>
+        </tr>
+    );
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2xl)', paddingBottom: '40px' }}>
@@ -151,7 +217,7 @@ export const Consumption: React.FC = () => {
             {/* ── Header ── */}
             <div className="page-header">
                 <div>
-                    <h2 className="page-title">Autopilot & Verbrauchssteuerung</h2>
+                    <h2 className="page-title">Verbrauch & Autopilot</h2>
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>
                         KI-Vorschläge bestätigen und automatischen Verbrauch in einer Übersicht steuern.
                     </p>
@@ -159,61 +225,49 @@ export const Consumption: React.FC = () => {
             </div>
 
             {/* ── KPI Cards ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-md)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--spacing-md)' }}>
                 <div className="stat-card">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--color-text-muted)', marginBottom: '10px', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                         <Zap size={14} /> Aktive Autopiloten
                     </div>
-                    <div style={{ fontSize: '36px', fontWeight: 700, color: 'var(--color-primary)' }}>
-                        {activePilots.length}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>
-                        von {products.length} Produkten
-                    </div>
+                    <div style={{ fontSize: '36px', fontWeight: 700, color: 'var(--color-primary)' }}>{activePilots.length}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>von {products.length} Produkten</div>
                 </div>
 
                 <div className="stat-card">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--color-text-muted)', marginBottom: '10px', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                         <Bot size={14} /> Offene KI-Vorschläge
                     </div>
-                    <div style={{ fontSize: '36px', fontWeight: 700, color: suggestions.length > 0 ? 'var(--color-warning)' : 'var(--color-text-main)' }}>
-                        {suggestions.length}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>
-                        warten auf Bestätigung
-                    </div>
+                    <div style={{ fontSize: '36px', fontWeight: 700, color: suggestions.length > 0 ? 'var(--color-warning)' : 'var(--color-text-main)' }}>{suggestions.length}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>warten auf Bestätigung</div>
                 </div>
 
                 <div className="stat-card">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--color-text-muted)', marginBottom: '10px', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                         <AlertTriangle size={14} /> Anomalien
                     </div>
-                    <div style={{ fontSize: '36px', fontWeight: 700, color: anomalies.length > 0 ? 'var(--color-danger)' : 'var(--color-text-main)' }}>
-                        {anomalies.length}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>
-                        Abweichung &gt; 50%
-                    </div>
+                    <div style={{ fontSize: '36px', fontWeight: 700, color: anomalies.length > 0 ? 'var(--color-danger)' : 'var(--color-text-main)' }}>{anomalies.length}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>Abweichung &gt; 50%</div>
                 </div>
+
+                {ignoredProducts.length > 0 && (
+                    <div className="stat-card">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--color-text-muted)', marginBottom: '10px', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            <X size={14} /> Ignoriert
+                        </div>
+                        <div style={{ fontSize: '36px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{ignoredProducts.length}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>Vorschläge ausgeblendet</div>
+                    </div>
+                )}
             </div>
 
-            {/* ── KI Suggestions ── */}
+            {/* ── KI Suggestions (expandable) ── */}
             <div className="card" style={{ overflow: 'hidden' }}>
-                <div style={{
-                    padding: '14px var(--spacing-xl)',
-                    borderBottom: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-surface-elevated)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                }}>
+                <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Bot size={16} color="var(--color-primary)" />
-                        Aktionsbedarf: KI-Vorschläge
+                        <Bot size={16} color="var(--color-primary)" /> Aktionsbedarf: KI-Vorschläge
                     </h3>
-                    {suggestions.length > 0 && (
-                        <span className="badge badge-warning">{suggestions.length} offen</span>
-                    )}
+                    {suggestions.length > 0 && <span className="badge badge-warning">{suggestions.length} offen</span>}
                 </div>
 
                 {suggestions.length > 0 ? (
@@ -226,68 +280,62 @@ export const Consumption: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {suggestions.map(stat => (
-                                <tr key={stat.product.id}>
-                                    <td>
-                                        <div style={{ fontWeight: 500 }}>{stat.product.name}</div>
-                                        <div style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>
-                                            {stat.product.category || '–'}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span className="badge badge-primary">
-                                                {stat.suggestedWeekly} {stat.product.unit} / Woche
-                                            </span>
-                                            <span style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>
-                                                aus Bestellhistorie berechnet
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td style={{ textAlign: 'right' }}>
-                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                            <button
-                                                className="btn btn-ghost btn-sm"
-                                                onClick={() => handleIgnore(stat.product)}
-                                                disabled={saving === stat.product.id}
-                                                title="Diesen Vorschlag dauerhaft ignorieren"
-                                            >
-                                                <X size={14} /> Ignorieren
-                                            </button>
-                                            <button
-                                                className="btn btn-success btn-sm"
-                                                onClick={() => handleAdopt(stat)}
-                                                disabled={saving === stat.product.id}
-                                            >
-                                                <CheckCircle2 size={14} /> Übernehmen
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                            {suggestions.map(stat => {
+                                const isOpen = expandedRows.has(stat.product.id);
+                                return (
+                                    <React.Fragment key={stat.product.id}>
+                                        <tr
+                                            onClick={() => toggleExpand(stat.product.id)}
+                                            style={{ cursor: 'pointer', backgroundColor: isOpen ? 'var(--color-surface-elevated)' : undefined }}
+                                        >
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    {isOpen
+                                                        ? <ChevronDown size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
+                                                        : <ChevronRight size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />}
+                                                    <div>
+                                                        <div style={{ fontWeight: 500 }}>{stat.product.name}</div>
+                                                        <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{stat.product.category || '–'}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td onClick={e => e.stopPropagation()}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span className="badge badge-primary">
+                                                        {stat.suggestedWeekly} {stat.product.unit} / Woche
+                                                    </span>
+                                                    <span style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>aus Bestellhistorie</span>
+                                                </div>
+                                            </td>
+                                            <td onClick={e => e.stopPropagation()} style={{ textAlign: 'right' }}>
+                                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleIgnore(stat.product)} disabled={saving === stat.product.id} title="Dauerhaft ignorieren">
+                                                        <X size={13} /> Ignorieren
+                                                    </button>
+                                                    <button className="btn btn-success btn-sm" onClick={() => handleAdopt(stat)} disabled={saving === stat.product.id}>
+                                                        <CheckCircle2 size={13} /> Übernehmen
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {isOpen && expandPanel(stat.product.name, stat.product.unit)}
+                                    </React.Fragment>
+                                );
+                            })}
                         </tbody>
                     </table>
                 ) : (
                     <div style={{ padding: 'var(--spacing-xl)' }}>
-                        <EmptyState
-                            icon={Bot}
-                            title="Keine offenen Vorschläge"
-                            text="Sobald ausreichend Bestellhistorie vorliegt, berechnet das System automatisch Verbrauchsvorschläge."
-                        />
+                        <EmptyState icon={Bot} title="Keine offenen Vorschläge" text="Sobald ausreichend Bestellhistorie vorliegt, berechnet das System automatisch Verbrauchsvorschläge." />
                     </div>
                 )}
             </div>
 
-            {/* ── Active Autopilots ── */}
+            {/* ── Active Autopilots (expandable) ── */}
             <div className="card" style={{ overflow: 'hidden' }}>
-                <div style={{
-                    padding: '14px var(--spacing-xl)',
-                    borderBottom: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-surface-elevated)',
-                }}>
+                <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)' }}>
                     <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Zap size={16} color="var(--color-success)" />
-                        Aktive Autopiloten
+                        <Zap size={16} color="var(--color-success)" /> Aktive Autopiloten
                     </h3>
                 </div>
 
@@ -297,120 +345,81 @@ export const Consumption: React.FC = () => {
                             <tr>
                                 <th>Produkt</th>
                                 <th>Eingestellter Verbrauch</th>
-                                <th>Letzter Abruf</th>
                                 <th style={{ textAlign: 'center' }}>Status</th>
                             </tr>
                         </thead>
                         <tbody>
                             {activePilots.map(p => {
+                                const isOpen  = expandedRows.has(`pilot-${p.id}`);
                                 const anomaly = anomalies.find(a => a.product.id === p.id);
                                 return (
-                                    <tr key={p.id}>
-                                        <td>
-                                            <div style={{ fontWeight: 500 }}>{p.name}</div>
-                                            <div style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>
-                                                {p.category || '–'}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span className="badge badge-success">
-                                                {p.consumptionAmount} {p.unit} {periodLabel(p)}
-                                            </span>
-                                        </td>
-                                        <td style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>
-                                            {p.lastConsumptionDate
-                                                ? new Date(p.lastConsumptionDate).toLocaleDateString('de-DE')
-                                                : '–'}
-                                        </td>
-                                        <td style={{ textAlign: 'center' }}>
-                                            {anomaly ? (
-                                                <span
-                                                    className="badge badge-warning"
-                                                    title={`Autopilot: ${anomaly.autoWeekly} ${p.unit}/Wo — Bestellhistorie: ${anomaly.actualWeekly} ${p.unit}/Wo`}
-                                                >
-                                                    Abweichung
+                                    <React.Fragment key={p.id}>
+                                        <tr
+                                            onClick={() => toggleExpand(`pilot-${p.id}`)}
+                                            style={{ cursor: 'pointer', backgroundColor: isOpen ? 'var(--color-surface-elevated)' : undefined }}
+                                        >
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    {isOpen
+                                                        ? <ChevronDown size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
+                                                        : <ChevronRight size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />}
+                                                    <div>
+                                                        <div style={{ fontWeight: 500 }}>{p.name}</div>
+                                                        <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>
+                                                            {p.lastConsumptionDate ? `Letzter Abruf: ${new Date(p.lastConsumptionDate).toLocaleDateString('de-DE')}` : '–'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className="badge badge-success">
+                                                    {p.consumptionAmount} {p.unit} {periodLabel(p)}
                                                 </span>
-                                            ) : (
-                                                <span className="badge badge-neutral">Normal</span>
-                                            )}
-                                        </td>
-                                    </tr>
+                                            </td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                {anomaly ? (
+                                                    <span className="badge badge-warning" title={`Autopilot: ${anomaly.autoWeekly} ${p.unit}/Wo — Bestellhistorie: ${anomaly.actualWeekly} ${p.unit}/Wo`}>
+                                                        Abweichung
+                                                    </span>
+                                                ) : (
+                                                    <span className="badge badge-neutral">Normal</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                        {isOpen && expandPanel(p.name, p.unit)}
+                                    </React.Fragment>
                                 );
                             })}
                         </tbody>
                     </table>
                 ) : (
                     <div style={{ padding: 'var(--spacing-xl)' }}>
-                        <EmptyState
-                            icon={Zap}
-                            title="Noch kein Autopilot aktiv"
-                            text="Übernimm einen KI-Vorschlag oben oder stelle den Verbrauch direkt auf der Produktseite ein."
-                        />
+                        <EmptyState icon={Zap} title="Noch kein Autopilot aktiv" text="Übernimm einen KI-Vorschlag oben oder stelle den Verbrauch direkt auf der Produktseite ein." />
                     </div>
                 )}
             </div>
 
-            {/* ── Anomalies (only shown when present) ── */}
+            {/* ── Anomalies ── */}
             {anomalies.length > 0 && (
                 <div className="card" style={{ overflow: 'hidden' }}>
-                    <div style={{
-                        padding: '14px var(--spacing-xl)',
-                        borderBottom: '1px solid var(--color-border)',
-                        backgroundColor: 'var(--color-warning-bg)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                    }}>
+                    <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-warning-bg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <AlertTriangle size={16} color="var(--color-warning)" />
-                        <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)' }}>
-                            Auffälligkeiten / Anomalien
-                        </h3>
-                        <span className="badge badge-warning" style={{ marginLeft: 'auto' }}>
-                            {anomalies.length}
-                        </span>
+                        <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)' }}>Auffälligkeiten / Anomalien</h3>
+                        <span className="badge badge-warning" style={{ marginLeft: 'auto' }}>{anomalies.length}</span>
                     </div>
-
                     <div>
                         {anomalies.map(({ product: p, autoWeekly, actualWeekly, ratio }) => (
-                            <div
-                                key={p.id}
-                                style={{
-                                    padding: '16px var(--spacing-xl)',
-                                    borderBottom: '1px solid var(--color-border)',
-                                    display: 'flex',
-                                    alignItems: 'flex-start',
-                                    gap: 'var(--spacing-md)',
-                                }}
-                            >
-                                <AlertTriangle
-                                    size={18}
-                                    color="var(--color-warning)"
-                                    style={{ flexShrink: 0, marginTop: '2px' }}
-                                />
+                            <div key={p.id} style={{ padding: '16px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                                <AlertTriangle size={18} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '2px' }} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>
-                                        {p.name}
-                                    </div>
+                                    <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>{p.name}</div>
                                     <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                                        {ratio > 1 ? (
-                                            <>
-                                                Du bestellst <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot
-                                                zieht nur <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Lagerbestand wird
-                                                dadurch höher ausgewiesen als er tatsächlich ist.
-                                            </>
-                                        ) : (
-                                            <>
-                                                Du bestellst nur <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot
-                                                zieht <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Bestand könnte
-                                                rechnerisch unter 0 fallen.
-                                            </>
-                                        )}
+                                        {ratio > 1
+                                            ? <>Du bestellst <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot zieht nur <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Lagerbestand wird dadurch höher ausgewiesen als er tatsächlich ist.</>
+                                            : <>Du bestellst nur <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot zieht <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Bestand könnte rechnerisch unter 0 fallen.</>}
                                     </div>
                                 </div>
-                                <span
-                                    className={ratio > 1 ? 'badge badge-warning' : 'badge badge-danger'}
-                                    style={{ flexShrink: 0 }}
-                                >
+                                <span className={ratio > 1 ? 'badge badge-warning' : 'badge badge-danger'} style={{ flexShrink: 0 }}>
                                     {ratio > 1 ? '+' : ''}{((ratio - 1) * 100).toFixed(0)}%
                                 </span>
                             </div>
@@ -419,22 +428,44 @@ export const Consumption: React.FC = () => {
                 </div>
             )}
 
-            {/* Hint when no autopilots and no suggestions */}
-            {activePilots.length === 0 && suggestions.length === 0 && (
-                <div style={{
-                    padding: 'var(--spacing-2xl)',
-                    backgroundColor: 'var(--color-surface-elevated)',
-                    borderRadius: 'var(--radius-lg)',
-                    border: '1px dashed var(--color-border)',
-                    textAlign: 'center',
-                }}>
-                    <Activity size={40} style={{ opacity: 0.2, marginBottom: '16px', display: 'block', margin: '0 auto 16px' }} />
-                    <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '8px' }}>
-                        Noch keine Daten für Autopilot-Vorschläge
+            {/* ── Ignored Products ── */}
+            {ignoredProducts.length > 0 && (
+                <div className="card" style={{ overflow: 'hidden' }}>
+                    <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <X size={15} color="var(--color-text-muted)" />
+                        <h3 style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-secondary)' }}>
+                            Ignorierte Vorschläge
+                        </h3>
+                        <span className="badge badge-neutral" style={{ marginLeft: 'auto' }}>{ignoredProducts.length}</span>
                     </div>
+                    <div>
+                        {ignoredProducts.map(p => (
+                            <div key={p.id} style={{ padding: '12px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                                <div>
+                                    <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{p.name}</div>
+                                    {p.category && <div style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
+                                </div>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => handleRestore(p)}
+                                    disabled={saving === p.id}
+                                    title="Vorschlag wieder aktivieren"
+                                >
+                                    <RotateCcw size={13} /> Wiederherstellen
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Full empty state ── */}
+            {activePilots.length === 0 && suggestions.length === 0 && ignoredProducts.length === 0 && (
+                <div style={{ padding: 'var(--spacing-2xl)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--color-border)', textAlign: 'center' }}>
+                    <Activity size={40} style={{ opacity: 0.2, display: 'block', margin: '0 auto 16px' }} />
+                    <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '8px' }}>Noch keine Daten für Autopilot-Vorschläge</div>
                     <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', maxWidth: '400px', margin: '0 auto', lineHeight: 1.6 }}>
-                        Erfasse mindestens zwei Bestellungen pro Produkt. Das System berechnet dann automatisch
-                        einen wöchentlichen Verbrauchswert aus der Bestellhistorie.
+                        Erfasse mindestens zwei Bestellungen pro Produkt. Das System berechnet dann automatisch einen wöchentlichen Verbrauchswert aus der Bestellhistorie.
                     </div>
                 </div>
             )}

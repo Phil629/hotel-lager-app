@@ -164,7 +164,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
                     <Link to="/consumption" className={navLink('/consumption')}>
                         <Activity size={17} style={{ flexShrink: 0 }} />
-                        Autopilot
+                        Verbrauch
                     </Link>
 
                     <Link to="/settings" className={navLink('/settings')}>
