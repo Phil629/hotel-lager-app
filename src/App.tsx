@@ -6,7 +6,8 @@ import { Products } from './pages/Products';
 import { Orders } from './pages/Orders';
 import { Settings } from './pages/Settings';
 import { Suppliers } from './pages/Suppliers';
-import { Statistics } from './pages/Statistics';
+import { Pricing } from './pages/Pricing';
+import { Consumption } from './pages/Consumption';
 import { Inventory } from './pages/Inventory';
 import { Auth } from './pages/Auth';
 import { Admin } from './pages/Admin';
@@ -149,7 +150,9 @@ function App() {
             <Route path="/orders"     element={<ProtectedRoute session={session}><Orders /></ProtectedRoute>} />
             <Route path="/suppliers"  element={<ProtectedRoute session={session}><Suppliers /></ProtectedRoute>} />
             <Route path="/inventory"  element={<ProtectedRoute session={session}><Inventory /></ProtectedRoute>} />
-            <Route path="/statistics" element={<ProtectedRoute session={session}><Statistics /></ProtectedRoute>} />
+            <Route path="/pricing"     element={<ProtectedRoute session={session}><Pricing /></ProtectedRoute>} />
+            <Route path="/consumption" element={<ProtectedRoute session={session}><Consumption /></ProtectedRoute>} />
+            <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
             {/* K2: Admin-Route nur für role='admin' */}
             <Route path="/admin" element={
               <ProtectedRoute session={session} requiredRole="admin" userRole={userRole}>

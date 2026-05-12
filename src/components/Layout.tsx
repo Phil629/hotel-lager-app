@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, ShoppingCart, Settings, Users, BarChart3, ClipboardList, ShieldAlert, WifiOff } from 'lucide-react';
+import { Package, ShoppingCart, Settings, Users, TrendingUp, Activity, ClipboardList, ShieldAlert, WifiOff } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
@@ -157,9 +157,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         Lieferanten
                     </Link>
 
-                    <Link to="/statistics" className={navLink('/statistics')}>
-                        <BarChart3 size={17} style={{ flexShrink: 0 }} />
-                        Statistiken
+                    <Link to="/pricing" className={navLink('/pricing')}>
+                        <TrendingUp size={17} style={{ flexShrink: 0 }} />
+                        Finanzen
+                    </Link>
+
+                    <Link to="/consumption" className={navLink('/consumption')}>
+                        <Activity size={17} style={{ flexShrink: 0 }} />
+                        Autopilot
                     </Link>
 
                     <Link to="/settings" className={navLink('/settings')}>

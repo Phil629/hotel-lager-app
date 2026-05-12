@@ -2451,7 +2451,7 @@ export const Orders: React.FC = () => {
                                                             const prod = prop.product;
                                                             const supp = suppliers.find(s => s.id === prod.supplierId);
                                                             const emailAddr = supp?.email || prod.emailOrderAddress || '';
-                                                            let btnText = "Bedarf merken";
+                                                            let btnText = "Bestellen";
                                                             if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) btnText = "🔗 Im Tab bestellen";
                                                             else if (prod.preferredOrderMethod === 'email' || emailAddr) btnText = "📧 E-Mail öffnen";
 
