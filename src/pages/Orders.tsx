@@ -251,11 +251,14 @@ export const Orders: React.FC = () => {
     const loadInboundEmails = async () => {
         const supabase = getSupabaseClient();
         if (!supabase) return;
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('inbound_emails')
             .select('id, supplier_name, subject, body_text, extracted_data, status, created_at')
             .order('created_at', { ascending: false })
             .limit(50);
+        if (error) {
+            console.error('Error loading inbound emails:', error);
+        }
         if (data) setInboundEmails(data as InboundEmail[]);
     };
 

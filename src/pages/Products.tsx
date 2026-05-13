@@ -56,6 +56,7 @@ const PriceHistoryChart = ({ productName }: { productName: string }) => {
 export const Products: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [orders, setOrders] = useState<Order[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeModalTab, setActiveModalTab] = useState<'basic' | 'inventory' | 'order' | 'analytics'>('basic');
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -124,7 +125,10 @@ export const Products: React.FC = () => {
     const rtDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
     const debouncedReloadProducts = () => {
         if (rtDebounce.current) clearTimeout(rtDebounce.current);
-        rtDebounce.current = setTimeout(() => DataService.getProducts().then(setProducts), 300);
+        rtDebounce.current = setTimeout(() => {
+            DataService.getProducts().then(setProducts);
+            DataService.getOrders().then(setOrders);
+        }, 300);
     };
 
     useEffect(() => {
@@ -157,9 +161,11 @@ export const Products: React.FC = () => {
             try {
                 await loadSuppliers().catch(e => console.error('Error loading suppliers:', e));
                 const loadedProducts = await DataService.getProducts();
+                const loadedOrders = await DataService.getOrders();
                 
                 // Immediately set products so the UI renders
                 setProducts(loadedProducts);
+                setOrders(loadedOrders);
 
                 // Handle URL Actions (QR Scans)
                 const action = searchParams.get('action');
@@ -781,6 +787,27 @@ export const Products: React.FC = () => {
                                                                     <div style={{ fontSize: '20px', fontWeight: 800, color: Number(product.stock) <= Number(product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)' }}>
                                                                         {product.stock}
                                                                     </div>
+                                                                    {(() => {
+                                                                        const openOrder = orders.find(o => o.productName === product.name && o.status === 'open');
+                                                                        if (openOrder) {
+                                                                            return (
+                                                                                <div style={{ marginTop: '4px' }}>
+                                                                                    <span className="badge badge-warning" style={{ fontSize: '10px' }} title="Bestellung ist unterwegs">
+                                                                                        <ShoppingCart size={10} /> Unterwegs
+                                                                                    </span>
+                                                                                </div>
+                                                                            );
+                                                                        } else if (Number(product.stock) <= Number(product.minStock || 0)) {
+                                                                            return (
+                                                                                <div style={{ marginTop: '4px' }}>
+                                                                                    <span className="badge badge-danger" style={{ fontSize: '10px' }}>
+                                                                                        <AlertTriangle size={10} /> Nachbestellen
+                                                                                    </span>
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        return null;
+                                                                    })()}
                                                                 </div>
                                                                 <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                                                                     <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Gesamtwert</div>
@@ -844,8 +871,10 @@ export const Products: React.FC = () => {
                                                     <tbody>
                                                         {visibleProds.map((product, index) => {
                                                             const isLastRows = index >= visibleProds.length - 2 && visibleProds.length > 3;
+                                                            const openOrder = orders.find(o => o.productName === product.name && o.status === 'open');
+                                                            const isLowStock = Number(product.stock) <= Number(product.minStock || 0);
                                                             return (
-                                                                <tr key={product.id} className={Number(product.stock) <= Number(product.minStock || 0) ? 'row-low-stock' : ''}>
+                                                                <tr key={product.id} className={isLowStock && !openOrder ? 'row-low-stock' : ''}>
                                                                     <td>
                                                                         {product.image ? (
                                                                             <img src={product.image} alt={product.name} style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
@@ -881,7 +910,11 @@ export const Products: React.FC = () => {
                                                                                 <input type="number" value={product.stock} min={0} onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))} style={{ width: '48px', textAlign: 'center', fontSize: '14px', fontWeight: 800, border: 'none', padding: '6px 4px', color: Number(product.stock) <= Number(product.minStock || 0) ? 'var(--color-danger)' : 'var(--color-text-main)', background: 'transparent', outline: 'none', MozAppearance: 'textfield' }} />
                                                                                 <button onClick={() => handleStockUpdate(product, product.stock + 1)} style={{ padding: '6px 11px', border: 'none', background: 'var(--color-surface-elevated)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-primary)', borderLeft: '1px solid var(--color-border)' }}>+</button>
                                                                             </div>
-                                                                            {Number(product.stock) <= Number(product.minStock || 0) && (
+                                                                            {openOrder ? (
+                                                                                <span className="badge badge-warning" style={{ fontSize: '10.5px' }} title="Bestellung ist unterwegs">
+                                                                                    <ShoppingCart size={10} /> Unterwegs
+                                                                                </span>
+                                                                            ) : isLowStock && (
                                                                                 <span className="badge badge-danger" style={{ fontSize: '10.5px' }}>
                                                                                     <AlertTriangle size={10} /> Nachbestellen
                                                                                 </span>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Product, Order } from '../types';
+import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap, ChevronDown, ChevronRight, RotateCcw, Save, Pencil } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -74,6 +74,19 @@ const RunwayBadge: React.FC<{ product: Product }> = ({ product }) => {
     return <span className={`badge ${cls}`} title={`Bestand reicht noch ca. ${days} Tage`}>{label}</span>;
 };
 
+const SortSelect = ({ value, onChange }: { value: string, onChange: (val: any) => void }) => (
+    <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text-main)', fontSize: '12px', marginLeft: '8px' }}
+    >
+        <option value="name">Name (A-Z)</option>
+        <option value="price">Preis (absteigend)</option>
+        <option value="category">Kategorie</option>
+        <option value="supplier">Lieferant</option>
+    </select>
+);
+
 // ── Mini Chart (last 8 months of orders for one product) ─────────────────────
 
 const ProductMiniChart: React.FC<{ productName: string; unit: string; orders: Order[] }> = ({ productName, unit, orders }) => {
@@ -127,9 +140,14 @@ export const Consumption: React.FC = () => {
     const [showManualSection, setShowManualSection] = useState(false);
     const [activeTab, setActiveTab] = useState<'setup' | 'active' | 'ignored'>('setup');
 
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [sortSetupBy, setSortSetupBy] = useState<'name' | 'price' | 'category' | 'supplier'>('name');
+    const [sortActiveBy, setSortActiveBy] = useState<'name' | 'price' | 'category' | 'supplier'>('name');
+    const [sortIgnoredBy, setSortIgnoredBy] = useState<'name' | 'price' | 'category' | 'supplier'>('name');
+
     const loadData = async () => {
-        const [p, o] = await Promise.all([DataService.getProducts(), DataService.getOrders()]);
-        setProducts(p); setOrders(o); setLoading(false);
+        const [p, o, s] = await Promise.all([DataService.getProducts(), DataService.getOrders(), DataService.getSuppliers()]);
+        setProducts(p); setOrders(o); setSuppliers(s); setLoading(false);
     };
 
     useEffect(() => { loadData(); }, []);
@@ -199,28 +217,46 @@ export const Consumption: React.FC = () => {
 
     // ── Derived lists ────────────────────────────────────────────────────────
 
+    const sortProducts = <T extends { product?: Product } | Product>(list: T[], sortBy: 'name' | 'price' | 'category' | 'supplier') => {
+        return [...list].sort((a, b) => {
+            const pA = 'product' in a ? a.product : a;
+            const pB = 'product' in b ? b.product : b;
+            
+            if (sortBy === 'price') {
+                return (pB.price || 0) - (pA.price || 0);
+            } else if (sortBy === 'category') {
+                return (pA.category || '').localeCompare(pB.category || '');
+            } else if (sortBy === 'supplier') {
+                const sA = suppliers.find(s => s.id === pA.supplierId)?.name || '';
+                const sB = suppliers.find(s => s.id === pB.supplierId)?.name || '';
+                return sA.localeCompare(sB);
+            }
+            return pA.name.localeCompare(pB.name);
+        });
+    };
+
     const activePilots = useMemo(
-        () => products.filter(p => (p.consumptionAmount ?? 0) > 0 && p.consumptionPeriod),
-        [products],
+        () => sortProducts(products.filter(p => (p.consumptionAmount ?? 0) > 0 && p.consumptionPeriod), sortActiveBy),
+        [products, sortActiveBy, suppliers],
     );
 
     const suggestions = useMemo(
-        () => productStats.filter(s => s.suggestedWeekly > 0 && !(s.product.consumptionAmount ?? 0) && !s.product.ignoreOrderProposals),
-        [productStats],
+        () => sortProducts(productStats.filter(s => s.suggestedWeekly > 0 && !(s.product.consumptionAmount ?? 0) && !s.product.ignoreOrderProposals), sortSetupBy),
+        [productStats, sortSetupBy, suppliers],
     );
 
     const ignoredProducts = useMemo(
-        () => products.filter(p => p.ignoreOrderProposals),
-        [products],
+        () => sortProducts(products.filter(p => p.ignoreOrderProposals), sortIgnoredBy),
+        [products, sortIgnoredBy, suppliers],
     );
 
     const manualProducts = useMemo(
-        () => products.filter(p =>
+        () => sortProducts(products.filter(p =>
             !(p.consumptionAmount ?? 0) &&
             !productStats.find(s => s.product.id === p.id && s.suggestedWeekly > 0) &&
             !p.ignoreOrderProposals
-        ),
-        [products, productStats],
+        ), sortSetupBy),
+        [products, productStats, sortSetupBy, suppliers],
     );
 
     const anomalies = useMemo((): Anomaly[] => {
@@ -530,10 +566,11 @@ export const Consumption: React.FC = () => {
 
                     {/* ── Active Autopilots (expandable, with runway + inline edit) ── */}
                     <div className="card" style={{ overflow: 'hidden' }}>
-                        <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)' }}>
+                        <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Zap size={16} color="var(--color-success)" /> Aktive Autopiloten
                             </h3>
+                            <SortSelect value={sortActiveBy} onChange={setSortActiveBy} />
                         </div>
 
                         {activePilots.length > 0 ? (
@@ -612,6 +649,7 @@ export const Consumption: React.FC = () => {
                         <Bot size={16} color="var(--color-primary)" /> Aktionsbedarf: KI-Vorschläge
                     </h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <SortSelect value={sortSetupBy} onChange={setSortSetupBy} />
                         {suggestions.length > 0 && (
                             <>
                                 <span className="badge badge-warning">{suggestions.length} offen</span>
@@ -700,6 +738,7 @@ export const Consumption: React.FC = () => {
                             <Pencil size={15} color="var(--color-text-muted)" /> Manuell konfigurieren
                         </h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <SortSelect value={sortSetupBy} onChange={setSortSetupBy} />
                             <span className="badge badge-neutral">{manualProducts.length} Produkte</span>
                             {showManualSection
                                 ? <ChevronDown size={16} color="var(--color-text-muted)" />
@@ -750,13 +789,23 @@ export const Consumption: React.FC = () => {
                                                 </select>
                                             </td>
                                             <td style={{ textAlign: 'right' }}>
-                                                <button
-                                                    className="btn btn-primary btn-sm"
-                                                    disabled={!canSave || isSavingThis}
-                                                    onClick={() => handleSaveInline(p)}
-                                                >
-                                                    <Save size={13} /> {isSavingThis ? 'Wird gespeichert…' : 'Speichern'}
-                                                </button>
+                                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm"
+                                                        disabled={isSavingThis}
+                                                        onClick={() => handleIgnore(p)}
+                                                        title="Aus Liste entfernen"
+                                                    >
+                                                        <X size={13} /> Ignorieren
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-primary btn-sm"
+                                                        disabled={!canSave || isSavingThis}
+                                                        onClick={() => handleSaveInline(p)}
+                                                    >
+                                                        <Save size={13} /> {isSavingThis ? 'Speichern…' : 'Speichern'}
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -774,7 +823,14 @@ export const Consumption: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2xl)' }}>
                     {/* ── Ignored Products ── */}
                     {ignoredProducts.length > 0 ? (
-                        <div>
+                        <div className="card" style={{ overflow: 'hidden' }}>
+                            <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <X size={16} color="var(--color-text-secondary)" /> Archivierte Produkte
+                                </h3>
+                                <SortSelect value={sortIgnoredBy} onChange={setSortIgnoredBy} />
+                            </div>
+                            <div>
                             {ignoredProducts.map(p => (
                                 <div key={p.id} style={{ padding: '12px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                                     <div>

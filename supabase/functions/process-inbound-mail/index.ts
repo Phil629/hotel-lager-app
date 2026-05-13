@@ -224,7 +224,7 @@ Antworte ausschließlich als JSON:
     const emailToMatch = parsedData.supplier_email?.trim();
     if (emailToMatch && emailToMatch !== 'hello@unbekannt.com') {
         const { data: emailMatch, error: emailErr } = await supabase.from('suppliers')
-             .select('id, email, customer_number').eq('user_id', user_id).ilike('email', emailToMatch).limit(1);
+             .select('id, email, customer_number').eq('company_id', company_id).ilike('email', emailToMatch).limit(1);
         if (emailErr) console.error("Error querying supplier by email:", emailErr);
         if (emailMatch && emailMatch.length > 0) {
             existingSuppliers = emailMatch;
@@ -245,7 +245,7 @@ Antworte ausschließlich als JSON:
         }
 
         const { data: nameMatch, error: supErr } = await supabase.from('suppliers')
-            .select('id, email, customer_number').eq('user_id', user_id).or(orQuery).limit(1);
+            .select('id, email, customer_number').eq('company_id', company_id).or(orQuery).limit(1);
         
         if (supErr) console.error("Error querying supplier by name:", supErr);
         if (nameMatch && nameMatch.length > 0) {
@@ -422,7 +422,7 @@ Antworte ausschließlich als JSON:
                 user_id: user_id,
                 company_id: company_id,
                 name: item.product_name,
-                category: 'Importiert',
+                category: item.category || 'KI-Import (E-Mail)',
                 price: item.price || 0,
                 supplier_id: supplier_id,
                 is_auto_generated: true,
