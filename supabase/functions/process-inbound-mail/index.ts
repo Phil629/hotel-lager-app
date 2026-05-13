@@ -29,18 +29,25 @@ serve(async (req) => {
     
     if (match && match[1]) {
        user_id = match[1]; // Nehme die UserID direkt aus der Mail-Adresse!
-       
-       // Optional: Versuche die Methode aus dem Profil zu laden, scheitert aber nicht, wenn Profil leer ist.
-       const { data: profiles, error } = await supabase.from('profiles').select('inventory_valuation_method').eq('id', match[1]).limit(1)
-       if (profiles && profiles.length > 0) {
-           valuation_method = profiles[0].inventory_valuation_method || 'latest';
-       }
     }
 
     if (!user_id) {
        console.error("Critical fail: Regex failed to extract user ID from email 'to' address:", to)
        return new Response("User not found", { status: 400 })
     }
+
+    // Validate user exists and fetch valuation method
+    const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('id, inventory_valuation_method')
+        .eq('id', user_id)
+        .maybeSingle();
+
+    if (!userProfile) {
+        console.error("User ID not found in profiles:", user_id);
+        return new Response("User not found", { status: 404 });
+    }
+    valuation_method = userProfile.inventory_valuation_method || 'latest';
 
     const prompt = `
 Du analysierst E-Mails und Anhänge für ein Hotel-Bestellwesen.
@@ -109,6 +116,12 @@ Antworte ausschließlich als JSON:
     for (let i = 1; i <= attachmentsCount; i++) {
         const file = formData.get(`attachment${i}`) as File | null;
         if (file) {
+            const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10 MB
+            if (file.size > MAX_ATTACHMENT_SIZE) {
+                console.warn(`Attachment ${i} too large (${file.size} bytes), skipping`);
+                continue;
+            }
+
             const mimeType = file.type || 'application/octet-stream';
             console.log(`Attachment ${i} found: name=${file.name}, mimeType=${mimeType}, size=${file.size}`);
             // Wir erlauben PDFs und alle gängigen Bilder (Scans von Rechnungen)
@@ -147,10 +160,12 @@ Antworte ausschließlich als JSON:
     extractedJsonText = extractedJsonText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim()
     
     let parsedData: any = {}
+    let geminiError = false;
     try {
         parsedData = JSON.parse(extractedJsonText)
     } catch(e) {
         console.error("Error parsing JSON from Gemini:", e)
+        geminiError = true;
     }
 
     // Schreibe Log in inbound_emails
@@ -161,7 +176,7 @@ Antworte ausschließlich als JSON:
         subject: subject,
         body_text: bodyText || '',
         extracted_data: parsedData,
-        status: 'processed'
+        status: geminiError ? 'gemini_error' : 'processed'
     }).select('id').single()
     
     if (logErr) {
@@ -181,7 +196,7 @@ Antworte ausschließlich als JSON:
     const emailToMatch = parsedData.supplier_email?.trim();
     if (emailToMatch && emailToMatch !== 'hello@unbekannt.com') {
         const { data: emailMatch, error: emailErr } = await supabase.from('suppliers')
-             .select('id').eq('user_id', user_id).ilike('email', emailToMatch).limit(1);
+             .select('id, email, customer_number').eq('user_id', user_id).ilike('email', emailToMatch).limit(1);
         if (emailErr) console.error("Error querying supplier by email:", emailErr);
         if (emailMatch && emailMatch.length > 0) {
             existingSuppliers = emailMatch;
@@ -202,7 +217,7 @@ Antworte ausschließlich als JSON:
         }
 
         const { data: nameMatch, error: supErr } = await supabase.from('suppliers')
-            .select('id').eq('user_id', user_id).or(orQuery).limit(1);
+            .select('id, email, customer_number').eq('user_id', user_id).or(orQuery).limit(1);
         
         if (supErr) console.error("Error querying supplier by name:", supErr);
         if (nameMatch && nameMatch.length > 0) {
@@ -212,14 +227,15 @@ Antworte ausschließlich als JSON:
     }
 
     if (existingSuppliers && existingSuppliers.length > 0) {
-        supplier_id = existingSuppliers[0].id
+        const existingSupplier = existingSuppliers[0];
+        supplier_id = existingSupplier.id;
         console.log("Found existing supplier:", supplier_id);
         
         const updatePayload: any = {};
         if (parsedData.supplier_email && parsedData.supplier_email.trim() !== '' && parsedData.supplier_email !== 'hello@unbekannt.com') {
             updatePayload.email = parsedData.supplier_email;
         }
-        if (parsedData.customer_number && parsedData.customer_number.trim() !== '') {
+        if (parsedData.customer_number && parsedData.customer_number.trim() !== '' && !existingSupplier.customer_number) {
             updatePayload.customer_number = parsedData.customer_number;
         }
 
@@ -286,7 +302,7 @@ Antworte ausschließlich als JSON:
             // Stufe 2: Fangnetz für rein manuell angelegte Bestellungen (die noch keine Bestellnummer haben!)
             if (!existingOrder) {
                 const { data: openOrders } = await supabase.from('orders')
-                    .select('id, quantity, price, date').eq('user_id', user_id).eq('status', 'open').ilike('product_name', item.product_name).is('order_number', null).limit(1);
+                    .select('id, quantity, price, date').eq('user_id', user_id).eq('status', 'open').eq('supplier_name', supName).ilike('product_name', item.product_name).is('order_number', null).limit(1);
                 if (openOrders && openOrders.length > 0) {
                      existingOrder = openOrders[0];
                 }
@@ -351,6 +367,11 @@ Antworte ausschließlich als JSON:
             }
         }
         
+        if (!supplier_id) {
+            console.error(`Skipping product creation/update for ${item.product_name}: no valid supplier_id`);
+            continue;
+        }
+
         // Versuche das Produkt zu updaten (Preis) oder neu anzulegen
         const { data: existingProds, error: prodErr } = await supabase.from('products')
             .select('id, price, stock').eq('user_id', user_id).ilike('name', item.product_name).limit(1)
@@ -393,7 +414,8 @@ Antworte ausschließlich als JSON:
 
   } catch (error) {
     console.error(error)
-    return new Response(JSON.stringify({ error: error.message }), {
+    const msg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: msg }), {
       headers: { "Content-Type": "application/json" },
       status: 500,
     })
