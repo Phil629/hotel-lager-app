@@ -39,7 +39,7 @@ serve(async (req) => {
     // Validate user exists and fetch valuation method
     const { data: userProfile } = await supabase
         .from('profiles')
-        .select('id, inventory_valuation_method')
+        .select('id, inventory_valuation_method, company_id')
         .eq('id', user_id)
         .maybeSingle();
 
@@ -48,6 +48,7 @@ serve(async (req) => {
         return new Response("User not found", { status: 404 });
     }
     valuation_method = userProfile.inventory_valuation_method || 'latest';
+    const company_id = userProfile.company_id;
 
     const prompt = `
 Du analysierst E-Mails und Anhänge für ein Hotel-Bestellwesen.
@@ -187,6 +188,7 @@ Antworte ausschließlich als JSON:
     console.log("Attempting to insert into inbound_emails...");
     const { data: inboundLog, error: logErr } = await supabase.from('inbound_emails').insert({
         user_id: user_id,
+        company_id: company_id,
         supplier_name: fromAddress || '',
         subject: subject,
         body_text: bodyText || '',
@@ -276,6 +278,7 @@ Antworte ausschließlich als JSON:
         const { data: newSupp, error: newSupErr } = await supabase.from('suppliers').insert({
             id: crypto.randomUUID(),
             user_id: user_id,
+            company_id: company_id,
             name: supName,
             email: parsedData.supplier_email || 'hello@unbekannt.com',
             customer_number: parsedData.customer_number || null,
@@ -374,6 +377,7 @@ Antworte ausschließlich als JSON:
                 const { error: orderErr } = await supabase.from('orders').insert({
                      id: crypto.randomUUID(),
                      user_id: user_id,
+                     company_id: company_id,
                      product_name: item.product_name,
                      quantity: Math.round(Number(item.quantity)) || 1,
                      price: Number(item.price) || 0,
@@ -414,6 +418,7 @@ Antworte ausschließlich als JSON:
             const { error: newProdErr } = await supabase.from('products').insert({
                 id: crypto.randomUUID(),
                 user_id: user_id,
+                company_id: company_id,
                 name: item.product_name,
                 category: 'Importiert',
                 price: item.price || 0,

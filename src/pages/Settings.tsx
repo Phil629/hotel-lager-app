@@ -540,11 +540,11 @@ export const Settings: React.FC = () => {
                             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Deine Weiterleitungs-Adresse:</span>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <code style={{ flex: 1, padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: '4px', border: '1px solid var(--color-border)', color: 'var(--color-text-main)', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>
-                                    {/* W11: company_id-basierte Adresse statt user_id */}
-                                {userId ? `in-${userId.substring(0, 8)}@inbound.bestellwesen.com` : 'Lade...'}
+                                    {/* Full UUID address to prevent regex/lookup failures in Edge Function */}
+                                {userId ? `in-${userId}@inbound.bestellwesen.com` : 'Lade...'}
                                 </code>
                                 <button type="button" onClick={() => {
-                                    navigator.clipboard.writeText(`in-${userId.substring(0, 8)}@inbound.bestellwesen.com`);
+                                    navigator.clipboard.writeText(`in-${userId}@inbound.bestellwesen.com`);
                                     setNotification({ message: 'Adresse kopiert!', type: 'success' });
                                 }} className="btn btn-ghost">Kopieren</button>
                             </div>
