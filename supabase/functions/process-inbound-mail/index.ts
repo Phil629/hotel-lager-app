@@ -76,6 +76,7 @@ Regeln:
 7. In items dürfen KEINE Versandkosten, Pfand, Rabatte, Steuerzeilen, Leergut, Paletten oder Gebühren auftauchen.
 8. Wenn zu wenig Sicherheit besteht, document_type = "unknown".
 9. Extrahiere die Kundennummer des Hotels (customer_number) bei diesem Lieferanten, falls sie auf dem Beleg steht (oft als "Kd-Nr.", "Kunden-Nr." oder "Customer No.").
+10. WICHTIG zu 'product_name': Filtere alle Artikelnummern, EANs, SKUs und kryptischen Codes aus dem Produktnamen heraus! 'product_name' darf NUR den menschenlesbaren Namen enthalten (z.B. 'Aqua Senses 300ml Shampoo' statt 'AQS300SMAIO-26 Aqua Senses...'). Packe die Artikelnummer stattdessen in das Feld 'sku'.
 
 Metadaten:
 Betreff: ${subject}
@@ -93,7 +94,8 @@ Antworte ausschließlich als JSON:
   "order_reference": "string | null",
   "items": [
     {
-      "product_name": "string",
+      "product_name": "string (nur lesbarer Name)",
+      "sku": "string | null",
       "quantity": 1,
       "price": 0
     }
