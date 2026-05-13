@@ -133,12 +133,7 @@ export const Consumption: React.FC = () => {
 
     useEffect(() => { loadData(); }, []);
 
-    const toggleExpand = (id: string) =>
-        setExpandedRows(prev => {
-            const next = new Set(prev);
-            next.has(id) ? next.delete(id) : next.add(id);
-            return next;
-        });
+
 
     const handleToggleSuggestionExpand = (stat: ProductStat) => {
         const id = stat.product.id;
