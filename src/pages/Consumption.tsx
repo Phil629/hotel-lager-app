@@ -321,6 +321,24 @@ export const Consumption: React.FC = () => {
         } finally { setSaving(null); }
     };
 
+    // Aktiviert Autopilot direkt aus dem "Kein Autopilot"-Tab heraus —
+    // setzt den manuellen Wert UND stellt Bestellvorschläge wieder her.
+    const handleActivateFromIgnored = async (product: Product) => {
+        const edit = inlineEdits[product.id];
+        if (!edit || edit.amount === '') return;
+        setSaving(`inline-${product.id}`);
+        try {
+            await DataService.saveProduct({
+                ...product,
+                consumptionAmount: Number(edit.amount),
+                consumptionPeriod: edit.period,
+                lastConsumptionDate: new Date().toISOString(),
+                ignoreOrderProposals: false,
+            });
+            await loadData();
+        } finally { setSaving(null); }
+    };
+
     if (loading) return (
         <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Lade Autopilot-Daten…</div>
     );
@@ -493,7 +511,7 @@ export const Consumption: React.FC = () => {
                             <X size={14} /> Ignoriert
                         </div>
                         <div style={{ fontSize: '36px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{ignoredProducts.length}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>Vorschläge ausgeblendet</div>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>ohne Autopilot konfiguriert</div>
                     </div>
                 )}
             </div>
@@ -525,7 +543,7 @@ export const Consumption: React.FC = () => {
                     style={{ borderRadius: '0', borderBottom: activeTab === 'ignored' ? '2px solid var(--color-primary)' : '2px solid transparent', padding: '10px 16px', fontWeight: activeTab === 'ignored' ? 600 : 500, color: activeTab === 'ignored' ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
                     onClick={() => setActiveTab('ignored')}
                 >
-                    <X size={16} /> Archiviert
+                    <X size={16} /> Kein Autopilot
                     {ignoredProducts.length > 0 && (
                         <span className="badge badge-neutral" style={{ marginLeft: '6px' }}>{ignoredProducts.length}</span>
                     )}
@@ -704,11 +722,30 @@ export const Consumption: React.FC = () => {
                                                 </div>
                                             </td>
                                             <td onClick={e => e.stopPropagation()} style={{ textAlign: 'right' }}>
-                                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleIgnore(stat.product)} disabled={saving === stat.product.id || batchSaving} title="Dauerhaft ignorieren">
-                                                        <X size={13} /> Ignorieren
+                                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm"
+                                                        onClick={() => handleIgnore(stat.product)}
+                                                        disabled={saving === stat.product.id || batchSaving}
+                                                        title="Keinen Autopilot für dieses Produkt einrichten — Vorschlag dauerhaft ausblenden"
+                                                    >
+                                                        <X size={13} /> Kein Autopilot
                                                     </button>
-                                                    <button className="btn btn-success btn-sm" onClick={() => handleAdopt(stat)} disabled={saving === stat.product.id || batchSaving}>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm"
+                                                        onClick={() => handleToggleSuggestionExpand(stat)}
+                                                        disabled={saving === stat.product.id || batchSaving}
+                                                        title="Eigenen Wert eingeben statt KI-Vorschlag zu übernehmen"
+                                                        style={{ color: 'var(--color-primary)' }}
+                                                    >
+                                                        <Pencil size={13} /> Anpassen
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-success btn-sm"
+                                                        onClick={() => handleAdopt(stat)}
+                                                        disabled={saving === stat.product.id || batchSaving}
+                                                        title={`KI-Vorschlag direkt übernehmen: ${stat.suggestedWeekly} ${stat.product.unit}/Woche`}
+                                                    >
                                                         <CheckCircle2 size={13} /> Übernehmen
                                                     </button>
                                                 </div>
@@ -796,9 +833,9 @@ export const Consumption: React.FC = () => {
                                                         className="btn btn-ghost btn-sm"
                                                         disabled={isSavingThis}
                                                         onClick={() => handleIgnore(p)}
-                                                        title="Aus Liste entfernen"
+                                                        title="Kein Autopilot für dieses Produkt"
                                                     >
-                                                        <X size={13} /> Ignorieren
+                                                        <X size={13} /> Kein Autopilot
                                                     </button>
                                                     <button
                                                         className="btn btn-primary btn-sm"
@@ -823,37 +860,89 @@ export const Consumption: React.FC = () => {
             {/* ── IGNORED TAB CONTENT ── */}
             {activeTab === 'ignored' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2xl)' }}>
-                    {/* ── Ignored Products ── */}
                     {ignoredProducts.length > 0 ? (
                         <div className="card" style={{ overflow: 'hidden' }}>
                             <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <X size={16} color="var(--color-text-secondary)" /> Archivierte Produkte
-                                </h3>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <X size={16} color="var(--color-text-secondary)" /> Kein Autopilot
+                                    </h3>
+                                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '3px' }}>
+                                        Trage hier direkt einen eigenen Wert ein, um den Autopilot doch noch zu aktivieren — ohne Umweg über KI-Vorschläge.
+                                    </div>
+                                </div>
                                 <SortSelect value={sortIgnoredBy} onChange={setSortIgnoredBy} />
                             </div>
-                            <div>
-                            {ignoredProducts.map(p => (
-                                <div key={p.id} style={{ padding: '12px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                                    <div>
-                                        <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{p.name}</div>
-                                        {p.category && <div style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
-                                    </div>
-                                    <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={() => handleRestore(p)}
-                                        disabled={saving === p.id}
-                                        title="Vorschlag wieder aktivieren"
-                                    >
-                                        <RotateCcw size={13} /> Wiederherstellen
-                                    </button>
-                                </div>
-                            ))}
-                            </div>
+                            <table className="products-table">
+                                <thead>
+                                    <tr>
+                                        <th>Produkt</th>
+                                        <th style={{ width: '120px' }}>Menge</th>
+                                        <th style={{ width: '140px' }}>Zeitraum</th>
+                                        <th style={{ textAlign: 'right' }}>Aktion</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {ignoredProducts.map(p => {
+                                        const edit = inlineEdits[p.id] ?? { amount: '', period: 'week' as const };
+                                        const isSavingThis = saving === `inline-${p.id}`;
+                                        const canActivate = edit.amount !== '' && Number(edit.amount) > 0;
+                                        return (
+                                            <tr key={p.id}>
+                                                <td>
+                                                    <div style={{ fontWeight: 500, color: 'var(--color-text-main)' }}>{p.name}</div>
+                                                    {p.category && <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        step="0.1"
+                                                        placeholder={p.unit}
+                                                        value={edit.amount}
+                                                        onChange={e => setInlineEdits(prev => ({ ...prev, [p.id]: { ...edit, amount: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                                                        style={{ width: '100%', padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-main)', fontSize: '13px' }}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <select
+                                                        value={edit.period}
+                                                        onChange={e => setInlineEdits(prev => ({ ...prev, [p.id]: { ...edit, period: e.target.value as 'day' | 'week' } }))}
+                                                        style={{ width: '100%', padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-main)', fontSize: '13px' }}
+                                                    >
+                                                        <option value="week">pro Woche</option>
+                                                        <option value="day">pro Tag</option>
+                                                    </select>
+                                                </td>
+                                                <td style={{ textAlign: 'right' }}>
+                                                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                                        <button
+                                                            className="btn btn-ghost btn-sm"
+                                                            onClick={() => handleRestore(p)}
+                                                            disabled={saving === p.id || isSavingThis}
+                                                            title="Zurück zu KI-Vorschlägen — der Vorschlag erscheint erneut im Tab 'Einrichten'"
+                                                        >
+                                                            <RotateCcw size={13} /> Zurück zu Vorschlägen
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-primary btn-sm"
+                                                            disabled={!canActivate || isSavingThis}
+                                                            onClick={() => handleActivateFromIgnored(p)}
+                                                            title="Autopilot mit eigenem Wert aktivieren"
+                                                        >
+                                                            <CheckCircle2 size={13} /> {isSavingThis ? 'Aktiviere…' : 'Aktivieren'}
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                     ) : (
                         <div style={{ padding: 'var(--spacing-xl)' }}>
-                            <EmptyState icon={X} title="Keine ignorierten Vorschläge" text="Hier findest du zukünftig Produkte, bei denen du den KI-Vorschlag abgelehnt hast." />
+                            <EmptyState icon={X} title="Keine Produkte ohne Autopilot" text="Produkte, bei denen du 'Kein Autopilot' gewählt hast, erscheinen hier. Du kannst ihnen direkt einen eigenen Verbrauchswert geben." />
                         </div>
                     )}
                 </div>

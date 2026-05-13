@@ -41,6 +41,7 @@ const timeAgo = (dateStr: string): string => {
 const KiStatusBadge: React.FC<{ status: string }> = ({ status }) => {
     if (status === 'processed') return <span className="badge badge-success">Erfolgreich</span>;
     if (status === 'gemini_error') return <span className="badge badge-danger">KI-Fehler</span>;
+    if (status === 'processed_duplicate') return <span className="badge badge-warning" title="Bestellung war bereits vorhanden">Duplikat</span>;
     return <span className="badge badge-neutral">{status}</span>;
 };
 

@@ -329,6 +329,9 @@ Antworte ausschließlich als JSON:
     const docType = parsedData.document_type || 'unknown';
     console.log(`Document type: ${docType}. Should create order? ${shouldCreateOrder}`);
 
+    let createdOrdersCount = 0;
+    let updatedOrdersCount = 0;
+
     // Aktualisiere oder Lege Produkte an
     const items = parsedData.items || []
     console.log(`Found ${items.length} items to process.`);
@@ -368,6 +371,7 @@ Antworte ausschließlich als JSON:
             }
             
             if (existingOrder) {
+                 updatedOrdersCount++;
                  console.log(`Open order for ${item.product_name} already exists. Updating it...`);
                  
                  const aiQuantity = Math.round(Number(item.quantity)) || 1;
@@ -405,6 +409,7 @@ Antworte ausschließlich als JSON:
                  else console.log("Order updated with AI revisions");
                  
             } else {
+                 createdOrdersCount++;
                 // Keine passende manuelle Bestellung gefunden -> Komplett neu anlegen
                 const { error: orderErr } = await supabase.from('orders').insert({
                      id: crypto.randomUUID(),
@@ -464,6 +469,10 @@ Antworte ausschließlich als JSON:
         } else {
             console.warn(`Skipping new product creation for "${item.product_name}": no valid supplier_id`);
         }
+    }
+
+    if (shouldCreateOrder && createdOrdersCount === 0 && updatedOrdersCount > 0 && inboundLog?.id) {
+        await supabase.from('inbound_emails').update({ status: 'processed_duplicate' }).eq('id', inboundLog.id);
     }
 
     return new Response(JSON.stringify({ success: true, message: 'Processed successfully' }), {
