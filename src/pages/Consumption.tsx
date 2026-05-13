@@ -125,6 +125,7 @@ export const Consumption: React.FC = () => {
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
     const [inlineEdits, setInlineEdits] = useState<Record<string, InlineEdit>>({});
     const [showManualSection, setShowManualSection] = useState(false);
+    const [showIgnoredSection, setShowIgnoredSection] = useState(false);
 
     const loadData = async () => {
         const [p, o] = await Promise.all([DataService.getProducts(), DataService.getOrders()]);
@@ -461,6 +462,35 @@ export const Consumption: React.FC = () => {
                 )}
             </div>
 
+            {/* ── Anomalies ── */}
+            {anomalies.length > 0 && (
+                <div className="card" style={{ overflow: 'hidden' }}>
+                    <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-warning-bg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertTriangle size={16} color="var(--color-warning)" />
+                        <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)' }}>Auffälligkeiten / Anomalien</h3>
+                        <span className="badge badge-warning" style={{ marginLeft: 'auto' }}>{anomalies.length}</span>
+                    </div>
+                    <div>
+                        {anomalies.map(({ product: p, autoWeekly, actualWeekly, ratio }) => (
+                            <div key={p.id} style={{ padding: '16px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                                <AlertTriangle size={18} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>{p.name}</div>
+                                    <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                                        {ratio > 1
+                                            ? <>Du bestellst <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot zieht nur <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Lagerbestand wird dadurch höher ausgewiesen als er tatsächlich ist.</>
+                                            : <>Du bestellst nur <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot zieht <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Bestand könnte rechnerisch unter 0 fallen.</>}
+                                    </div>
+                                </div>
+                                <span className={ratio > 1 ? 'badge badge-warning' : 'badge badge-danger'} style={{ flexShrink: 0 }}>
+                                    {ratio > 1 ? '+' : ''}{((ratio - 1) * 100).toFixed(0)}%
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* ── KI Suggestions (expandable) ── */}
             <div className="card" style={{ overflow: 'hidden' }}>
                 <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -617,66 +647,6 @@ export const Consumption: React.FC = () => {
                 )}
             </div>
 
-            {/* ── Anomalies ── */}
-            {anomalies.length > 0 && (
-                <div className="card" style={{ overflow: 'hidden' }}>
-                    <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-warning-bg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <AlertTriangle size={16} color="var(--color-warning)" />
-                        <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)' }}>Auffälligkeiten / Anomalien</h3>
-                        <span className="badge badge-warning" style={{ marginLeft: 'auto' }}>{anomalies.length}</span>
-                    </div>
-                    <div>
-                        {anomalies.map(({ product: p, autoWeekly, actualWeekly, ratio }) => (
-                            <div key={p.id} style={{ padding: '16px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
-                                <AlertTriangle size={18} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '2px' }} />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>{p.name}</div>
-                                    <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                                        {ratio > 1
-                                            ? <>Du bestellst <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot zieht nur <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Lagerbestand wird dadurch höher ausgewiesen als er tatsächlich ist.</>
-                                            : <>Du bestellst nur <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot zieht <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Bestand könnte rechnerisch unter 0 fallen.</>}
-                                    </div>
-                                </div>
-                                <span className={ratio > 1 ? 'badge badge-warning' : 'badge badge-danger'} style={{ flexShrink: 0 }}>
-                                    {ratio > 1 ? '+' : ''}{((ratio - 1) * 100).toFixed(0)}%
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* ── Ignored Products ── */}
-            {ignoredProducts.length > 0 && (
-                <div className="card" style={{ overflow: 'hidden' }}>
-                    <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <X size={15} color="var(--color-text-muted)" />
-                        <h3 style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-secondary)' }}>
-                            Ignorierte Vorschläge
-                        </h3>
-                        <span className="badge badge-neutral" style={{ marginLeft: 'auto' }}>{ignoredProducts.length}</span>
-                    </div>
-                    <div>
-                        {ignoredProducts.map(p => (
-                            <div key={p.id} style={{ padding: '12px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                                <div>
-                                    <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{p.name}</div>
-                                    {p.category && <div style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
-                                </div>
-                                <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() => handleRestore(p)}
-                                    disabled={saving === p.id}
-                                    title="Vorschlag wieder aktivieren"
-                                >
-                                    <RotateCcw size={13} /> Wiederherstellen
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
             {/* ── Manuell konfigurieren ── */}
             {manualProducts.length > 0 && (
                 <div className="card" style={{ overflow: 'hidden' }}>
@@ -751,6 +721,47 @@ export const Consumption: React.FC = () => {
                                 })}
                             </tbody>
                         </table>
+                    )}
+                </div>
+            )}
+
+            {/* ── Ignored Products ── */}
+            {ignoredProducts.length > 0 && (
+                <div className="card" style={{ overflow: 'hidden' }}>
+                    <div 
+                        style={{ padding: '14px var(--spacing-xl)', borderBottom: showIgnoredSection ? '1px solid var(--color-border)' : undefined, backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                        onClick={() => setShowIgnoredSection(v => !v)}
+                    >
+                        <X size={15} color="var(--color-text-muted)" />
+                        <h3 style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-secondary)' }}>
+                            Ignorierte Vorschläge
+                        </h3>
+                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span className="badge badge-neutral">{ignoredProducts.length}</span>
+                            {showIgnoredSection
+                                ? <ChevronDown size={16} color="var(--color-text-muted)" />
+                                : <ChevronRight size={16} color="var(--color-text-muted)" />}
+                        </div>
+                    </div>
+                    {showIgnoredSection && (
+                        <div>
+                            {ignoredProducts.map(p => (
+                                <div key={p.id} style={{ padding: '12px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                                    <div>
+                                        <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{p.name}</div>
+                                        {p.category && <div style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
+                                    </div>
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => handleRestore(p)}
+                                        disabled={saving === p.id}
+                                        title="Vorschlag wieder aktivieren"
+                                    >
+                                        <RotateCcw size={13} /> Wiederherstellen
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </div>
             )}
