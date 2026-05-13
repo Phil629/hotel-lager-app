@@ -217,10 +217,10 @@ export const Consumption: React.FC = () => {
 
     // ── Derived lists ────────────────────────────────────────────────────────
 
-    const sortProducts = <T extends { product?: Product } | Product>(list: T[], sortBy: 'name' | 'price' | 'category' | 'supplier') => {
+    const sortProducts = <T extends { product: Product } | Product>(list: T[], sortBy: 'name' | 'price' | 'category' | 'supplier') => {
         return [...list].sort((a, b) => {
-            const pA = 'product' in a ? a.product : a;
-            const pB = 'product' in b ? b.product : b;
+            const pA = ('product' in a ? a.product : a) as Product;
+            const pB = ('product' in b ? b.product : b) as Product;
             
             if (sortBy === 'price') {
                 return (pB.price || 0) - (pA.price || 0);
@@ -847,6 +847,7 @@ export const Consumption: React.FC = () => {
                                     </button>
                                 </div>
                             ))}
+                            </div>
                         </div>
                     ) : (
                         <div style={{ padding: 'var(--spacing-xl)' }}>

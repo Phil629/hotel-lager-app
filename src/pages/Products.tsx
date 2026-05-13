@@ -849,23 +849,23 @@ export const Products: React.FC = () => {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <table className="products-table">
+                                                <table className="products-table" style={{ tableLayout: 'fixed' }}>
                                                     <thead>
                                                         <tr>
-                                                            <th></th>
-                                                            <th className="sortable" onClick={() => handleSort('name')}>
+                                                            <th style={{ width: '60px' }}></th>
+                                                            <th className="sortable" onClick={() => handleSort('name')} style={{ width: '35%' }}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                                     Name {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={13} style={{ opacity: 0.3 }} />}
                                                                 </div>
                                                             </th>
-                                                            <th className="sortable" onClick={() => handleSort('stock')}>
+                                                            <th className="sortable" onClick={() => handleSort('stock')} style={{ width: '20%' }}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                                     Bestand & Wert {sortConfig.key === 'stock' ? (sortConfig.direction === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={13} style={{ opacity: 0.3 }} />}
                                                                 </div>
                                                             </th>
-                                                            <th>Kontakt / Links</th>
-                                                            <th style={{ textAlign: 'center' }}>Bestellen</th>
-                                                            <th></th>
+                                                            <th style={{ width: '20%' }}>Kontakt / Links</th>
+                                                            <th style={{ textAlign: 'center', width: '130px' }}>Bestellen</th>
+                                                            <th style={{ width: '90px' }}></th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
