@@ -559,7 +559,7 @@ export const Products: React.FC = () => {
 
     const filteredProducts = useMemo(() => products.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesLowStock = showLowStockOnly ? Number(p.stock) <= Number(p.minStock || 0) : true;
+        const matchesLowStock = showLowStockOnly ? (Number(p.minStock) > 0 && Number(p.stock) <= Number(p.minStock)) : true;
         return matchesSearch && matchesLowStock;
     }).sort((a, b) => {
         if (!sortConfig.key) return 0;
@@ -584,7 +584,7 @@ export const Products: React.FC = () => {
         [products]
     );
     const lowStockCount = useMemo(
-        () => products.filter(p => Number(p.stock) <= Number(p.minStock || 0)).length,
+        () => products.filter(p => Number(p.minStock) > 0 && Number(p.stock) <= Number(p.minStock)).length,
         [products]
     );
 
@@ -784,7 +784,7 @@ export const Products: React.FC = () => {
                                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' }}>
                                                                 <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                                                                     <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Bestand</div>
-                                                                    <div style={{ fontSize: '20px', fontWeight: 800, color: Number(product.stock) <= Number(product.minStock || 0) ? '#dc2626' : 'var(--color-text-main)' }}>
+                                                                    <div style={{ fontSize: '20px', fontWeight: 800, color: (Number(product.minStock) > 0 && Number(product.stock) <= Number(product.minStock)) ? '#dc2626' : 'var(--color-text-main)' }}>
                                                                         {product.stock}
                                                                     </div>
                                                                     {(() => {
@@ -797,7 +797,7 @@ export const Products: React.FC = () => {
                                                                                     </span>
                                                                                 </div>
                                                                             );
-                                                                        } else if (Number(product.stock) <= Number(product.minStock || 0)) {
+                                                                        } else if (Number(product.minStock) > 0 && Number(product.stock) <= Number(product.minStock)) {
                                                                             return (
                                                                                 <div style={{ marginTop: '4px' }}>
                                                                                     <span className="badge badge-danger" style={{ fontSize: '10px' }}>
@@ -872,7 +872,7 @@ export const Products: React.FC = () => {
                                                         {visibleProds.map((product, index) => {
                                                             const isLastRows = index >= visibleProds.length - 2 && visibleProds.length > 3;
                                                             const openOrder = orders.find(o => o.productName === product.name && o.status === 'open');
-                                                            const isLowStock = Number(product.stock) <= Number(product.minStock || 0);
+                                                            const isLowStock = Number(product.minStock) > 0 && Number(product.stock) <= Number(product.minStock);
                                                             return (
                                                                 <tr key={product.id} className={isLowStock && !openOrder ? 'row-low-stock' : ''}>
                                                                     <td>
@@ -1266,7 +1266,7 @@ export const Products: React.FC = () => {
                                                     <div className="form-group">
                                                         <label className="form-label">Meldebestand (Untergrenze)</label>
                                                         <input type="number" value={newProduct.minStock || 0} onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })} className="input-field" />
-                                                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>Ab hier schlägt der Autopilot an.</span>
+                                                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>0 = keine Bestandswarnung.</span>
                                                     </div>
                                                     <div className="form-group">
                                                         <label className="form-label">Standard Bestellmenge</label>

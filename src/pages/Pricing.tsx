@@ -5,7 +5,7 @@ import { StorageService } from '../services/storage';
 import {
     TrendingUp, TrendingDown, Euro, Package, AlertTriangle, Download, X,
     Filter, PiggyBank, Plus, Trash2, Search, ChevronDown, ChevronRight,
-    Users, ShoppingCart, BarChart2, Bot, Layers,
+    Users, ShoppingCart, BarChart2, Layers,
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -43,16 +43,7 @@ const TYPE_BADGE:   Record<string, string> = { category: 'badge-primary', produc
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f97316', '#ec4899'];
-const KI_CAT_NAMES = new Set(['importiert', 'Importiert', 'KI-Import', 'KI-Import (E-Mail)', 'ki-import']);
-
 const fmt = (v: number, cur: string) => v.toLocaleString('de-DE', { style: 'currency', currency: cur });
-const isKiCat = (c: string | null | undefined) => !!c && KI_CAT_NAMES.has(c);
-
-const KiCatBadge = () => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', backgroundColor: 'rgba(59,130,246,0.12)', color: 'var(--color-primary)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontSize: '11px', fontWeight: 600 }}>
-        <Bot size={10} /> KI-Import (E-Mail)
-    </span>
-);
 
 const EmptyState = ({ icon: Icon, title, text }: { icon: React.ElementType; title: string; text: string }) => (
     <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--color-text-muted)', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-lg)' }}>
@@ -74,7 +65,7 @@ const CTooltip = ({ active, payload, label, currency }: { active?: boolean; payl
 
 const PTooltip = ({ active, payload, currency }: { active?: boolean; payload?: { name: string; value: number }[]; currency: string }) => {
     if (!active || !payload?.length) return null;
-    const name = isKiCat(payload[0].name) ? 'KI-Import (E-Mail)' : payload[0].name;
+    const name = payload[0].name;
     return (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', boxShadow: 'var(--shadow-md)' }}>
             <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>{name}</div>
@@ -233,7 +224,7 @@ export const Pricing: React.FC = () => {
         const map: Record<string, number> = {};
         filteredOrders.forEach(o => {
             const p = products.find(pr => pr.name === o.productName);
-            const cat = isKiCat(p?.category) ? 'KI-Import (E-Mail)' : (p?.category || 'Ohne Kategorie');
+            const cat = p?.category || 'Ohne Kategorie';
             map[cat] = (map[cat] || 0) + o.quantity * (o.price ?? p?.price ?? 0);
         });
         const entries = Object.entries(map).map(([name, v]) => ({ name, value: Math.round(v * 100) / 100 })).sort((a, b) => b.value - a.value);
@@ -433,7 +424,7 @@ export const Pricing: React.FC = () => {
                 </select>
                 <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="input-field" style={{ flex: '1 1 150px', padding: '7px 10px' }}>
                     <option value="">Alle Kategorien</option>
-                    {categories.map(c => <option key={c} value={c}>{isKiCat(c) ? '🤖 KI-Import (E-Mail)' : c}</option>)}
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select value={supplierFilter} onChange={e => setSupplierFilter(e.target.value)} className="input-field" style={{ flex: '1 1 150px', padding: '7px 10px' }}>
                     <option value="">Alle Lieferanten</option>
@@ -529,7 +520,7 @@ export const Pricing: React.FC = () => {
                                     <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
                                         <div style={{ width: '9px', height: '9px', borderRadius: '2px', backgroundColor: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
                                         <span style={{ flex: 1, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {isKiCat(entry.name) ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Bot size={10} color="var(--color-primary)" />KI-Import (E-Mail)</span> : entry.name}
+                                            {entry.name}
                                         </span>
                                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 600, minWidth: '36px', textAlign: 'right' }}>{pieTotalVal > 0 ? (entry.value / pieTotalVal * 100).toFixed(0) : 0}%</span>
                                         <span style={{ color: 'var(--color-text-faint)', minWidth: '72px', textAlign: 'right' }}>{fmt(entry.value, currency)}</span>
@@ -552,7 +543,7 @@ export const Pricing: React.FC = () => {
                                 return (
                                     <div key={cat.name} style={{ display: 'grid', gridTemplateColumns: '190px 1fr 110px', alignItems: 'center', gap: '12px' }}>
                                         <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {isKiCat(cat.name) ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Bot size={11} color="var(--color-primary)" />KI-Import (E-Mail)</span> : cat.name}
+                                            {cat.name}
                                         </div>
                                         <div style={{ position: 'relative', height: '8px', backgroundColor: 'var(--color-border)', borderRadius: '4px', overflow: 'hidden' }}>
                                             <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, backgroundColor: PIE_COLORS[i % PIE_COLORS.length], borderRadius: '4px', transition: 'width 0.4s ease' }} />
@@ -582,7 +573,7 @@ export const Pricing: React.FC = () => {
                                             </td>
                                             <td>
                                                 <div style={{ fontWeight: 500 }}>{p.name}</div>
-                                                {p.category && <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{isKiCat(p.category) ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}><Bot size={9} color="var(--color-primary)" />KI-Import</span> : p.category}</div>}
+                                                {p.category && <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
                                             </td>
                                             <td style={{ textAlign: 'right', color: 'var(--color-text-muted)', fontSize: '13px' }}>{p.filteredQty} {p.unit}</td>
                                             <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(p.filteredSpend, currency)}</td>
@@ -645,7 +636,7 @@ export const Pricing: React.FC = () => {
                                                     </td>
                                                     <td>
                                                         {stat.product.category
-                                                            ? (isKiCat(stat.product.category) ? <KiCatBadge /> : <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{stat.product.category}</span>)
+                                                            ? <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{stat.product.category}</span>
                                                             : <span style={{ color: 'var(--color-text-faint)', fontSize: '12px' }}>—</span>}
                                                     </td>
                                                     <td style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{stat.supplierName}</td>
@@ -890,7 +881,7 @@ export const Pricing: React.FC = () => {
                                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>{TYPE_LABEL[draft.type]} auswählen</label>
                                 <select value={draft.key} onChange={e => { const v = e.target.value; const l = draft.type === 'supplier' ? (suppliers.find(s => s.id === v)?.name ?? v) : v; setDraft(p => ({ ...p, key: v, label: l })); }} className="input-field" style={{ width: '100%', padding: '8px 12px' }}>
                                     <option value="">— bitte wählen —</option>
-                                    {draft.type === 'category' && categories.map(c => <option key={c} value={c}>{isKiCat(c) ? '🤖 KI-Import (E-Mail)' : c}</option>)}
+                                    {draft.type === 'category' && categories.map(c => <option key={c} value={c}>{c}</option>)}
                                     {draft.type === 'product'  && products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                     {draft.type === 'supplier' && suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
