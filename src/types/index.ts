@@ -43,6 +43,7 @@ export interface Supplier {
   orderPhone?: string;
   orderUrl?: string;
   ignoreOrderProposals?: boolean;
+  customerNumber?: string; // e.g. "Kd-Nr. 12345"
 }
 
 export interface Product {

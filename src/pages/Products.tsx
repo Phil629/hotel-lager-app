@@ -1326,6 +1326,10 @@ export const Products: React.FC = () => {
                                                         <input type="email" placeholder="Wenn leer: Lieferanten-Email" value={newProduct.emailOrderAddress || ''} onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })} className="input-field" />
                                                     </div>
                                                 </div>
+                                                <div className="form-group" style={{ marginTop: 'var(--spacing-md)' }}>
+                                                    <label className="form-label">Direkte Bestell-Telefonnummer</label>
+                                                    <input type="tel" placeholder="Wenn leer: Lieferanten-Telefon" value={newProduct.supplierPhone || ''} onChange={e => setNewProduct({ ...newProduct, supplierPhone: e.target.value })} className="input-field" />
+                                                </div>
                                             </div>
 
                                             {/* Section: E-Mail Vorlage */}
@@ -1621,6 +1625,26 @@ export const Products: React.FC = () => {
                                                     <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                 )}
                                             </label>
+                                            
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px', padding: '12px', backgroundColor: 'white', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--color-border)' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                    <span style={{ color: 'var(--color-text-muted)' }}>Menge zu bestellen:</span>
+                                                    <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{orderCart.find(c => c.product.id === selectedProductForOrder.id)?.quantity || 1} {selectedProductForOrder.unit}</span>
+                                                </div>
+                                                {selectedProductForOrder.productNumber && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                        <span style={{ color: 'var(--color-text-muted)' }}>Produktnummer:</span>
+                                                        <span style={{ fontWeight: 600 }}>{selectedProductForOrder.productNumber}</span>
+                                                    </div>
+                                                )}
+                                                {suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.customerNumber && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                        <span style={{ color: 'var(--color-text-muted)' }}>Eigene Kundennr.:</span>
+                                                        <span style={{ fontWeight: 600 }}>{suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.customerNumber}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
                                             <a
                                                 href={`tel:${selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone}`}
                                                 style={{
@@ -1631,8 +1655,8 @@ export const Products: React.FC = () => {
                                                     padding: 'var(--spacing-sm)',
                                                     borderRadius: 'var(--radius-sm)',
                                                     border: '1px solid var(--color-border)',
-                                                    backgroundColor: 'var(--color-surface)',
-                                                    color: 'var(--color-text-main)',
+                                                    backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'phone' ? 'var(--color-primary)' : 'var(--color-surface)',
+                                                    color: getEffectiveOrderMethod(selectedProductForOrder) === 'phone' ? 'white' : 'var(--color-text-main)',
                                                     cursor: 'pointer',
                                                     fontWeight: 500,
                                                     textDecoration: 'none'
@@ -1640,7 +1664,7 @@ export const Products: React.FC = () => {
                                             >
                                                 <Phone size={16} />
                                                 {selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone}
-                                                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>(Anrufen)</span>
+                                                <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.8 }}>(Anrufen)</span>
                                             </a>
                                         </div>
                                     )}

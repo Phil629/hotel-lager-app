@@ -147,7 +147,8 @@ export const Suppliers: React.FC = () => {
                 orderEmail: formData.orderEmail,
                 orderPhone: formData.orderPhone,
                 orderUrl: formData.orderUrl,
-                ignoreOrderProposals: formData.ignoreOrderProposals
+                ignoreOrderProposals: formData.ignoreOrderProposals,
+                customerNumber: formData.customerNumber
             } as Supplier;
 
             await DataService.saveSupplier(supplierToSave);
@@ -355,6 +356,10 @@ export const Suppliers: React.FC = () => {
                                                 <label className="form-label">Webseite / Portal URL</label>
                                                 <input type="text" value={formData.url || ''} onChange={e => setFormData({ ...formData, url: e.target.value })} className="input-field" placeholder="www.beispiel.de" />
                                             </div>
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Kundennummer (bei diesem Lieferanten)</label>
+                                            <input type="text" value={formData.customerNumber || ''} onChange={e => setFormData({ ...formData, customerNumber: e.target.value })} className="input-field" placeholder="z.B. Kd-Nr. 123456" />
                                         </div>
                                         <div className="form-group">
                                             <label className="form-label">Standard Bestellweg</label>

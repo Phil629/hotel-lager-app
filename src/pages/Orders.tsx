@@ -2453,6 +2453,7 @@ export const Orders: React.FC = () => {
                                                             const emailAddr = supp?.email || prod.emailOrderAddress || '';
                                                             let btnText = "Bestellen";
                                                             if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) btnText = "🔗 Im Tab bestellen";
+                                                            else if (prod.preferredOrderMethod === 'phone') btnText = "📞 Anrufen & Bestellen";
                                                             else if (prod.preferredOrderMethod === 'email' || emailAddr) btnText = "📧 E-Mail öffnen";
 
                                                             return (
@@ -2514,6 +2515,24 @@ export const Orders: React.FC = () => {
                                                                                         style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
                                                                                         {btnText}
                                                                                     </a>
+                                                                                );
+                                                                            } else if (btnText === '📞 Anrufen & Bestellen') {
+                                                                                const phoneNum = prod.supplierPhone || supp?.orderPhone || supp?.phone || '';
+                                                                                return (
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                                                                                        {(prod.productNumber || supp?.customerNumber) && (
+                                                                                            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textAlign: 'right', display: 'flex', gap: '8px' }}>
+                                                                                                {prod.productNumber && <span>Art-Nr: <strong style={{ color: 'var(--color-text-main)' }}>{prod.productNumber}</strong></span>}
+                                                                                                {supp?.customerNumber && <span>Kd-Nr: <strong style={{ color: 'var(--color-text-main)' }}>{supp.customerNumber}</strong></span>}
+                                                                                            </div>
+                                                                                        )}
+                                                                                        <a 
+                                                                                            href={`tel:${phoneNum}`}
+                                                                                            onClick={() => executeProposalDbSave(prop)}
+                                                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                            <Phone size={16} /> {phoneNum || btnText}
+                                                                                        </a>
+                                                                                    </div>
                                                                                 );
                                                                             } else {
                                                                                 return (
