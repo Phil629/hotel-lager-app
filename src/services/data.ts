@@ -289,6 +289,12 @@ export const DataService = {
     async deleteSupplier(id: string): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;
+        // Unlink products first to avoid FK constraint violation
+        const { error: unlinkError } = await supabase
+            .from('products')
+            .update({ supplier_id: null })
+            .eq('supplier_id', id);
+        if (unlinkError) throw unlinkError;
         const { error } = await supabase.from('suppliers').delete().eq('id', id);
         if (error) throw error;
     },

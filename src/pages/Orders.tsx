@@ -584,10 +584,13 @@ export const Orders: React.FC = () => {
             if (product.stock <= min) {
                 const standardQty = product.standardOrderQuantity ? product.standardOrderQuantity : (min > 0 ? min * 2 : 1);
                 
-                const openOrdersForProduct = orders.filter(o => o.status === 'open' && o.productName === product.name);
-                const openQuantity = openOrdersForProduct.reduce((sum, o) => sum + (o.quantity || 0), 0);
-                
-                const needed = standardQty - openQuantity;
+                const productNameLower = product.name.toLowerCase();
+                const openOrdersForProduct = orders.filter(o =>
+                    o.status === 'open' && o.productName.toLowerCase() === productNameLower
+                );
+                if (openOrdersForProduct.length > 0) continue;
+
+                const needed = standardQty;
                 if (needed > 0) {
                     const supplier = suppliers.find(s => s.id === product.supplierId);
                     proposals.push({
@@ -595,7 +598,7 @@ export const Orders: React.FC = () => {
                         supplierName: supplier ? supplier.name : 'Kein Lieferant',
                         supplierId: product.supplierId || 'unassigned',
                         quantity: needed,
-                        openQty: openQuantity,
+                        openQty: 0,
                         selected: true
                     });
                 }

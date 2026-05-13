@@ -125,7 +125,7 @@ export const Consumption: React.FC = () => {
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
     const [inlineEdits, setInlineEdits] = useState<Record<string, InlineEdit>>({});
     const [showManualSection, setShowManualSection] = useState(false);
-    const [showIgnoredSection, setShowIgnoredSection] = useState(false);
+    const [activeTab, setActiveTab] = useState<'setup' | 'active' | 'ignored'>('setup');
 
     const loadData = async () => {
         const [p, o] = await Promise.all([DataService.getProducts(), DataService.getOrders()]);
@@ -462,7 +462,44 @@ export const Consumption: React.FC = () => {
                 )}
             </div>
 
-            {/* ── Anomalies ── */}
+            {/* ── Tabs Navigation ── */}
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--color-border)', paddingBottom: '0', marginBottom: 'var(--spacing-md)' }}>
+                <button
+                    className={`btn btn-ghost ${activeTab === 'setup' ? 'btn-active' : ''}`}
+                    style={{ borderRadius: '0', borderBottom: activeTab === 'setup' ? '2px solid var(--color-primary)' : '2px solid transparent', padding: '10px 16px', fontWeight: activeTab === 'setup' ? 600 : 500, color: activeTab === 'setup' ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+                    onClick={() => setActiveTab('setup')}
+                >
+                    <Bot size={16} /> Einrichten
+                    {(suggestions.length > 0 || manualProducts.length > 0) && (
+                        <span className="badge badge-neutral" style={{ marginLeft: '6px' }}>{suggestions.length + manualProducts.length}</span>
+                    )}
+                </button>
+                <button
+                    className={`btn btn-ghost ${activeTab === 'active' ? 'btn-active' : ''}`}
+                    style={{ borderRadius: '0', borderBottom: activeTab === 'active' ? '2px solid var(--color-primary)' : '2px solid transparent', padding: '10px 16px', fontWeight: activeTab === 'active' ? 600 : 500, color: activeTab === 'active' ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+                    onClick={() => setActiveTab('active')}
+                >
+                    <Zap size={16} /> Laufend
+                    {activePilots.length > 0 && (
+                        <span className="badge badge-neutral" style={{ marginLeft: '6px' }}>{activePilots.length}</span>
+                    )}
+                </button>
+                <button
+                    className={`btn btn-ghost ${activeTab === 'ignored' ? 'btn-active' : ''}`}
+                    style={{ borderRadius: '0', borderBottom: activeTab === 'ignored' ? '2px solid var(--color-primary)' : '2px solid transparent', padding: '10px 16px', fontWeight: activeTab === 'ignored' ? 600 : 500, color: activeTab === 'ignored' ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+                    onClick={() => setActiveTab('ignored')}
+                >
+                    <X size={16} /> Archiviert
+                    {ignoredProducts.length > 0 && (
+                        <span className="badge badge-neutral" style={{ marginLeft: '6px' }}>{ignoredProducts.length}</span>
+                    )}
+                </button>
+            </div>
+
+            {/* ── ACTIVE TAB CONTENT ── */}
+            {activeTab === 'active' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2xl)' }}>
+                    {/* ── Anomalies ── */}
             {anomalies.length > 0 && (
                 <div className="card" style={{ overflow: 'hidden' }}>
                     <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-warning-bg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -491,7 +528,84 @@ export const Consumption: React.FC = () => {
                 </div>
             )}
 
-            {/* ── KI Suggestions (expandable) ── */}
+                    {/* ── Active Autopilots (expandable, with runway + inline edit) ── */}
+                    <div className="card" style={{ overflow: 'hidden' }}>
+                        <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)' }}>
+                            <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Zap size={16} color="var(--color-success)" /> Aktive Autopiloten
+                            </h3>
+                        </div>
+
+                        {activePilots.length > 0 ? (
+                            <table className="products-table">
+                                <thead>
+                                    <tr>
+                                        <th>Produkt</th>
+                                        <th>Eingestellter Verbrauch</th>
+                                        <th style={{ textAlign: 'center' }}>Reicht noch</th>
+                                        <th style={{ textAlign: 'center' }}>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {activePilots.map(p => {
+                                        const isOpen  = expandedRows.has(`pilot-${p.id}`);
+                                        const anomaly = anomalies.find(a => a.product.id === p.id);
+                                        return (
+                                            <React.Fragment key={p.id}>
+                                                <tr
+                                                    onClick={() => handleTogglePilotExpand(p)}
+                                                    style={{ cursor: 'pointer', backgroundColor: isOpen ? 'var(--color-surface-elevated)' : undefined }}
+                                                >
+                                                    <td>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            {isOpen
+                                                                ? <ChevronDown size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
+                                                                : <ChevronRight size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />}
+                                                            <div>
+                                                                <div style={{ fontWeight: 500 }}>{p.name}</div>
+                                                                <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>
+                                                                    {p.lastConsumptionDate ? `Letzter Abruf: ${new Date(p.lastConsumptionDate).toLocaleDateString('de-DE')}` : '–'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span className="badge badge-success">
+                                                            {p.consumptionAmount} {p.unit} {periodLabel(p)}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                                                        <RunwayBadge product={p} />
+                                                    </td>
+                                                    <td style={{ textAlign: 'center' }}>
+                                                        {anomaly ? (
+                                                            <span className="badge badge-warning" title={`Autopilot: ${anomaly.autoWeekly} ${p.unit}/Wo — Bestellhistorie: ${anomaly.actualWeekly} ${p.unit}/Wo`}>
+                                                                Abweichung
+                                                            </span>
+                                                        ) : (
+                                                            <span className="badge badge-neutral">Normal</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                                {isOpen && pilotExpandPanel(p)}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div style={{ padding: 'var(--spacing-xl)' }}>
+                                <EmptyState icon={Zap} title="Noch kein Autopilot aktiv" text="Wechsle zum Reiter 'Einrichten' und übernimm KI-Vorschläge." />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* ── SETUP TAB CONTENT ── */}
+            {activeTab === 'setup' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2xl)' }}>
+                    {/* ── KI Suggestions (expandable) ── */}
             <div className="card" style={{ overflow: 'hidden' }}>
                 <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -575,78 +689,6 @@ export const Consumption: React.FC = () => {
                 )}
             </div>
 
-            {/* ── Active Autopilots (expandable, with runway + inline edit) ── */}
-            <div className="card" style={{ overflow: 'hidden' }}>
-                <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)' }}>
-                    <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Zap size={16} color="var(--color-success)" /> Aktive Autopiloten
-                    </h3>
-                </div>
-
-                {activePilots.length > 0 ? (
-                    <table className="products-table">
-                        <thead>
-                            <tr>
-                                <th>Produkt</th>
-                                <th>Eingestellter Verbrauch</th>
-                                <th style={{ textAlign: 'center' }}>Reicht noch</th>
-                                <th style={{ textAlign: 'center' }}>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {activePilots.map(p => {
-                                const isOpen  = expandedRows.has(`pilot-${p.id}`);
-                                const anomaly = anomalies.find(a => a.product.id === p.id);
-                                return (
-                                    <React.Fragment key={p.id}>
-                                        <tr
-                                            onClick={() => handleTogglePilotExpand(p)}
-                                            style={{ cursor: 'pointer', backgroundColor: isOpen ? 'var(--color-surface-elevated)' : undefined }}
-                                        >
-                                            <td>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    {isOpen
-                                                        ? <ChevronDown size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
-                                                        : <ChevronRight size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />}
-                                                    <div>
-                                                        <div style={{ fontWeight: 500 }}>{p.name}</div>
-                                                        <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>
-                                                            {p.lastConsumptionDate ? `Letzter Abruf: ${new Date(p.lastConsumptionDate).toLocaleDateString('de-DE')}` : '–'}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span className="badge badge-success">
-                                                    {p.consumptionAmount} {p.unit} {periodLabel(p)}
-                                                </span>
-                                            </td>
-                                            <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                                                <RunwayBadge product={p} />
-                                            </td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                {anomaly ? (
-                                                    <span className="badge badge-warning" title={`Autopilot: ${anomaly.autoWeekly} ${p.unit}/Wo — Bestellhistorie: ${anomaly.actualWeekly} ${p.unit}/Wo`}>
-                                                        Abweichung
-                                                    </span>
-                                                ) : (
-                                                    <span className="badge badge-neutral">Normal</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                        {isOpen && pilotExpandPanel(p)}
-                                    </React.Fragment>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                ) : (
-                    <div style={{ padding: 'var(--spacing-xl)' }}>
-                        <EmptyState icon={Zap} title="Noch kein Autopilot aktiv" text="Übernimm einen KI-Vorschlag oben oder stelle den Verbrauch direkt auf der Produktseite ein." />
-                    </div>
-                )}
-            </div>
-
             {/* ── Manuell konfigurieren ── */}
             {manualProducts.length > 0 && (
                 <div className="card" style={{ overflow: 'hidden' }}>
@@ -724,29 +766,17 @@ export const Consumption: React.FC = () => {
                     )}
                 </div>
             )}
+                </div>
+            )}
 
-            {/* ── Ignored Products ── */}
-            {ignoredProducts.length > 0 && (
-                <div className="card" style={{ overflow: 'hidden' }}>
-                    <div 
-                        style={{ padding: '14px var(--spacing-xl)', borderBottom: showIgnoredSection ? '1px solid var(--color-border)' : undefined, backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-                        onClick={() => setShowIgnoredSection(v => !v)}
-                    >
-                        <X size={15} color="var(--color-text-muted)" />
-                        <h3 style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-secondary)' }}>
-                            Ignorierte Vorschläge
-                        </h3>
-                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span className="badge badge-neutral">{ignoredProducts.length}</span>
-                            {showIgnoredSection
-                                ? <ChevronDown size={16} color="var(--color-text-muted)" />
-                                : <ChevronRight size={16} color="var(--color-text-muted)" />}
-                        </div>
-                    </div>
-                    {showIgnoredSection && (
+            {/* ── IGNORED TAB CONTENT ── */}
+            {activeTab === 'ignored' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2xl)' }}>
+                    {/* ── Ignored Products ── */}
+                    {ignoredProducts.length > 0 ? (
                         <div>
                             {ignoredProducts.map(p => (
-                                <div key={p.id} style={{ padding: '12px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                                <div key={p.id} style={{ padding: '12px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                                     <div>
                                         <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{p.name}</div>
                                         {p.category && <div style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
@@ -761,6 +791,10 @@ export const Consumption: React.FC = () => {
                                     </button>
                                 </div>
                             ))}
+                        </div>
+                    ) : (
+                        <div style={{ padding: 'var(--spacing-xl)' }}>
+                            <EmptyState icon={X} title="Keine ignorierten Vorschläge" text="Hier findest du zukünftig Produkte, bei denen du den KI-Vorschlag abgelehnt hast." />
                         </div>
                     )}
                 </div>
