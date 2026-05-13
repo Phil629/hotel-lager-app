@@ -1317,18 +1317,37 @@ export const Products: React.FC = () => {
                                                     </div>
                                                 </div>
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
-                                                    <div className="form-group">
-                                                        <label className="form-label">Webshop / Bestell-URL</label>
-                                                        <input type="url" value={newProduct.orderUrl || ''} onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })} onBlur={e => { const val = e.target.value; if (val && !/^https?:\/\//i.test(val)) setNewProduct({ ...newProduct, orderUrl: 'https://' + val }); }} placeholder="https://..." className="input-field" />
+                                                    <div className="form-group" style={{ 
+                                                        transition: 'all 0.3s ease', 
+                                                        padding: '12px', 
+                                                        borderRadius: 'var(--radius-md)', 
+                                                        backgroundColor: newProduct.preferredOrderMethod === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
+                                                        border: newProduct.preferredOrderMethod === 'link' ? '1px solid var(--color-primary)' : '1px solid transparent'
+                                                    }}>
+                                                        <label className="form-label" style={{ color: newProduct.preferredOrderMethod === 'link' ? 'var(--color-primary)' : 'inherit' }}>Webshop / Bestell-URL</label>
+                                                        <input type="url" value={newProduct.orderUrl || ''} onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })} onBlur={e => { const val = e.target.value; if (val && !/^https?:\/\//i.test(val)) setNewProduct({ ...newProduct, orderUrl: 'https://' + val }); }} placeholder="https://..." className="input-field" style={{ borderColor: newProduct.preferredOrderMethod === 'link' ? 'var(--color-primary)' : '' }} />
                                                     </div>
-                                                    <div className="form-group">
-                                                        <label className="form-label">Abweichende E-Mail (nur dieses Produkt)</label>
-                                                        <input type="email" placeholder="Wenn leer: Lieferanten-Email" value={newProduct.emailOrderAddress || ''} onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })} className="input-field" />
+                                                    <div className="form-group" style={{ 
+                                                        transition: 'all 0.3s ease', 
+                                                        padding: '12px', 
+                                                        borderRadius: 'var(--radius-md)', 
+                                                        backgroundColor: newProduct.preferredOrderMethod === 'email' ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
+                                                        border: newProduct.preferredOrderMethod === 'email' ? '1px solid var(--color-primary)' : '1px solid transparent'
+                                                    }}>
+                                                        <label className="form-label" style={{ color: newProduct.preferredOrderMethod === 'email' ? 'var(--color-primary)' : 'inherit' }}>Abweichende E-Mail (nur dieses Produkt)</label>
+                                                        <input type="email" placeholder="Wenn leer: Lieferanten-Email" value={newProduct.emailOrderAddress || ''} onChange={e => setNewProduct({ ...newProduct, emailOrderAddress: e.target.value })} className="input-field" style={{ borderColor: newProduct.preferredOrderMethod === 'email' ? 'var(--color-primary)' : '' }} />
                                                     </div>
                                                 </div>
-                                                <div className="form-group" style={{ marginTop: 'var(--spacing-md)' }}>
-                                                    <label className="form-label">Direkte Bestell-Telefonnummer</label>
-                                                    <input type="tel" placeholder="Wenn leer: Lieferanten-Telefon" value={newProduct.supplierPhone || ''} onChange={e => setNewProduct({ ...newProduct, supplierPhone: e.target.value })} className="input-field" />
+                                                <div className="form-group" style={{ 
+                                                    marginTop: 'var(--spacing-sm)',
+                                                    transition: 'all 0.3s ease', 
+                                                    padding: '12px', 
+                                                    borderRadius: 'var(--radius-md)', 
+                                                    backgroundColor: newProduct.preferredOrderMethod === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
+                                                    border: newProduct.preferredOrderMethod === 'phone' ? '1px solid var(--color-primary)' : '1px solid transparent'
+                                                }}>
+                                                    <label className="form-label" style={{ color: newProduct.preferredOrderMethod === 'phone' ? 'var(--color-primary)' : 'inherit' }}>Direkte Bestell-Telefonnummer</label>
+                                                    <input type="tel" placeholder="Wenn leer: Lieferanten-Telefon" value={newProduct.supplierPhone || ''} onChange={e => setNewProduct({ ...newProduct, supplierPhone: e.target.value })} className="input-field" style={{ borderColor: newProduct.preferredOrderMethod === 'phone' ? 'var(--color-primary)' : '' }} />
                                                 </div>
                                             </div>
 

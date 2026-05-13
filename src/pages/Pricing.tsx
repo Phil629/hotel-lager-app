@@ -2,19 +2,38 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { TrendingUp, TrendingDown, Euro, Package, AlertTriangle, Download, X, Filter, PiggyBank } from 'lucide-react';
+import { TrendingUp, TrendingDown, Euro, Package, AlertTriangle, Download, X, Filter, PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-// ── Storage ───────────────────────────────────────────────────────────────────
+// ── Budget model ──────────────────────────────────────────────────────────────
 
-const BUDGET_KEY = 'pricing_category_budgets';
+interface Budget {
+    id: string;
+    type: 'category' | 'product' | 'supplier';
+    key: string;
+    label: string;
+    amount: number;
+    period: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+}
 
-const loadBudgetsFromStorage = (): Record<string, number> => {
-    try { return JSON.parse(localStorage.getItem(BUDGET_KEY) || '{}'); } catch { return {}; }
-};
+interface BudgetDraft {
+    type: 'category' | 'product' | 'supplier';
+    key: string;
+    label: string;
+    amount: string;
+    period: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+}
 
-const persistBudgets = (b: Record<string, number>) =>
-    localStorage.setItem(BUDGET_KEY, JSON.stringify(b));
+const BUDGET_KEY   = 'pricing_budgets_v2';
+const DRAFT_INIT: BudgetDraft = { type: 'category', key: '', label: '', amount: '', period: 'monthly' };
+
+const loadBudgets  = (): Budget[] => { try { return JSON.parse(localStorage.getItem(BUDGET_KEY) || '[]'); } catch { return []; } };
+const saveBudgets  = (b: Budget[]) => localStorage.setItem(BUDGET_KEY, JSON.stringify(b));
+
+const TYPE_LABEL:   Record<string, string> = { category: 'Kategorie', product: 'Produkt', supplier: 'Lieferant' };
+const PERIOD_LABEL: Record<string, string> = { weekly: 'Wöchentlich', monthly: 'Monatlich', quarterly: 'Quartal', yearly: 'Jährlich' };
+const PERIOD_NOW:   Record<string, string> = { weekly: 'Diese Woche', monthly: 'Dieser Monat', quarterly: 'Dieses Quartal', yearly: 'Dieses Jahr' };
+const TYPE_BADGE:   Record<string, string> = { category: 'badge-primary', product: 'badge-neutral', supplier: 'badge-success' };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -62,12 +81,10 @@ export const Pricing: React.FC = () => {
     const [categoryFilter, setCategoryFilter] = useState<string>('');
     const [supplierFilter, setSupplierFilter] = useState<string>('');
 
-    // Budget tracking
-    const [budgets,     setBudgets]     = useState<Record<string, number>>(loadBudgetsFromStorage);
-    const [budgetEdits, setBudgetEdits] = useState<Record<string, string>>(() => {
-        const b = loadBudgetsFromStorage();
-        return Object.fromEntries(Object.entries(b).map(([k, v]) => [k, String(v)]));
-    });
+    // Budget
+    const [budgets, setBudgets]             = useState<Budget[]>(loadBudgets);
+    const [showBudgetModal, setShowBudgetModal] = useState(false);
+    const [draft, setDraft]                 = useState<BudgetDraft>(DRAFT_INIT);
 
     const currency = StorageService.getSettings().currency || 'EUR';
 
@@ -210,38 +227,69 @@ export const Pricing: React.FC = () => {
         priceAlerts.length ? priceAlerts.reduce((s, d) => s + d.change, 0) / priceAlerts.length : 0,
     [priceAlerts]);
 
-    // ── Budget: current-month spend per category (always unfiltered by period) ──
+    // ── Budget spends ─────────────────────────────────────────────────────────
 
-    const categorySpend = useMemo(() => {
-        const now = new Date();
+    const budgetSpends = useMemo(() => {
         const result: Record<string, number> = {};
-        orders.forEach(o => {
-            const d = new Date(o.date);
-            if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) return;
-            const product = products.find(p => p.name === o.productName);
-            if (!product?.category) return;
-            const spend = o.quantity * (o.price ?? product.price ?? 0);
-            result[product.category] = (result[product.category] ?? 0) + spend;
+        budgets.forEach(b => {
+            const now = new Date();
+            let startDate: Date;
+            switch (b.period) {
+                case 'weekly': {
+                    const day = now.getDay() || 7;
+                    startDate = new Date(now);
+                    startDate.setDate(now.getDate() - day + 1);
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                }
+                case 'monthly':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    break;
+                case 'quarterly': {
+                    const q = Math.floor(now.getMonth() / 3);
+                    startDate = new Date(now.getFullYear(), q * 3, 1);
+                    break;
+                }
+                default:
+                    startDate = new Date(now.getFullYear(), 0, 1);
+            }
+            result[b.id] = orders
+                .filter(o => new Date(o.date) >= startDate)
+                .reduce((sum, o) => {
+                    const product = products.find(p => p.name === o.productName);
+                    const matches =
+                        b.type === 'category' ? product?.category === b.key :
+                        b.type === 'product'  ? o.productName === b.key :
+                        b.type === 'supplier' ? product?.supplierId === b.key : false;
+                    if (!matches) return sum;
+                    return sum + o.quantity * (o.price ?? product?.price ?? 0);
+                }, 0);
         });
         return result;
-    }, [orders, products]);
+    }, [budgets, orders, products]);
 
-    // ── Budget handlers ──────────────────────────────────────────────────────
+    // ── Budget handlers ───────────────────────────────────────────────────────
 
-    const handleBudgetBlur = (category: string) => {
-        const raw = (budgetEdits[category] ?? '').replace(',', '.');
-        if (raw === '') {
-            const { [category]: _, ...rest } = budgets;
-            setBudgets(rest); persistBudgets(rest);
-            return;
-        }
-        const val = parseFloat(raw);
-        if (!isNaN(val) && val > 0) {
-            const updated = { ...budgets, [category]: val };
-            setBudgets(updated); persistBudgets(updated);
-        } else {
-            setBudgetEdits(prev => ({ ...prev, [category]: budgets[category] ? String(budgets[category]) : '' }));
-        }
+    const handleSaveBudget = () => {
+        const val = parseFloat(draft.amount.replace(',', '.'));
+        if (!draft.key || isNaN(val) || val <= 0) return;
+        const updated = [...budgets, {
+            id: String(Date.now()),
+            type: draft.type,
+            key: draft.key,
+            label: draft.label || draft.key,
+            amount: val,
+            period: draft.period,
+        }];
+        setBudgets(updated);
+        saveBudgets(updated);
+        setShowBudgetModal(false);
+    };
+
+    const handleDeleteBudget = (id: string) => {
+        const updated = budgets.filter(b => b.id !== id);
+        setBudgets(updated);
+        saveBudgets(updated);
     };
 
     // ── CSV Export ───────────────────────────────────────────────────────────
@@ -270,6 +318,11 @@ export const Pricing: React.FC = () => {
     const currencyTick   = currency === 'CHF' ? 'CHF ' : '€';
     const kpiLabel       = periodFilter === '30' ? 'Ausgaben (30 Tage)' : periodFilter ? 'Ausgaben (Zeitraum)' : 'Ausgaben diesen Monat';
     const chartTitle     = periodFilter === '30' ? 'Ausgaben — letzte 30 Tage' : periodFilter ? `Ausgaben — ${periodOptions.find(o => o.value === periodFilter)?.label ?? ''}` : 'Monatliche Ausgaben — letzte 12 Monate';
+
+    // Draft validation
+    const isDuplicate = !!draft.key && budgets.some(b => b.type === draft.type && b.key === draft.key && b.period === draft.period);
+    const draftVal    = parseFloat(draft.amount.replace(',', '.'));
+    const canSave     = !!draft.key && !isNaN(draftVal) && draftVal > 0 && !isDuplicate;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2xl)', paddingBottom: '40px' }}>
@@ -361,67 +414,80 @@ export const Pricing: React.FC = () => {
             </div>
 
             {/* ── Budget Tracking ── */}
-            {categories.length > 0 && (
-                <div className="card" style={{ padding: 'var(--spacing-xl)' }}>
-                    <h3 style={{ margin: '0 0 var(--spacing-lg) 0', fontSize: '16px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <PiggyBank size={18} color="var(--color-primary)" /> Budget-Tracking — dieser Monat
+            <div className="card" style={{ padding: 'var(--spacing-xl)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: budgets.length > 0 ? 'var(--spacing-lg)' : 0 }}>
+                    <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <PiggyBank size={18} color="var(--color-primary)" /> Budget-Tracking
                     </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {categories.map(cat => {
-                            const spend  = categorySpend[cat] ?? 0;
-                            const budget = budgets[cat] ?? 0;
-                            const pct    = budget > 0 ? Math.min((spend / budget) * 100, 100) : 0;
-                            const over   = budget > 0 && spend > budget;
+                    <button className="btn btn-primary btn-sm" onClick={() => { setDraft(DRAFT_INIT); setShowBudgetModal(true); }}>
+                        <Plus size={14} /> Budget erstellen
+                    </button>
+                </div>
+
+                {budgets.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--spacing-md)' }}>
+                        {budgets.map(b => {
+                            const spend = budgetSpends[b.id] ?? 0;
+                            const pct   = b.amount > 0 ? Math.min((spend / b.amount) * 100, 100) : 0;
+                            const over  = spend > b.amount;
                             const barColor = pct > 90 ? 'var(--color-danger)' : pct > 70 ? 'var(--color-warning)' : 'var(--color-success)';
                             return (
-                                <div key={cat}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                            <span style={{ fontWeight: 600, color: 'var(--color-text-main)' }}>{cat}</span>
-                                            {over && <span className="badge badge-danger">Überschritten</span>}
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                                            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                                                {fmt(spend, currency)}{budget > 0 ? ` / ${fmt(budget, currency)}` : ''}
-                                            </span>
-                                            <div style={{ position: 'relative' }}>
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="100"
-                                                    placeholder="Budget setzen…"
-                                                    value={budgetEdits[cat] ?? ''}
-                                                    onChange={e => setBudgetEdits(prev => ({ ...prev, [cat]: e.target.value }))}
-                                                    onBlur={() => handleBudgetBlur(cat)}
-                                                    className="input-field"
-                                                    style={{ width: '130px', padding: '6px 10px', fontSize: '13px' }}
-                                                />
+                                <div key={b.id} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {/* Header */}
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)', marginBottom: '5px' }}>{b.label}</div>
+                                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                                <span className={`badge ${TYPE_BADGE[b.type]}`}>{TYPE_LABEL[b.type]}</span>
+                                                <span className="badge badge-neutral">{PERIOD_LABEL[b.period]}</span>
+                                                {over && <span className="badge badge-danger">Überschritten</span>}
                                             </div>
                                         </div>
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            style={{ padding: '4px 6px', flexShrink: 0 }}
+                                            onClick={() => handleDeleteBudget(b.id)}
+                                            title="Budget löschen"
+                                        >
+                                            <Trash2 size={13} color="var(--color-text-muted)" />
+                                        </button>
                                     </div>
-                                    <div style={{ height: '8px', backgroundColor: 'var(--color-surface-elevated)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-                                        {budget > 0 && (
-                                            <div style={{ height: '100%', width: `${pct}%`, backgroundColor: barColor, borderRadius: '4px', transition: 'width 0.4s ease' }} />
-                                        )}
+
+                                    {/* Numbers */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                        <span style={{ fontSize: '22px', fontWeight: 700, color: over ? 'var(--color-danger)' : 'var(--color-text-main)' }}>
+                                            {fmt(spend, currency)}
+                                        </span>
+                                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                                            / {fmt(b.amount, currency)}
+                                        </span>
                                     </div>
-                                    {budget > 0 && (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                                            <span style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{pct.toFixed(0)}% verbraucht</span>
-                                            {over
-                                                ? <span style={{ fontSize: '11px', color: 'var(--color-danger)', fontWeight: 600 }}>+{fmt(spend - budget, currency)} über Budget</span>
-                                                : <span style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{fmt(budget - spend, currency)} verbleibend</span>
-                                            }
-                                        </div>
-                                    )}
+
+                                    {/* Bar */}
+                                    <div style={{ height: '6px', backgroundColor: 'var(--color-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${pct}%`, backgroundColor: barColor, borderRadius: '3px', transition: 'width 0.4s ease' }} />
+                                    </div>
+
+                                    {/* Footer */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>
+                                            {PERIOD_NOW[b.period]} · {pct.toFixed(0)}%
+                                        </span>
+                                        {over
+                                            ? <span style={{ fontSize: '11px', color: 'var(--color-danger)', fontWeight: 600 }}>+{fmt(spend - b.amount, currency)} über Budget</span>
+                                            : <span style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{fmt(b.amount - spend, currency)} verbleibend</span>
+                                        }
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
-                    <p style={{ margin: 'var(--spacing-lg) 0 0 0', fontSize: '12px', color: 'var(--color-text-faint)' }}>
-                        Budgets werden lokal gespeichert und beziehen sich immer auf den aktuellen Kalendermonat.
-                    </p>
-                </div>
-            )}
+                ) : (
+                    <div style={{ paddingTop: 'var(--spacing-lg)' }}>
+                        <EmptyState icon={PiggyBank} title="Noch kein Budget definiert" text="Klicke auf 'Budget erstellen', um ein Budget für eine Kategorie, ein Produkt oder einen Lieferanten festzulegen." />
+                    </div>
+                )}
+            </div>
 
             {/* ── Bottom row ── */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 'var(--spacing-xl)', alignItems: 'start' }}>
@@ -500,6 +566,122 @@ export const Pricing: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* ── Create Budget Modal ── */}
+            {showBudgetModal && (
+                <div className="modal-overlay" onClick={() => setShowBudgetModal(false)}>
+                    <div className="modal-box" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <PiggyBank size={18} color="var(--color-primary)" />
+                            <h3>Budget erstellen</h3>
+                        </div>
+
+                        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+
+                            {/* Type toggle */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '8px' }}>Budget-Typ</label>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                    {(['category', 'product', 'supplier'] as const).map(t => (
+                                        <button
+                                            key={t}
+                                            className={draft.type === t ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+                                            onClick={() => setDraft(prev => ({ ...prev, type: t, key: '', label: '' }))}
+                                        >
+                                            {TYPE_LABEL[t]}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Entity dropdown */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>
+                                    {TYPE_LABEL[draft.type]} auswählen
+                                </label>
+                                <select
+                                    value={draft.key}
+                                    onChange={e => {
+                                        const value = e.target.value;
+                                        const label = draft.type === 'supplier'
+                                            ? (suppliers.find(s => s.id === value)?.name ?? value)
+                                            : value;
+                                        setDraft(prev => ({ ...prev, key: value, label }));
+                                    }}
+                                    className="input-field"
+                                    style={{ width: '100%', padding: '8px 12px' }}
+                                >
+                                    <option value="">— bitte wählen —</option>
+                                    {draft.type === 'category' && (
+                                        categories.length > 0
+                                            ? categories.map(c => <option key={c} value={c}>{c}</option>)
+                                            : <option disabled>Keine Kategorien vorhanden</option>
+                                    )}
+                                    {draft.type === 'product' && (
+                                        products.length > 0
+                                            ? products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)
+                                            : <option disabled>Keine Produkte vorhanden</option>
+                                    )}
+                                    {draft.type === 'supplier' && (
+                                        suppliers.length > 0
+                                            ? suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                                            : <option disabled>Keine Lieferanten vorhanden</option>
+                                    )}
+                                </select>
+                            </div>
+
+                            {/* Period */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Zeitraum</label>
+                                <select
+                                    value={draft.period}
+                                    onChange={e => setDraft(prev => ({ ...prev, period: e.target.value as BudgetDraft['period'] }))}
+                                    className="input-field"
+                                    style={{ width: '100%', padding: '8px 12px' }}
+                                >
+                                    <option value="weekly">Wöchentlich</option>
+                                    <option value="monthly">Monatlich</option>
+                                    <option value="quarterly">Quartalsmäßig</option>
+                                    <option value="yearly">Jährlich</option>
+                                </select>
+                            </div>
+
+                            {/* Amount */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>
+                                    Budget-Betrag ({currency})
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="100"
+                                    placeholder="z.B. 1000"
+                                    value={draft.amount}
+                                    onChange={e => setDraft(prev => ({ ...prev, amount: e.target.value }))}
+                                    className="input-field"
+                                    style={{ width: '100%', padding: '8px 12px' }}
+                                    autoFocus
+                                />
+                            </div>
+
+                            {/* Duplicate warning */}
+                            {isDuplicate && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--color-warning)', backgroundColor: 'var(--color-warning-bg)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
+                                    <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+                                    Für diese {TYPE_LABEL[draft.type]} existiert bereits ein Budget für diesen Zeitraum.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="modal-footer">
+                            <button className="btn btn-ghost" onClick={() => setShowBudgetModal(false)}>Abbrechen</button>
+                            <button className="btn btn-primary" onClick={handleSaveBudget} disabled={!canSave}>
+                                <PiggyBank size={14} /> Budget speichern
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
