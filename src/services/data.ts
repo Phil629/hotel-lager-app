@@ -334,8 +334,8 @@ export const DataService = {
         const { error } = await supabase.rpc('upsert_supplier_credentials', {
             p_supplier_id: supplierId,
             p_login_url: credentials.loginUrl || null,
-            p_login_username: credentials.loginUsername || null,
-            p_login_password: credentials.loginPassword || null,
+            p_username: credentials.loginUsername || null,
+            p_password: credentials.loginPassword || null,
         });
         if (error) throw error;
     },

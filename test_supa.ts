@@ -1,0 +1,1 @@
+import { getSupabaseClient } from './src/services/supabase'; async function test() { const s = getSupabaseClient(); if(!s) return; const { data, error } = await s.from('suppliers').select('*').limit(1); console.log('ERROR:', error); console.log('DATA:', data); } test();  
