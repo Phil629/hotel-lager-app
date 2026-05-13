@@ -67,6 +67,7 @@ Regeln:
 6. Nimm bei order_date bevorzugt das Haupt-Belegdatum/Druckdatum oben im Kopf (z.B. "Datum: 07.04."). Nimm zur Not das Bestelldatum, aber NIEMALS ein zukünftiges Lieferdatum oder Zahlungsziel.
 7. In items dürfen KEINE Versandkosten, Pfand, Rabatte, Steuerzeilen, Leergut, Paletten oder Gebühren auftauchen.
 8. Wenn zu wenig Sicherheit besteht, document_type = "unknown".
+9. Extrahiere die Kundennummer des Hotels (customer_number) bei diesem Lieferanten, falls sie auf dem Beleg steht (oft als "Kd-Nr.", "Kunden-Nr." oder "Customer No.").
 
 Metadaten:
 Betreff: ${subject}
@@ -79,6 +80,7 @@ Antworte ausschließlich als JSON:
   "should_create_order": false,
   "supplier_name": "string | null",
   "supplier_email": "string | null",
+  "customer_number": "string | null",
   "invoice_number": "string | null",
   "order_reference": "string | null",
   "items": [
@@ -213,15 +215,22 @@ Antworte ausschließlich als JSON:
         supplier_id = existingSuppliers[0].id
         console.log("Found existing supplier:", supplier_id);
         
-        // Update die Email, wenn die KI eine bessere gefunden hat
+        const updatePayload: any = {};
         if (parsedData.supplier_email && parsedData.supplier_email.trim() !== '' && parsedData.supplier_email !== 'hello@unbekannt.com') {
+            updatePayload.email = parsedData.supplier_email;
+        }
+        if (parsedData.customer_number && parsedData.customer_number.trim() !== '') {
+            updatePayload.customer_number = parsedData.customer_number;
+        }
+
+        if (Object.keys(updatePayload).length > 0) {
             const { error: updSupErr } = await supabase
               .from('suppliers')
-              .update({ email: parsedData.supplier_email })
+              .update(updatePayload)
               .eq('id', supplier_id);
 
-            if (updSupErr) console.error("Error updating supplier email:", updSupErr);
-            else console.log("Updated supplier email to:", parsedData.supplier_email);
+            if (updSupErr) console.error("Error updating supplier:", updSupErr);
+            else console.log("Updated supplier with:", updatePayload);
         }
     } else {
         const { data: newSupp, error: newSupErr } = await supabase.from('suppliers').insert({
@@ -229,6 +238,7 @@ Antworte ausschließlich als JSON:
             user_id: user_id,
             name: supName,
             email: parsedData.supplier_email || 'hello@unbekannt.com',
+            customer_number: parsedData.customer_number || null,
             is_auto_generated: true
         }).select('id').single()
         
