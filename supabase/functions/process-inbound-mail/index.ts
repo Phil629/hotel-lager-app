@@ -50,6 +50,20 @@ serve(async (req) => {
     valuation_method = userProfile.inventory_valuation_method || 'latest';
     const company_id = userProfile.company_id;
 
+    // Vorhandene Kategorien dieser Firma laden (für smarte Kategorie-Zuweisung)
+    const { data: catRows } = await supabase
+        .from('products')
+        .select('category')
+        .eq('company_id', company_id)
+        .not('category', 'is', null);
+    const existingCategories = [...new Set(
+        (catRows || []).map((r: any) => r.category as string).filter(Boolean)
+    )].filter(c => c !== 'KI-Import (E-Mail)' && c !== 'Importiert');
+
+    const categoryHint = existingCategories.length > 0
+        ? existingCategories.join(', ')
+        : '(keine vorhanden — passende kurze Kategorie erfinden)';
+
     const prompt = `
 Du analysierst E-Mails und Anhänge für ein Hotel-Bestellwesen.
 
@@ -77,6 +91,11 @@ Regeln:
 8. Wenn zu wenig Sicherheit besteht, document_type = "unknown".
 9. Extrahiere die Kundennummer des Hotels (customer_number) bei diesem Lieferanten, falls sie auf dem Beleg steht (oft als "Kd-Nr.", "Kunden-Nr." oder "Customer No.").
 10. WICHTIG zu 'product_name': Filtere alle Artikelnummern, EANs, SKUs und kryptischen Codes aus dem Produktnamen heraus! 'product_name' darf NUR den menschenlesbaren Namen enthalten (z.B. 'Aqua Senses 300ml Shampoo' statt 'AQS300SMAIO-26 Aqua Senses...'). Packe die Artikelnummer stattdessen in das Feld 'sku'.
+11. KATEGORIE: Weise jedem Artikel eine Kategorie zu. Nutze bevorzugt EXAKT eine der vorhandenen Kategorien (siehe unten). Nur wenn wirklich keine passt, erfinde eine neue kurze, prägnante Kategorie auf Deutsch (z.B. "Getränke", "Reinigung", "Lebensmittel", "Hygiene", "Bürobedarf").
+12. TELEFON: Falls eine Telefonnummer des Lieferanten auf dem Beleg steht, trage sie unter supplier_phone ein (bevorzugt internationales Format, z.B. +49 89 123456).
+13. IBAN: Falls eine IBAN des Lieferanten auf dem Beleg steht, trage sie unter supplier_iban ein.
+
+Vorhandene Kategorien (bevorzugt verwenden): ${categoryHint}
 
 Metadaten:
 Betreff: ${subject}
@@ -89,6 +108,8 @@ Antworte ausschließlich als JSON:
   "should_create_order": false,
   "supplier_name": "string | null",
   "supplier_email": "string | null",
+  "supplier_phone": "string | null",
+  "supplier_iban": "string | null",
   "customer_number": "string | null",
   "invoice_number": "string | null",
   "order_reference": "string | null",
@@ -96,6 +117,7 @@ Antworte ausschließlich als JSON:
     {
       "product_name": "string (nur lesbarer Name)",
       "sku": "string | null",
+      "category": "string (passende Kategorie auf Deutsch, bevorzugt aus vorhandenen)",
       "quantity": 1,
       "price": 0
     }
@@ -224,7 +246,7 @@ Antworte ausschließlich als JSON:
     const emailToMatch = parsedData.supplier_email?.trim();
     if (emailToMatch && emailToMatch !== 'hello@unbekannt.com') {
         const { data: emailMatch, error: emailErr } = await supabase.from('suppliers')
-             .select('id, email, customer_number').eq('company_id', company_id).ilike('email', emailToMatch).limit(1);
+             .select('id, email, customer_number, phone, iban').eq('company_id', company_id).ilike('email', emailToMatch).limit(1);
         if (emailErr) console.error("Error querying supplier by email:", emailErr);
         if (emailMatch && emailMatch.length > 0) {
             existingSuppliers = emailMatch;
@@ -266,6 +288,12 @@ Antworte ausschließlich als JSON:
         if (parsedData.customer_number && parsedData.customer_number.trim() !== '' && !existingSupplier.customer_number) {
             updatePayload.customer_number = parsedData.customer_number;
         }
+        if (parsedData.supplier_phone && parsedData.supplier_phone.trim() !== '' && !existingSupplier.phone) {
+            updatePayload.phone = parsedData.supplier_phone.trim();
+        }
+        if (parsedData.supplier_iban && parsedData.supplier_iban.trim() !== '' && !existingSupplier.iban) {
+            updatePayload.iban = parsedData.supplier_iban.trim();
+        }
 
         if (Object.keys(updatePayload).length > 0) {
             const { error: updSupErr } = await supabase
@@ -284,6 +312,8 @@ Antworte ausschließlich als JSON:
             name: supName,
             email: parsedData.supplier_email || 'hello@unbekannt.com',
             customer_number: parsedData.customer_number || null,
+            phone: parsedData.supplier_phone || null,
+            iban: parsedData.supplier_iban || null,
             is_auto_generated: true
         }).select('id').single()
         

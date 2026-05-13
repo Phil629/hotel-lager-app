@@ -738,7 +738,9 @@ export const Consumption: React.FC = () => {
                             <Pencil size={15} color="var(--color-text-muted)" /> Manuell konfigurieren
                         </h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <SortSelect value={sortSetupBy} onChange={setSortSetupBy} />
+                            <div onClick={e => e.stopPropagation()}>
+                                <SortSelect value={sortSetupBy} onChange={setSortSetupBy} />
+                            </div>
                             <span className="badge badge-neutral">{manualProducts.length} Produkte</span>
                             {showManualSection
                                 ? <ChevronDown size={16} color="var(--color-text-muted)" />
