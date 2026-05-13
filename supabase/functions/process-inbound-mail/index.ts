@@ -112,8 +112,15 @@ Antworte ausschließlich als JSON:
     const attachmentsCount = attachmentsCountStr ? parseInt(attachmentsCountStr, 10) : 0;
     
     console.log(`Received attachments count from Sendgrid: ${attachmentsCount}`);
-    
+    let processedAttachmentsCount = 0;
+    const MAX_ATTACHMENTS_TO_PROCESS = 5;
+
     for (let i = 1; i <= attachmentsCount; i++) {
+        if (processedAttachmentsCount >= MAX_ATTACHMENTS_TO_PROCESS) {
+            console.log(`Max attachments limit (${MAX_ATTACHMENTS_TO_PROCESS}) reached. Skipping remaining files.`);
+            break;
+        }
+
         const file = formData.get(`attachment${i}`) as File | null;
         if (file) {
             const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -135,6 +142,7 @@ Antworte ausschließlich als JSON:
                         data: base64Data
                     }
                 });
+                processedAttachmentsCount++;
             }
         }
     }
