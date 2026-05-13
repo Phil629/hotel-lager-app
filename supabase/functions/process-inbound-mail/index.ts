@@ -62,7 +62,7 @@ serve(async (req) => {
 
     const categoryHint = existingCategories.length > 0
         ? existingCategories.join(', ')
-        : '(keine vorhanden — passende kurze Kategorie erfinden)';
+        : '(keine vorhanden — du MUSST zwingend selbst eine passende kurze Kategorie auf Deutsch erfinden)';
 
     const prompt = `
 Du analysierst E-Mails und Anhänge für ein Hotel-Bestellwesen.
@@ -91,7 +91,7 @@ Regeln:
 8. Wenn zu wenig Sicherheit besteht, document_type = "unknown".
 9. Extrahiere die Kundennummer des Hotels (customer_number) bei diesem Lieferanten, falls sie auf dem Beleg steht (oft als "Kd-Nr.", "Kunden-Nr." oder "Customer No.").
 10. WICHTIG zu 'product_name': Filtere alle Artikelnummern, EANs, SKUs und kryptischen Codes aus dem Produktnamen heraus! 'product_name' darf NUR den menschenlesbaren Namen enthalten (z.B. 'Aqua Senses 300ml Shampoo' statt 'AQS300SMAIO-26 Aqua Senses...'). Packe die Artikelnummer stattdessen in das Feld 'sku'.
-11. KATEGORIE: Weise jedem Artikel eine Kategorie zu. Nutze bevorzugt EXAKT eine der vorhandenen Kategorien (siehe unten). Nur wenn wirklich keine passt, erfinde eine neue kurze, prägnante Kategorie auf Deutsch (z.B. "Getränke", "Reinigung", "Lebensmittel", "Hygiene", "Bürobedarf").
+11. KATEGORIE: Weise jedem Artikel ZWINGEND eine logische Warengruppe/Kategorie auf Deutsch zu (z.B. "Getränke", "Reinigung", "Lebensmittel", "Hygiene", "Bürobedarf"). Nutze bevorzugt EXAKT eine der unten gelisteten vorhandenen Kategorien. Falls die Liste leer ist oder nichts passt, MUSST du eine sinnvolle neue erfinden. Verwende NIEMALS generische Begriffe wie "Importiert" oder "KI-Import".
 12. TELEFON: Falls eine Telefonnummer des Lieferanten auf dem Beleg steht, trage sie unter supplier_phone ein (bevorzugt internationales Format, z.B. +49 89 123456).
 13. IBAN: Falls eine IBAN des Lieferanten auf dem Beleg steht, trage sie unter supplier_iban ein.
 
@@ -457,7 +457,7 @@ Antworte ausschließlich als JSON:
                 user_id: user_id,
                 company_id: company_id,
                 name: item.product_name,
-                category: item.category || 'KI-Import (E-Mail)',
+                category: item.category || 'Sonstiges',
                 price: item.price || 0,
                 supplier_id: supplier_id,
                 is_auto_generated: true,
