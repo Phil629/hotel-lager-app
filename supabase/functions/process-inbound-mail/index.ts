@@ -153,14 +153,21 @@ Antworte ausschließlich als JSON:
 
     const geminiData = await geminiRes.json()
     console.log("Raw Gemini API response snippet:", JSON.stringify(geminiData).substring(0, 500));
-    
+
+    let geminiError = false;
+
+    // HTTP-Fehler oder leere Candidates (Rate-Limit, ungültiger Key etc.)
+    if (!geminiRes.ok || !geminiData?.candidates?.length) {
+        console.error("Gemini API error or empty candidates:", JSON.stringify(geminiData).substring(0, 300));
+        geminiError = true;
+    }
+
     let extractedJsonText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
-    
+
     // Kleiner Fix falls Gemini doch Markdown schickt
     extractedJsonText = extractedJsonText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim()
-    
+
     let parsedData: any = {}
-    let geminiError = false;
     try {
         parsedData = JSON.parse(extractedJsonText)
     } catch(e) {
@@ -183,6 +190,15 @@ Antworte ausschließlich als JSON:
         console.error("CRITICAL ERROR inserting into inbound_emails:", logErr);
     } else {
         console.log("Successfully inserted inbound_emails row:", inboundLog);
+    }
+
+    // Bei Gemini-Fehler abbrechen — E-Mail ist geloggt, aber keine Daten importieren.
+    // SendGrid braucht 2xx, sonst wiederholt es die Mail.
+    if (geminiError) {
+        return new Response(
+            JSON.stringify({ success: false, message: 'Gemini error — email logged, no data imported' }),
+            { headers: { 'Content-Type': 'application/json' }, status: 200 }
+        );
     }
 
     // Lege Supplier an
@@ -367,43 +383,41 @@ Antworte ausschließlich als JSON:
             }
         }
         
-        if (!supplier_id) {
-            console.error(`Skipping product creation/update for ${item.product_name}: no valid supplier_id`);
-            continue;
-        }
-
         // Versuche das Produkt zu updaten (Preis) oder neu anzulegen
         const { data: existingProds, error: prodErr } = await supabase.from('products')
             .select('id, price, stock').eq('user_id', user_id).ilike('name', item.product_name).limit(1)
-        
+
         if (prodErr) console.error("Error querying product:", prodErr);
-        
+
         if (existingProds && existingProds.length > 0) {
-             const ep = existingProds[0]
-             if (item.price) {
-                  let newPrice = item.price;
-                  if (valuation_method === 'average' && ep.stock > 0 && ep.price > 0) {
-                      newPrice = ((ep.stock * ep.price) + ((item.quantity || 1) * item.price)) / (ep.stock + (item.quantity || 1));
-                  }
-                  const { error: updateErr } = await supabase.from('products').update({ price: newPrice }).eq('id', ep.id)
-                  if (updateErr) console.error("Error updating price:", updateErr);
-                  else console.log("Updated existing product price:", ep.id);
-             }
+            // Preis-Update bestehender Produkte — supplier_id nicht nötig
+            const ep = existingProds[0]
+            if (item.price) {
+                let newPrice = item.price;
+                if (valuation_method === 'average' && ep.stock > 0 && ep.price > 0) {
+                    newPrice = ((ep.stock * ep.price) + ((item.quantity || 1) * item.price)) / (ep.stock + (item.quantity || 1));
+                }
+                const { error: updateErr } = await supabase.from('products').update({ price: newPrice }).eq('id', ep.id)
+                if (updateErr) console.error("Error updating price:", updateErr);
+                else console.log("Updated existing product price:", ep.id);
+            }
+        } else if (supplier_id) {
+            // Neues Produkt anlegen — nur wenn Lieferant bekannt
+            const { error: newProdErr } = await supabase.from('products').insert({
+                id: crypto.randomUUID(),
+                user_id: user_id,
+                name: item.product_name,
+                category: 'Importiert',
+                price: item.price || 0,
+                supplier_id: supplier_id,
+                is_auto_generated: true,
+                stock: 0,
+                unit: 'Stk'
+            })
+            if (newProdErr) console.error("Error creating new product:", newProdErr);
+            else console.log("Created new product:", item.product_name);
         } else {
-             // Produkt komplett neu generieren
-             const { error: newProdErr } = await supabase.from('products').insert({
-                  id: crypto.randomUUID(),
-                  user_id: user_id,
-                  name: item.product_name,
-                  category: 'Importiert',
-                  price: item.price || 0,
-                  supplier_id: supplier_id, // ACHTUNG hier muss valid supplierId sein
-                  is_auto_generated: true,
-                  stock: 0,
-                  unit: 'Stk'
-             })
-             if (newProdErr) console.error("Error creating new product:", newProdErr);
-             else console.log("Created new product:", item.product_name);
+            console.warn(`Skipping new product creation for "${item.product_name}": no valid supplier_id`);
         }
     }
 
