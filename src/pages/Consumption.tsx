@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Product, Order } from '../types';
 import { DataService } from '../services/data';
-import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap, ChevronDown, ChevronRight, RotateCcw, Save } from 'lucide-react';
+import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap, ChevronDown, ChevronRight, RotateCcw, Save, Pencil } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -124,6 +124,7 @@ export const Consumption: React.FC = () => {
     const [batchSaving, setBatchSaving] = useState(false);
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
     const [inlineEdits, setInlineEdits] = useState<Record<string, InlineEdit>>({});
+    const [showManualSection, setShowManualSection] = useState(false);
 
     const loadData = async () => {
         const [p, o] = await Promise.all([DataService.getProducts(), DataService.getOrders()]);
@@ -138,6 +139,24 @@ export const Consumption: React.FC = () => {
             next.has(id) ? next.delete(id) : next.add(id);
             return next;
         });
+
+    const handleToggleSuggestionExpand = (stat: ProductStat) => {
+        const id = stat.product.id;
+        setExpandedRows(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+                // pre-fill with AI suggestion on first open (don't overwrite if user already edited)
+                setInlineEdits(edits => ({
+                    ...edits,
+                    [id]: edits[id] ?? { amount: stat.suggestedWeekly, period: 'week' },
+                }));
+            }
+            return next;
+        });
+    };
 
     const handleTogglePilotExpand = (p: Product) => {
         const key = `pilot-${p.id}`;
@@ -199,6 +218,15 @@ export const Consumption: React.FC = () => {
         [products],
     );
 
+    const manualProducts = useMemo(
+        () => products.filter(p =>
+            !(p.consumptionAmount ?? 0) &&
+            !productStats.find(s => s.product.id === p.id && s.suggestedWeekly > 0) &&
+            !p.ignoreOrderProposals
+        ),
+        [products, productStats],
+    );
+
     const anomalies = useMemo((): Anomaly[] => {
         return activePilots.map(p => {
             const autoWeekly   = p.consumptionPeriod === 'day' ? (p.consumptionAmount ?? 0) * 7 : (p.consumptionAmount ?? 0);
@@ -251,7 +279,12 @@ export const Consumption: React.FC = () => {
         if (!edit || edit.amount === '') return;
         setSaving(`inline-${product.id}`);
         try {
-            await DataService.saveProduct({ ...product, consumptionAmount: Number(edit.amount), consumptionPeriod: edit.period });
+            await DataService.saveProduct({
+                ...product,
+                consumptionAmount: Number(edit.amount),
+                consumptionPeriod: edit.period,
+                lastConsumptionDate: new Date().toISOString(),
+            });
             await loadData();
         } finally { setSaving(null); }
     };
@@ -260,20 +293,67 @@ export const Consumption: React.FC = () => {
         <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Lade Autopilot-Daten…</div>
     );
 
-    // ── Suggestion expand panel ───────────────────────────────────────────────
+    // ── Suggestion expand panel (chart + editable form) ──────────────────────
 
-    const suggestionExpandPanel = (productName: string, unit: string) => (
-        <tr>
-            <td colSpan={3} style={{ padding: '0 var(--spacing-xl) var(--spacing-md) var(--spacing-xl)', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)' }}>
-                <div style={{ paddingTop: 'var(--spacing-sm)' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                        Bestellhistorie (letzte 8 Monate) — {productName}
+    const suggestionExpandPanel = (stat: ProductStat) => {
+        const { product: p } = stat;
+        const edit = inlineEdits[p.id] ?? { amount: stat.suggestedWeekly, period: 'week' as const };
+        const isSavingThis = saving === `inline-${p.id}`;
+        const canSave = edit.amount !== '' && Number(edit.amount) > 0;
+        return (
+            <tr>
+                <td colSpan={3} style={{ padding: '0 var(--spacing-xl) var(--spacing-md) var(--spacing-xl)', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)' }}>
+                    <div style={{ paddingTop: 'var(--spacing-sm)', display: 'grid', gridTemplateColumns: '1fr auto', gap: 'var(--spacing-xl)', alignItems: 'start' }}>
+                        {/* Chart */}
+                        <div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                                Bestellhistorie (letzte 8 Monate) — {p.name}
+                            </div>
+                            <ProductMiniChart productName={p.name} unit={p.unit} orders={orders} />
+                        </div>
+                        {/* Editable form */}
+                        <div style={{ minWidth: '200px', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                Verbrauch anpassen
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Menge ({p.unit})</label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step="0.1"
+                                    value={edit.amount}
+                                    onChange={e => setInlineEdits(prev => ({ ...prev, [p.id]: { ...edit, amount: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ width: '100%', padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-main)', fontSize: '14px', fontWeight: 500 }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Zeitraum</label>
+                                <select
+                                    value={edit.period}
+                                    onChange={e => setInlineEdits(prev => ({ ...prev, [p.id]: { ...edit, period: e.target.value as 'day' | 'week' } }))}
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ width: '100%', padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-main)', fontSize: '14px' }}
+                                >
+                                    <option value="week">pro Woche</option>
+                                    <option value="day">pro Tag</option>
+                                </select>
+                            </div>
+                            <button
+                                className="btn btn-success btn-sm"
+                                disabled={!canSave || isSavingThis}
+                                onClick={e => { e.stopPropagation(); handleSaveInline(p); }}
+                                style={{ width: '100%', justifyContent: 'center' }}
+                            >
+                                <CheckCircle2 size={13} /> {isSavingThis ? 'Wird übernommen…' : 'Übernehmen'}
+                            </button>
+                        </div>
                     </div>
-                    <ProductMiniChart productName={productName} unit={unit} orders={orders} />
-                </div>
-            </td>
-        </tr>
-    );
+                </td>
+            </tr>
+        );
+    };
 
     // ── Pilot expand panel with inline edit ───────────────────────────────────
 
@@ -424,7 +504,7 @@ export const Consumption: React.FC = () => {
                                 return (
                                     <React.Fragment key={stat.product.id}>
                                         <tr
-                                            onClick={() => toggleExpand(stat.product.id)}
+                                            onClick={() => handleToggleSuggestionExpand(stat)}
                                             style={{ cursor: 'pointer', backgroundColor: isOpen ? 'var(--color-surface-elevated)' : undefined }}
                                         >
                                             <td>
@@ -457,7 +537,7 @@ export const Consumption: React.FC = () => {
                                                 </div>
                                             </td>
                                         </tr>
-                                        {isOpen && suggestionExpandPanel(stat.product.name, stat.product.unit)}
+                                        {isOpen && suggestionExpandPanel(stat)}
                                     </React.Fragment>
                                 );
                             })}
@@ -602,8 +682,86 @@ export const Consumption: React.FC = () => {
                 </div>
             )}
 
+            {/* ── Manuell konfigurieren ── */}
+            {manualProducts.length > 0 && (
+                <div className="card" style={{ overflow: 'hidden' }}>
+                    <div
+                        style={{ padding: '14px var(--spacing-xl)', borderBottom: showManualSection ? '1px solid var(--color-border)' : undefined, backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                        onClick={() => setShowManualSection(v => !v)}
+                    >
+                        <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Pencil size={15} color="var(--color-text-muted)" /> Manuell konfigurieren
+                        </h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span className="badge badge-neutral">{manualProducts.length} Produkte</span>
+                            {showManualSection
+                                ? <ChevronDown size={16} color="var(--color-text-muted)" />
+                                : <ChevronRight size={16} color="var(--color-text-muted)" />}
+                        </div>
+                    </div>
+
+                    {showManualSection && (
+                        <table className="products-table">
+                            <thead>
+                                <tr>
+                                    <th>Produkt</th>
+                                    <th style={{ width: '130px' }}>Menge</th>
+                                    <th style={{ width: '140px' }}>Zeitraum</th>
+                                    <th style={{ width: '120px', textAlign: 'right' }}>Aktion</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {manualProducts.map(p => {
+                                    const edit = inlineEdits[p.id] ?? { amount: '', period: 'week' as const };
+                                    const isSavingThis = saving === `inline-${p.id}`;
+                                    const canSave = edit.amount !== '' && Number(edit.amount) > 0;
+                                    return (
+                                        <tr key={p.id}>
+                                            <td>
+                                                <div style={{ fontWeight: 500 }}>{p.name}</div>
+                                                {p.category && <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
+                                            </td>
+                                            <td>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    step="0.1"
+                                                    placeholder={p.unit}
+                                                    value={edit.amount}
+                                                    onChange={e => setInlineEdits(prev => ({ ...prev, [p.id]: { ...edit, amount: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                                                    style={{ width: '100%', padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-main)', fontSize: '13px' }}
+                                                />
+                                            </td>
+                                            <td>
+                                                <select
+                                                    value={edit.period}
+                                                    onChange={e => setInlineEdits(prev => ({ ...prev, [p.id]: { ...edit, period: e.target.value as 'day' | 'week' } }))}
+                                                    style={{ width: '100%', padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-main)', fontSize: '13px' }}
+                                                >
+                                                    <option value="week">pro Woche</option>
+                                                    <option value="day">pro Tag</option>
+                                                </select>
+                                            </td>
+                                            <td style={{ textAlign: 'right' }}>
+                                                <button
+                                                    className="btn btn-primary btn-sm"
+                                                    disabled={!canSave || isSavingThis}
+                                                    onClick={() => handleSaveInline(p)}
+                                                >
+                                                    <Save size={13} /> {isSavingThis ? 'Wird gespeichert…' : 'Speichern'}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            )}
+
             {/* ── Full empty state ── */}
-            {activePilots.length === 0 && suggestions.length === 0 && ignoredProducts.length === 0 && (
+            {activePilots.length === 0 && suggestions.length === 0 && ignoredProducts.length === 0 && manualProducts.length === 0 && (
                 <div style={{ padding: 'var(--spacing-2xl)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--color-border)', textAlign: 'center' }}>
                     <Activity size={40} style={{ opacity: 0.2, display: 'block', margin: '0 auto 16px' }} />
                     <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '8px' }}>Noch keine Daten für Autopilot-Vorschläge</div>
