@@ -1620,10 +1620,29 @@ export const Orders: React.FC = () => {
                                             ))}
                                     </div>
                                 ) : (
-                                    <div style={{ padding: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                                            <h4 style={{ margin: 0 }}>{selectedProduct.name}</h4>
-                                            <button onClick={() => setSelectedProduct(null)} style={{ color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Ändern</button>
+                                    <div style={{ padding: '0', border: 'none', borderRadius: '0' }}>
+                                        <div style={{ padding: '16px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                {selectedProduct.image ? (
+                                                    <img src={selectedProduct.image} alt={selectedProduct.name} style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <div style={{ width: '48px', height: '48px', borderRadius: '6px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <Package size={24} color="#64748b" />
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, marginBottom: '2px' }}>Ausgewähltes Produkt</div>
+                                                    <div style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{selectedProduct.name}</div>
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={(e) => { e.preventDefault(); setSelectedProduct(null); }}
+                                                className="btn btn-ghost"
+                                                style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#3b82f6', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', padding: '8px 12px', fontSize: '14px', borderRadius: '6px' }}
+                                                type="button"
+                                            >
+                                                <Edit2 size={16} /> Produkt ändern
+                                            </button>
                                         </div>
 
                                         {(() => {
