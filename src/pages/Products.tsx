@@ -687,7 +687,7 @@ export const Products: React.FC = () => {
                             borderRadius: 'var(--radius-full)',
                             border: '1px solid var(--color-border)',
                             fontSize: 'var(--font-size-md)',
-                            backgroundColor: 'white',
+                            backgroundColor: 'var(--color-surface)',
                             boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
                             outline: 'none',
                             transition: 'border-color 0.2s, box-shadow 0.2s'
@@ -708,7 +708,7 @@ export const Products: React.FC = () => {
 
             {
                 filteredProducts.length === 0 ? (
-                    <div style={{ padding: '40px', textAlign: 'center', backgroundColor: 'white', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ padding: '40px', textAlign: 'center', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)' }}>
                         <ShoppingCart size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
                         {products.length === 0 ? (
                             <>
@@ -912,7 +912,7 @@ export const Products: React.FC = () => {
                                                                     </td>
                                                                     <td>
                                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                            <div style={{ display: 'inline-flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', width: 'fit-content' }}>
+                                                                            <div style={{ display: 'inline-flex', alignItems: 'center', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', width: 'fit-content' }}>
                                                                                 <button onClick={() => handleStockUpdate(product, Math.max(0, product.stock - 1))} style={{ padding: '6px 11px', border: 'none', background: 'var(--color-surface-elevated)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-text-muted)', borderRight: '1px solid var(--color-border)' }}>−</button>
                                                                                 <input type="number" value={product.stock} min={0} onChange={e => handleStockUpdate(product, Math.max(0, parseInt(e.target.value) || 0))} style={{ width: '48px', textAlign: 'center', fontSize: '14px', fontWeight: 800, border: 'none', padding: '6px 4px', color: Number(product.stock) <= Number(product.minStock || 0) ? 'var(--color-danger)' : 'var(--color-text-main)', background: 'transparent', outline: 'none', MozAppearance: 'textfield' }} />
                                                                                 <button onClick={() => handleStockUpdate(product, product.stock + 1)} style={{ padding: '6px 11px', border: 'none', background: 'var(--color-surface-elevated)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', color: 'var(--color-primary)', borderLeft: '1px solid var(--color-border)' }}>+</button>
@@ -968,7 +968,7 @@ export const Products: React.FC = () => {
                                                                         {openSettingsId === product.id && (
                                                                             <>
                                                                                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }} onClick={() => setOpenSettingsId(null)} />
-                                                                                <div style={{ position: 'absolute', right: '16px', ...(isLastRows ? { bottom: '100%', marginBottom: '8px' } : { top: '100%', marginTop: '8px' }), backgroundColor: 'white', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--color-border)', zIndex: 20, minWidth: '180px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                                                                                <div style={{ position: 'absolute', right: '16px', ...(isLastRows ? { bottom: '100%', marginBottom: '8px' } : { top: '100%', marginTop: '8px' }), backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--color-border)', zIndex: 20, minWidth: '180px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                                                                                     <button onClick={() => { const links = getIoTLink(product); if (links) { setShowIoTLink(links); setOpenSettingsId(null); } }} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', borderBottom: '1px solid var(--color-border)', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'var(--color-text-main)', fontSize: '14px', fontWeight: 500 }}><Wifi size={16} /> IoT Setup / QR</button>
                                                                                     <button onClick={() => handleDeleteClick(product.id)} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#ef4444', fontSize: '14px', fontWeight: 500 }}><Trash2 size={16} /> Produkt löschen</button>
                                                                                 </div>
@@ -1232,7 +1232,7 @@ export const Products: React.FC = () => {
                                     {/* TAB: ANALYTICS */}
                                     {activeModalTab === 'analytics' && (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                            <div style={{ padding: 'var(--spacing-lg)', backgroundColor: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+                                            <div style={{ padding: 'var(--spacing-lg)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
                                                 <h4 style={{ margin: '0 0 8px 0', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}><TrendingUp size={20} /> Preisentwicklung</h4>
                                                 <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 8px 0', lineHeight: 1.5 }}>
                                                     Dieses Diagramm wird <strong>automatisch</strong> durch alle manuellen Bestellungen sowie durch eingehende Rechnungen gefüllt, die von der KI verarbeitet wurden.
@@ -1685,7 +1685,7 @@ export const Products: React.FC = () => {
                                                 )}
                                             </label>
                                             
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px', padding: '12px', backgroundColor: 'white', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--color-border)' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px', padding: '12px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--color-border)' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                                                     <span style={{ color: 'var(--color-text-muted)' }}>Menge zu bestellen:</span>
                                                     <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{orderCart.find(c => c.product.id === selectedProductForOrder.id)?.quantity || 1} {selectedProductForOrder.unit}</span>
@@ -2087,7 +2087,7 @@ export const Products: React.FC = () => {
                                     padding: '12px',
                                     borderRadius: 'var(--radius-md)',
                                     border: '1px solid var(--color-border)',
-                                    backgroundColor: 'white',
+                                    backgroundColor: 'var(--color-surface)',
                                     cursor: 'pointer'
                                 }}
                             >

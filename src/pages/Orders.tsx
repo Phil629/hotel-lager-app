@@ -1143,7 +1143,7 @@ export const Orders: React.FC = () => {
                                                         style={{
                                                             display: 'flex', alignItems: 'center', gap: '6px',
                                                             padding: '6px 12px',
-                                                            backgroundColor: '#fff',
+                                                            backgroundColor: 'var(--color-surface)',
                                                             border: '1px solid #ff9800',
                                                             borderRadius: '4px',
                                                             color: '#ff9800',
@@ -2217,7 +2217,7 @@ export const Orders: React.FC = () => {
                                         padding: 'var(--spacing-sm) var(--spacing-md)',
                                         borderRadius: 'var(--radius-md)',
                                         border: '1px solid var(--color-border)',
-                                        backgroundColor: 'white',
+                                        backgroundColor: 'var(--color-surface)',
                                         color: 'var(--color-text-main)',
                                         cursor: 'pointer'
                                     }}
@@ -2334,7 +2334,7 @@ export const Orders: React.FC = () => {
                                         padding: 'var(--spacing-sm) var(--spacing-md)',
                                         borderRadius: 'var(--radius-md)',
                                         border: '1px solid var(--color-border)',
-                                        backgroundColor: 'white',
+                                        backgroundColor: 'var(--color-surface)',
                                         color: 'var(--color-text-main)',
                                         cursor: 'pointer'
                                     }}
@@ -2580,7 +2580,7 @@ export const Orders: React.FC = () => {
                                 <button onClick={() => setIsProposalModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#64748b" /></button>
                             </div>
 
-                            <div style={{ padding: 'var(--spacing-xl)', overflowY: 'auto', flex: 1, backgroundColor: 'white' }}>
+                            <div style={{ padding: 'var(--spacing-xl)', overflowY: 'auto', flex: 1, backgroundColor: 'var(--color-surface)' }}>
                                 {modalProposals.length === 0 ? (
                                     <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--spacing-2xl) 0' }}>Keine offenen Vorschläge mehr! 🎉</div>
                                 ) : (
