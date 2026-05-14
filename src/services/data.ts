@@ -201,8 +201,11 @@ export const DataService = {
     async deleteProduct(id: string): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;
-        const { error } = await supabase.from('products').delete().eq('id', id);
+        const { error, count } = await supabase.from('products').delete({ count: 'exact' }).eq('id', id);
         if (error) throw error;
+        if (count === 0) {
+            throw new Error("Fehlende Berechtigung oder Produkt nicht gefunden (RLS blockiert).");
+        }
     },
 
     async getOrders(): Promise<Order[]> {
