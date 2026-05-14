@@ -739,10 +739,10 @@ export const Products: React.FC = () => {
                             const hasMore = supProds.length > 5;
 
                             return (
-                                <div key={supplierId} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-xl)', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                                <div key={supplierId} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-xl)', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)', border: '1px solid var(--color-border)' }}>
                                     <div 
                                         onClick={() => toggleSupplier(supplierId)}
-                                        style={{ padding: '16px 24px', backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                        style={{ padding: '16px 24px', backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTopLeftRadius: 'calc(var(--radius-xl) - 1px)', borderTopRightRadius: 'calc(var(--radius-xl) - 1px)' }}
                                     >
                                         <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700 }}>
                                             <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><Building2 size={18} /></div>
