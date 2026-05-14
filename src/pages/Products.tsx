@@ -277,10 +277,17 @@ export const Products: React.FC = () => {
     const confirmDelete = async () => {
         if (deleteConfirmId) {
             setIsLoading(true);
-            await DataService.deleteProduct(deleteConfirmId);
-            await loadProducts();
-            setIsLoading(false);
-            setDeleteConfirmId(null);
+            try {
+                await DataService.deleteProduct(deleteConfirmId);
+                setDeleteConfirmId(null);
+                setNotification({ message: 'Produkt erfolgreich gelöscht', type: 'success' });
+                await loadProducts();
+            } catch (err: any) {
+                console.error("Failed to delete product", err);
+                setNotification({ message: 'Fehler beim Löschen: ' + (err.message || String(err)), type: 'error' });
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
