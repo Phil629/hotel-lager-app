@@ -251,7 +251,7 @@ export const Suppliers: React.FC = () => {
                     return (
                         <div key={supplier.id} className="card stat-card-interactive" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                             {/* Header */}
-                            <div style={{ padding: 'var(--spacing-lg) var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ padding: 'var(--spacing-lg) var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <div>
                                     <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: 'var(--color-text-main)' }}>{supplier.name}</h3>
                                     {supplier.contactName && (
@@ -306,7 +306,7 @@ export const Suppliers: React.FC = () => {
                 })}
 
                 {filteredSuppliers.length === 0 && (
-                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', backgroundColor: 'white', borderRadius: 'var(--radius-xl)', border: '1px dashed #cbd5e1', color: '#64748b' }}>
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px dashed var(--color-border)', color: 'var(--color-text-muted)' }}>
                         <Package size={48} style={{ margin: '0 auto 12px auto', opacity: 0.3 }} />
                         <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-main)' }}>Keine Lieferanten gefunden.</h3>
                         <p style={{ margin: 0 }}>Überprüfe deinen Suchbegriff oder lege einen neuen Lieferanten an.</p>

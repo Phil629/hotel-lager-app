@@ -739,10 +739,10 @@ export const Products: React.FC = () => {
                             const hasMore = supProds.length > 5;
 
                             return (
-                                <div key={supplierId} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-xl)', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)', border: '1px solid var(--color-border)' }}>
+                                <div key={supplierId} style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border)' }}>
                                     <div 
                                         onClick={() => toggleSupplier(supplierId)}
-                                        style={{ padding: '16px 24px', backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTopLeftRadius: 'calc(var(--radius-xl) - 1px)', borderTopRightRadius: 'calc(var(--radius-xl) - 1px)' }}
+                                        style={{ padding: '16px 24px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTopLeftRadius: 'calc(var(--radius-xl) - 1px)', borderTopRightRadius: 'calc(var(--radius-xl) - 1px)' }}
                                     >
                                         <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700 }}>
                                             <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><Building2 size={18} /></div>
@@ -757,10 +757,10 @@ export const Products: React.FC = () => {
                                     {isExpanded && (
                                         <>
                                             {isMobile ? (
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', padding: '16px', backgroundColor: '#f1f5f9' }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', padding: '16px', backgroundColor: 'var(--color-background)' }}>
                                                     {visibleProds.map(product => (
                                                         <div key={product.id} style={{
-                                                            backgroundColor: 'white',
+                                                            backgroundColor: 'var(--color-surface-elevated)',
                                                             borderRadius: 'var(--radius-xl)',
                                                             padding: 'var(--spacing-lg)',
                                                             boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)',
@@ -842,7 +842,7 @@ export const Products: React.FC = () => {
                                                                 )}
                                                             </div>
                                                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-                                                                <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', color: 'var(--color-text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
+                                                                <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
                                                                     <Edit2 size={16} /> Edit
                                                                 </button>
                                                                 <button onClick={() => handleDeleteClick(product.id)} style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
