@@ -843,7 +843,13 @@ export const Consumption: React.FC = () => {
                     </table>
                 ) : (
                     <div style={{ padding: 'var(--spacing-xl)' }}>
-                        <EmptyState icon={Bot} title="Keine offenen Vorschläge" text="Sobald ausreichend Bestellhistorie vorliegt, berechnet das System automatisch Verbrauchsvorschläge." />
+                        <EmptyState
+                            icon={Bot}
+                            title="Keine offenen Vorschläge"
+                            text={manualProducts.length > 0
+                                ? `${manualProducts.length} Produkt${manualProducts.length > 1 ? 'e haben' : ' hat'} noch nicht genug Bestellhistorie — mindestens 2 Bestellungen pro Produkt nötig. Sieh unten unter „Manuell konfigurieren".`
+                                : 'Sobald mindestens 2 Bestellungen pro Produkt vorliegen, berechnet das System automatisch einen Verbrauchsvorschlag.'}
+                        />
                     </div>
                 )}
             </div>
@@ -855,9 +861,14 @@ export const Consumption: React.FC = () => {
                         style={{ padding: '14px var(--spacing-xl)', borderBottom: showManualSection ? '1px solid var(--color-border)' : undefined, backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
                         onClick={() => setShowManualSection(v => !v)}
                     >
-                        <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Pencil size={15} color="var(--color-text-muted)" /> Manuell konfigurieren
-                        </h3>
+                        <div>
+                            <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Pencil size={15} color="var(--color-text-muted)" /> Manuell konfigurieren
+                            </h3>
+                            <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '3px' }}>
+                                Noch zu wenig Bestellhistorie für KI-Vorschläge — mind. 2 Bestellungen pro Produkt nötig
+                            </div>
+                        </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div onClick={e => e.stopPropagation()}>
                                 <SortSelect value={sortSetupBy} onChange={setSortSetupBy} />
@@ -884,10 +895,19 @@ export const Consumption: React.FC = () => {
                                     const edit = inlineEdits[p.id] ?? { amount: '', period: 'week' as const };
                                     const isSavingThis = saving === `inline-${p.id}`;
                                     const canSave = edit.amount !== '' && Number(edit.amount) > 0;
+                                    const orderCount = orders.filter(o => o.productName === p.name).length;
+                                    const needed = Math.max(0, 2 - orderCount);
                                     return (
                                         <tr key={p.id}>
                                             <td>
                                                 <div style={{ fontWeight: 500 }}>{p.name}</div>
+                                                <div style={{ fontSize: '11px', color: needed > 0 ? 'var(--color-text-faint)' : 'var(--color-success)', marginTop: '2px' }}>
+                                                    {orderCount === 0
+                                                        ? 'Noch keine Bestellungen · 2 nötig für KI'
+                                                        : needed > 0
+                                                            ? `${orderCount} Bestellung${orderCount > 1 ? 'en' : ''} · noch ${needed} nötig für KI`
+                                                            : `${orderCount} Bestellungen vorhanden`}
+                                                </div>
                                                 {p.category && <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>{p.category}</div>}
                                             </td>
                                             <td>

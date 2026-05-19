@@ -631,11 +631,11 @@ export const Orders: React.FC = () => {
             if (min > 0 && product.stock <= min) {
                 const standardQty = product.standardOrderQuantity ? product.standardOrderQuantity : min * 2;
                 
-                const productNameLower = product.name.toLowerCase();
+                const productNameLower = product.name.trim().toLowerCase();
                 const openOrdersForProduct = orders.filter(o =>
-                    o.status === 'open' && o.productName.toLowerCase() === productNameLower
+                    o.status === 'open' && o.productName.trim().toLowerCase() === productNameLower
                 );
-                if (openOrdersForProduct.length > 0) continue;
+                const openQty = openOrdersForProduct.reduce((sum, o) => sum + o.quantity, 0);
 
                 const needed = standardQty;
                 if (needed > 0) {
@@ -645,7 +645,7 @@ export const Orders: React.FC = () => {
                         supplierName: supplier ? supplier.name : 'Kein Lieferant',
                         supplierId: product.supplierId || 'unassigned',
                         quantity: needed,
-                        openQty: 0,
+                        openQty: openQty,
                         selected: true
                     });
                 }
@@ -2788,87 +2788,96 @@ export const Orders: React.FC = () => {
                                                                     </div>
                                                                     
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f1f5f9', padding: '6px', borderRadius: 'var(--radius-md)' }}>
-                                                                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569', paddingLeft: '4px' }}>BESTELLEN:</span>
-                                                                            <input type="number" min="1" value={prop.quantity || 1} onChange={e => updateProposalQuantity(originalIndex, Number(e.target.value))} style={{ width: '60px', padding: '6px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontWeight: 700, fontSize: '15px' }} />
-                                                                            <span style={{ fontSize: '13px', color: '#475569', width: '30px', fontWeight: 500 }}>{prod.unit || 'Stk'}</span>
-                                                                        </div>
-                                                                        
-                                                                        {(() => {
-                                                                            const _emailAddr = prod.emailOrderAddress || suppliers.find(s => s.id === prod.supplierId)?.email || '';
-                                                                            const { subject, body } = generateEmailTemplate([{ product: prod, quantity: prop.quantity }]);
-                                                                            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${_emailAddr}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                                                            const mailtoUrl = `mailto:${_emailAddr}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                                                            const webshopUrl = effWebUrl;
+                                                                        {prop.openQty > 0 ? (
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', padding: '10px 16px', borderRadius: 'var(--radius-md)', color: '#d97706', fontWeight: 600 }}>
+                                                                                <Package size={16} />
+                                                                                Bereits bestellt ({prop.openQty} {prod.unit || 'Stk'} unterwegs)
+                                                                            </div>
+                                                                        ) : (
+                                                                            <>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f1f5f9', padding: '6px', borderRadius: 'var(--radius-md)' }}>
+                                                                                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569', paddingLeft: '4px' }}>BESTELLEN:</span>
+                                                                                    <input type="number" min="1" value={prop.quantity || 1} onChange={e => updateProposalQuantity(originalIndex, Number(e.target.value))} style={{ width: '60px', padding: '6px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontWeight: 700, fontSize: '15px' }} />
+                                                                                    <span style={{ fontSize: '13px', color: '#475569', width: '30px', fontWeight: 500 }}>{prod.unit || 'Stk'}</span>
+                                                                                </div>
+                                                                                
+                                                                                {(() => {
+                                                                                    const _emailAddr = prod.emailOrderAddress || suppliers.find(s => s.id === prod.supplierId)?.email || '';
+                                                                                    const { subject, body } = generateEmailTemplate([{ product: prod, quantity: prop.quantity }]);
+                                                                                    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${_emailAddr}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                                                                    const mailtoUrl = `mailto:${_emailAddr}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                                                                    const webshopUrl = effWebUrl;
 
-                                                                            if (btnText === '📧 E-Mail öffnen') {
-                                                                                const pref = StorageService.getSettings().preferredEmailClient;
-                                                                                return (
-                                                                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                                                                        {(pref === 'all' || pref === 'gmail') && (
+                                                                                    if (btnText === '📧 E-Mail öffnen') {
+                                                                                        const pref = StorageService.getSettings().preferredEmailClient;
+                                                                                        return (
+                                                                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                                                                {(pref === 'all' || pref === 'gmail') && (
+                                                                                                    <a 
+                                                                                                        href={gmailUrl}
+                                                                                                        target="_blank"
+                                                                                                        rel="noopener noreferrer"
+                                                                                                        onClick={() => executeProposalDbSave(prop)}
+                                                                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+                                                                                                        <Mail size={16} /> {pref === 'gmail' ? 'E-Mail öffnen' : 'Gmail'}
+                                                                                                    </a>
+                                                                                                )}
+                                                                                                {(pref === 'all' || pref === 'mailto' || !pref) && (
+                                                                                                    <a 
+                                                                                                        href={mailtoUrl}
+                                                                                                        onClick={() => executeProposalDbSave(prop)}
+                                                                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+                                                                                                        <Mail size={16} /> {pref === 'mailto' ? 'E-Mail öffnen' : 'Mail-App'}
+                                                                                                    </a>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        );
+                                                                                    } else if (btnText === '🔗 Im Tab bestellen') {
+                                                                                        return (
                                                                                             <a 
-                                                                                                href={gmailUrl}
+                                                                                                href={webshopUrl}
                                                                                                 target="_blank"
                                                                                                 rel="noopener noreferrer"
                                                                                                 onClick={() => executeProposalDbSave(prop)}
-                                                                                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
-                                                                                                <Mail size={16} /> {pref === 'gmail' ? 'E-Mail öffnen' : 'Gmail'}
+                                                                                                style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                                {btnText}
                                                                                             </a>
-                                                                                        )}
-                                                                                        {(pref === 'all' || pref === 'mailto' || !pref) && (
-                                                                                            <a 
-                                                                                                href={mailtoUrl}
-                                                                                                onClick={() => executeProposalDbSave(prop)}
-                                                                                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}>
-                                                                                                <Mail size={16} /> {pref === 'mailto' ? 'E-Mail öffnen' : 'Mail-App'}
-                                                                                            </a>
-                                                                                        )}
-                                                                                    </div>
-                                                                                );
-                                                                            } else if (btnText === '🔗 Im Tab bestellen') {
-                                                                                return (
-                                                                                    <a 
-                                                                                        href={webshopUrl}
-                                                                                        target="_blank"
-                                                                                        rel="noopener noreferrer"
-                                                                                        onClick={() => executeProposalDbSave(prop)}
-                                                                                        style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
-                                                                                        {btnText}
-                                                                                    </a>
-                                                                                );
-                                                                            } else if (btnText === '📞 Anrufen & Bestellen') {
-                                                                                return (
-                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                                                                                        {(prod.productNumber || supp?.customerNumber) && (
-                                                                                            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textAlign: 'right', display: 'flex', gap: '8px' }}>
-                                                                                                {prod.productNumber && <span>Art-Nr: <strong style={{ color: 'var(--color-text-main)' }}>{prod.productNumber}</strong></span>}
-                                                                                                {supp?.customerNumber && <span>Kd-Nr: <strong style={{ color: 'var(--color-text-main)' }}>{supp.customerNumber}</strong></span>}
+                                                                                        );
+                                                                                    } else if (btnText === '📞 Anrufen & Bestellen') {
+                                                                                        return (
+                                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                                                                                                {(prod.productNumber || supp?.customerNumber) && (
+                                                                                                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textAlign: 'right', display: 'flex', gap: '8px' }}>
+                                                                                                        {prod.productNumber && <span>Art-Nr: <strong style={{ color: 'var(--color-text-main)' }}>{prod.productNumber}</strong></span>}
+                                                                                                        {supp?.customerNumber && <span>Kd-Nr: <strong style={{ color: 'var(--color-text-main)' }}>{supp.customerNumber}</strong></span>}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                                                                    <button 
+                                                                                                        onClick={() => setPhoneCallProposalData({ product: prod, quantity: prop.quantity || 1 })}
+                                                                                                        style={{ border: '1px solid var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                                                                                        <Phone size={16} /> Notizen & Details anzeigen
+                                                                                                    </button>
+                                                                                                    <button 
+                                                                                                        onClick={() => executeProposalDbSave(prop)}
+                                                                                                        style={{ border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                                        <CheckSquare size={16} /> Als bestellt markieren
+                                                                                                    </button>
+                                                                                                </div>
                                                                                             </div>
-                                                                                        )}
-                                                                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                                                                            <button 
-                                                                                                onClick={() => setPhoneCallProposalData({ product: prod, quantity: prop.quantity || 1 })}
-                                                                                                style={{ border: '1px solid var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                                                                                <Phone size={16} /> Notizen & Details anzeigen
-                                                                                            </button>
+                                                                                        );
+                                                                                    } else {
+                                                                                        return (
                                                                                             <button 
                                                                                                 onClick={() => executeProposalDbSave(prop)}
-                                                                                                style={{ border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
-                                                                                                <CheckSquare size={16} /> Als bestellt markieren
+                                                                                                style={{ padding: '10px 16px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                                {btnText}
                                                                                             </button>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                );
-                                                                            } else {
-                                                                                return (
-                                                                                    <button 
-                                                                                        onClick={() => executeProposalDbSave(prop)}
-                                                                                        style={{ padding: '10px 16px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
-                                                                                        {btnText}
-                                                                                    </button>
-                                                                                );
-                                                                            }
-                                                                        })()}
+                                                                                        );
+                                                                                    }
+                                                                                })()}
+                                                                            </>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             );
