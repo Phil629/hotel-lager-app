@@ -31,7 +31,7 @@ interface PhoneCallPanelProps {
     supplierPhone?: string;
     supplierName?: string;
     order?: Order;
-    lowStockProducts?: { product: Product; suggestedQty: number }[];
+    lowStockProducts?: { product: Product; suggestedQty: number; openQty?: number }[];
     onClose: () => void;
 }
 
@@ -129,18 +129,27 @@ export const PhoneCallPanel: React.FC<PhoneCallPanelProps> = ({
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    {lowStockProducts.map(({ product, suggestedQty }) => (
+                                    {lowStockProducts.map(({ product, suggestedQty, openQty }) => (
                                         <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', backgroundColor: product.stock <= 0 ? 'var(--color-danger-bg)' : 'var(--color-warning-bg)', border: `1px solid ${product.stock <= 0 ? '#fca5a5' : '#fcd34d'}`, borderRadius: 'var(--radius-md)' }}>
                                             <div>
                                                 <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-main)' }}>{product.name}</div>
                                                 <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                                                     Bestand: <span style={{ color: product.stock <= 0 ? 'var(--color-danger)' : 'var(--color-warning)', fontWeight: 600 }}>{product.stock} {product.unit}</span>
                                                     {product.minStock !== undefined && ` · Min: ${product.minStock}`}
+                                                    {openQty !== undefined && openQty > 0 && <span style={{ color: '#d97706', fontWeight: 600, marginLeft: '8px' }}>· {openQty} ausstehend</span>}
                                                 </div>
                                             </div>
                                             <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '16px' }}>
-                                                <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--color-primary)', lineHeight: 1 }}>{suggestedQty}</div>
-                                                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{product.unit} bestellen</div>
+                                                {openQty !== undefined && openQty > 0 ? (
+                                                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#d97706', backgroundColor: '#fef3c7', padding: '4px 8px', borderRadius: '4px' }}>
+                                                        Bereits bestellt
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--color-primary)', lineHeight: 1 }}>{suggestedQty}</div>
+                                                        <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{product.unit} bestellen</div>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     ))}

@@ -2141,7 +2141,8 @@ export const Products: React.FC = () => {
                             ?? phoneCallProduct.standardOrderQuantity
                             ?? (phoneCallProduct.minStock !== undefined && phoneCallProduct.stock < phoneCallProduct.minStock
                                 ? Math.max((phoneCallProduct.minStock * 2) - phoneCallProduct.stock, 1)
-                                : 1)
+                                : 1),
+                        openQty: orders.filter(o => o.status === 'open' && o.productName.trim().toLowerCase() === phoneCallProduct.name.trim().toLowerCase()).reduce((sum, o) => sum + o.quantity, 0)
                     }]}
                     onClose={() => setPhoneCallProduct(null)}
                 />

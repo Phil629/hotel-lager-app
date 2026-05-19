@@ -679,11 +679,7 @@ export const Orders: React.FC = () => {
             
             await DataService.saveOrder(newOrder);
             setSessionGeneratedOrderIds(prev => [...prev, newOrder.id]);
-            setModalProposals(prev => prev.map(p => 
-                p.product.id === prod.id 
-                ? { ...p, openQty: p.openQty + proposal.quantity } 
-                : p
-            ));
+            setModalProposals(prev => prev.filter(p => p.product.id !== prod.id));
             loadOrders();
             setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
         } catch(e) {
@@ -2857,14 +2853,13 @@ export const Orders: React.FC = () => {
                                                                                                     </div>
                                                                                                 )}
                                                                                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                                                                                    <button 
-                                                                                                        onClick={() => setPhoneCallProposalData({ product: prod, quantity: prop.quantity || 1 })}
-                                                                                                        style={{ border: '1px solid var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                                                                                        <Phone size={16} /> Notizen & Details anzeigen
-                                                                                                    </button>
+                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', fontSize: '15px', fontWeight: 700, color: 'var(--color-text-main)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', height: '40px' }}>
+                                                                                                        <Phone size={16} color="var(--color-primary)" />
+                                                                                                        {supp?.orderPhone || supp?.phone || 'Keine Nr. hinterlegt'}
+                                                                                                    </div>
                                                                                                     <button 
                                                                                                         onClick={() => executeProposalDbSave(prop)}
-                                                                                                        style={{ border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                                        style={{ border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 16px', height: '40px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
                                                                                                         <CheckSquare size={16} /> Als bestellt markieren
                                                                                                     </button>
                                                                                                 </div>
