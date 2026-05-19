@@ -10,6 +10,8 @@ export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [userRole, setUserRole] = useState<string>('');
+    const [currentCompanyId, setCurrentCompanyId] = useState<string>('');
+    const [currentUserId, setCurrentUserId] = useState<string>('');
 
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -31,8 +33,10 @@ export const Suppliers: React.FC = () => {
         if (supabaseClient) {
             supabaseClient.auth.getUser().then(({ data: { user } }) => {
                 if (user) {
-                    supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle().then(({ data }) => {
+                    setCurrentUserId(user.id);
+                    supabaseClient.from('profiles').select('role, company_id').eq('id', user.id).maybeSingle().then(({ data }) => {
                         setUserRole(data?.role || '');
+                        setCurrentCompanyId(data?.company_id || '');
                     });
                 }
             });
@@ -134,8 +138,8 @@ export const Suppliers: React.FC = () => {
 
             const supplierToSave: Supplier = {
                 id: targetSupplierId,
-                company_id: editingSupplier?.company_id,
-                user_id: editingSupplier?.user_id,
+                company_id: editingSupplier?.company_id || currentCompanyId || undefined,
+                user_id: editingSupplier?.user_id || currentUserId || undefined,
                 is_auto_generated: editingSupplier?.is_auto_generated,
                 name: formData.name,
                 contactName: formData.contactName,
@@ -194,7 +198,7 @@ export const Suppliers: React.FC = () => {
         } catch (error: any) {
             console.error(error);
             const msg = error?.message || error?.details || JSON.stringify(error);
-            setNotification({ message: `Fehler beim Speichern: ${msg}`, type: 'error' });
+            setNotification({ message: `Fehler beim Speichern: ${msg}. Payload: ${JSON.stringify(supplierToSave)}`, type: 'error' });
         } finally {
             setIsSubmitting(false);
         }
