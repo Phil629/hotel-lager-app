@@ -134,6 +134,9 @@ export const Suppliers: React.FC = () => {
 
             const supplierToSave: Supplier = {
                 id: targetSupplierId,
+                company_id: editingSupplier?.company_id,
+                user_id: editingSupplier?.user_id,
+                is_auto_generated: editingSupplier?.is_auto_generated,
                 name: formData.name,
                 contactName: formData.contactName,
                 email: formData.email || '',

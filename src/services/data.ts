@@ -17,26 +17,32 @@ const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: 
     }];
 };
 
-const toSupabaseSupplier = (s: Supplier) => ({
-    id: s.id,
-    name: s.name?.trim() || 'Unbenannt',
-    contact_name: s.contactName?.trim() || null,
-    email: s.email?.trim() || null,
-    phone: s.phone?.trim() || null,
-    url: s.url?.trim() || null,
-    notes: s.notes ? JSON.stringify(s.notes) : null,
-    login_url: s.loginUrl?.trim() || null,
-    login_username: s.loginUsername?.trim() || null,
-    // login_password intentionally omitted — stored encrypted via upsert_supplier_credentials RPC
-    preferred_order_method: s.preferredOrderMethod?.trim() || null,
-    order_email: s.orderEmail?.trim() || null,
-    order_phone: s.orderPhone?.trim() || null,
-    order_url: s.orderUrl?.trim() || null,
-    ignore_order_proposals: s.ignoreOrderProposals,
-    customer_number: s.customerNumber?.trim() || null,
-    payment_method: s.paymentMethod?.trim() || null,
-    default_category: s.defaultCategory?.trim() || null
-});
+const toSupabaseSupplier = (s: Supplier) => {
+    const payload: any = {
+        id: s.id,
+        name: s.name?.trim() || 'Unbenannt',
+        contact_name: s.contactName?.trim() || null,
+        email: s.email?.trim() || null,
+        phone: s.phone?.trim() || null,
+        url: s.url?.trim() || null,
+        notes: s.notes ? JSON.stringify(s.notes) : null,
+        login_url: s.loginUrl?.trim() || null,
+        login_username: s.loginUsername?.trim() || null,
+        // login_password intentionally omitted — stored encrypted via upsert_supplier_credentials RPC
+        preferred_order_method: s.preferredOrderMethod?.trim() || null,
+        order_email: s.orderEmail?.trim() || null,
+        order_phone: s.orderPhone?.trim() || null,
+        order_url: s.orderUrl?.trim() || null,
+        ignore_order_proposals: s.ignoreOrderProposals,
+        customer_number: s.customerNumber?.trim() || null,
+        payment_method: s.paymentMethod?.trim() || null,
+        default_category: s.defaultCategory?.trim() || null
+    };
+    if (s.company_id !== undefined) payload.company_id = s.company_id;
+    if (s.user_id !== undefined) payload.user_id = s.user_id;
+    if (s.is_auto_generated !== undefined) payload.is_auto_generated = s.is_auto_generated;
+    return payload;
+};
 
 const fromSupabaseSupplier = (s: any): Supplier => ({
     id: s.id,
