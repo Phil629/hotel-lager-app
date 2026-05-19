@@ -945,32 +945,34 @@ export const Orders: React.FC = () => {
                             const supplier = suppliers.find(s => s.id === product.supplierId) ?? null;
                             const effectiveEmail = order.supplierEmail || product.emailOrderAddress || supplier?.email || '';
                             const effectivePhone = order.supplierPhone || product.supplierPhone || supplier?.orderPhone || supplier?.phone || '';
+                            const effectiveUrl = product.orderUrl || supplier?.orderUrl || supplier?.url || supplier?.loginUrl || '';
+                            const effMethod = getEffectiveOrderMethod(product);
                             return (
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', marginBottom: '6px' }}>
-                                    {product.orderUrl && (
-                                        <a href={product.orderUrl} target="_blank" rel="noopener noreferrer"
-                                            className={getEffectiveOrderMethod(product) === 'link' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost'}
+                                    {effectiveUrl && (
+                                        <a href={effectiveUrl} target="_blank" rel="noopener noreferrer"
+                                            className={(effMethod === 'link' || effMethod === 'webshop') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost'}
                                         >
                                             <ExternalLink size={13} /> Webshop
-                                            {getEffectiveOrderMethod(product) === 'link' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
+                                            {(effMethod === 'link' || effMethod === 'webshop') && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
                                     {effectiveEmail && !product.autoOrder && (
                                         <a href={`https://mail.google.com/mail/?view=cm&fs=1&to=${effectiveEmail}`} target="_blank" rel="noopener noreferrer"
-                                            className={getEffectiveOrderMethod(product) === 'email' ? 'btn btn-sm btn-danger-solid' : 'btn btn-sm btn-ghost'}
-                                            style={getEffectiveOrderMethod(product) === 'email' ? { backgroundColor: '#EA4335' } : {}}
+                                            className={effMethod === 'email' ? 'btn btn-sm btn-danger-solid' : 'btn btn-sm btn-ghost'}
+                                            style={effMethod === 'email' ? { backgroundColor: '#EA4335' } : {}}
                                         >
                                             <Mail size={13} /> Gmail
-                                            {getEffectiveOrderMethod(product) === 'email' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
+                                            {effMethod === 'email' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
                                     {effectivePhone && (
                                         <button
                                             onClick={() => setPhoneCallPanelData({ order, mode: 'order' })}
-                                            className={getEffectiveOrderMethod(product) === 'phone' ? 'btn btn-sm btn-warning' : 'btn btn-sm btn-ghost'}
+                                            className={effMethod === 'phone' ? 'btn btn-sm btn-warning' : 'btn btn-sm btn-ghost'}
                                         >
                                             <Phone size={13} /> Anrufen
-                                            {getEffectiveOrderMethod(product) === 'phone' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
+                                            {effMethod === 'phone' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
                                         </button>
                                     )}
                                 </div>
@@ -1795,15 +1797,15 @@ export const Orders: React.FC = () => {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
                                             {(selectedProduct.supplierPhone || (suppliers.find(s => s.id === selectedProduct.supplierId)?.phone)) && (
                                                 <div style={{
-                                                    backgroundColor: selectedProduct.preferredOrderMethod === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                                    backgroundColor: getEffectiveOrderMethod(selectedProduct) === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                                     padding: 'var(--spacing-md)',
                                                     borderRadius: 'var(--radius-md)',
-                                                    border: selectedProduct.preferredOrderMethod === 'phone' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                    order: selectedProduct.preferredOrderMethod === 'phone' ? -1 : 0
+                                                    border: getEffectiveOrderMethod(selectedProduct) === 'phone' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                    order: getEffectiveOrderMethod(selectedProduct) === 'phone' ? -1 : 0
                                                 }}>
                                                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
                                                         Telefonische Bestellung:
-                                                        {selectedProduct.preferredOrderMethod === 'phone' && (
+                                                        {getEffectiveOrderMethod(selectedProduct) === 'phone' && (
                                                             <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                         )}
                                                     </label>
@@ -1839,22 +1841,22 @@ export const Orders: React.FC = () => {
                                                     </div>
                                                 </div>
                                             )}
-                                            {selectedProduct.orderUrl && (
+                                            {(selectedProduct.orderUrl || suppliers.find(s => s.id === selectedProduct.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProduct.supplierId)?.url || suppliers.find(s => s.id === selectedProduct.supplierId)?.loginUrl) && (
                                                 <div style={{
-                                                    backgroundColor: selectedProduct.preferredOrderMethod === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                                    backgroundColor: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                                     padding: 'var(--spacing-md)',
                                                     borderRadius: 'var(--radius-md)',
-                                                    border: selectedProduct.preferredOrderMethod === 'link' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                    order: selectedProduct.preferredOrderMethod === 'link' ? -1 : 0
+                                                    border: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                    order: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? -1 : 0
                                                 }}>
                                                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
                                                         Bestelllink:
-                                                        {selectedProduct.preferredOrderMethod === 'link' && (
+                                                        {(getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') && (
                                                             <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                         )}
                                                     </label>
                                                     <a
-                                                        href={selectedProduct.orderUrl}
+                                                        href={selectedProduct.orderUrl || suppliers.find(s => s.id === selectedProduct.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProduct.supplierId)?.url || suppliers.find(s => s.id === selectedProduct.supplierId)?.loginUrl || ''}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         style={{
@@ -1865,8 +1867,8 @@ export const Orders: React.FC = () => {
                                                             padding: 'var(--spacing-sm)',
                                                             borderRadius: 'var(--radius-sm)',
                                                             border: '1px solid var(--color-border)',
-                                                            backgroundColor: selectedProduct.preferredOrderMethod === 'link' ? 'var(--color-primary)' : 'var(--color-surface)',
-                                                            color: selectedProduct.preferredOrderMethod === 'link' ? 'white' : 'var(--color-text-main)',
+                                                            backgroundColor: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? 'var(--color-primary)' : 'var(--color-surface)',
+                                                            color: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? 'white' : 'var(--color-text-main)',
                                                             cursor: 'pointer',
                                                             fontWeight: 500,
                                                             textDecoration: 'none'
@@ -1880,7 +1882,7 @@ export const Orders: React.FC = () => {
 
                                             {(selectedProduct.emailOrderAddress || suppliers.find(s => s.id === selectedProduct.supplierId)?.email) && !selectedProduct.autoOrder && (
                                                 <>
-                                                    {selectedProduct.preferredOrderMethod !== 'email' && !isOrderEmailExpanded ? (
+                                                    {getEffectiveOrderMethod(selectedProduct) !== 'email' && !isOrderEmailExpanded ? (
                                                         <button
                                                             type="button"
                                                             onClick={() => setIsOrderEmailExpanded(true)}
@@ -1904,15 +1906,15 @@ export const Orders: React.FC = () => {
                                                         </button>
                                                     ) : (
                                                         <div style={{
-                                                            backgroundColor: selectedProduct.preferredOrderMethod === 'email' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                                            backgroundColor: getEffectiveOrderMethod(selectedProduct) === 'email' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                                             padding: 'var(--spacing-md)',
                                                             borderRadius: 'var(--radius-md)',
-                                                            border: selectedProduct.preferredOrderMethod === 'email' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                            order: selectedProduct.preferredOrderMethod === 'email' ? -1 : 0
+                                                            border: getEffectiveOrderMethod(selectedProduct) === 'email' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                            order: getEffectiveOrderMethod(selectedProduct) === 'email' ? -1 : 0
                                                         }}>
                                                             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
                                                                 Email Vorschau & Bearbeitung:
-                                                                {selectedProduct.preferredOrderMethod === 'email' && (
+                                                                {getEffectiveOrderMethod(selectedProduct) === 'email' && (
                                                                     <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                                 )}
                                                             </label>
@@ -2754,10 +2756,12 @@ export const Orders: React.FC = () => {
                                                             const prod = prop.product;
                                                             const supp = suppliers.find(s => s.id === prod.supplierId);
                                                             const emailAddr = prod.emailOrderAddress || supp?.email || '';
+                                                            const effM = getEffectiveOrderMethod(prod);
+                                                            const effWebUrl = prod.orderUrl || supp?.orderUrl || supp?.url || supp?.loginUrl || '';
                                                             let btnText = "Bestellen";
-                                                            if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) btnText = "🔗 Im Tab bestellen";
-                                                            else if (prod.preferredOrderMethod === 'phone') btnText = "📞 Anrufen & Bestellen";
-                                                            else if (prod.preferredOrderMethod === 'email' || emailAddr) btnText = "📧 E-Mail öffnen";
+                                                            if ((effM === 'link' || effM === 'webshop') && effWebUrl) btnText = "🔗 Im Tab bestellen";
+                                                            else if (effM === 'phone') btnText = "📞 Anrufen & Bestellen";
+                                                            else if (effM === 'email' || emailAddr) btnText = "📧 E-Mail öffnen";
 
                                                             return (
                                                                 <div key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', flexWrap: 'wrap' }}>
@@ -2782,7 +2786,7 @@ export const Orders: React.FC = () => {
                                                                             const { subject, body } = generateEmailTemplate([{ product: prod, quantity: prop.quantity }]);
                                                                             const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${_emailAddr}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                                                                             const mailtoUrl = `mailto:${_emailAddr}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                                                            const webshopUrl = prod.orderUrl || suppliers.find(s => s.id === prod.supplierId)?.url || suppliers.find(s => s.id === prod.supplierId)?.loginUrl || '';
+                                                                            const webshopUrl = effWebUrl;
 
                                                                             if (btnText === '📧 E-Mail öffnen') {
                                                                                 const pref = StorageService.getSettings().preferredEmailClient;
