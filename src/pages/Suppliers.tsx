@@ -16,6 +16,7 @@ export const Suppliers: React.FC = () => {
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
     const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
+    const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState<Partial<Supplier>>({
@@ -416,10 +417,7 @@ export const Suppliers: React.FC = () => {
                                                     <input type="radio" name="pom_supplier" value="email" checked={formData.preferredOrderMethod === 'email' || !formData.preferredOrderMethod} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'email' })} /> <Mail size={14}/> Email
                                                 </label>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                                                    <input type="radio" name="pom_supplier" value="link" checked={formData.preferredOrderMethod === 'link'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'link' })} /> <ExternalLink size={14}/> Webshop (Link)
-                                                </label>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                                                    <input type="radio" name="pom_supplier" value="webshop" checked={formData.preferredOrderMethod === 'webshop'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'webshop' })} /> <ExternalLink size={14}/> Webshop (System)
+                                                    <input type="radio" name="pom_supplier" value="webshop" checked={formData.preferredOrderMethod === 'webshop' || formData.preferredOrderMethod === 'link'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'webshop' })} /> <ExternalLink size={14}/> Webshop
                                                 </label>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                                                     <input type="radio" name="pom_supplier" value="phone" checked={formData.preferredOrderMethod === 'phone'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'phone' })} /> <Phone size={14}/> Telefon
