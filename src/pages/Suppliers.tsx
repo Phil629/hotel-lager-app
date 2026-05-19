@@ -5,7 +5,6 @@ import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
-import { PhoneCallPanel } from '../components/PhoneCallPanel';
 
 export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -25,15 +24,6 @@ export const Suppliers: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [phoneCallSupplier, setPhoneCallSupplier] = useState<Supplier | null>(null);
-
-    const getLowStockProducts = (supplier: Supplier) =>
-        products
-            .filter(p => p.supplierId === supplier.id && p.minStock !== undefined && p.stock < p.minStock)
-            .map(p => ({
-                product: p,
-                suggestedQty: p.standardOrderQuantity ?? Math.max((p.minStock! * 2) - p.stock, 1),
-            }));
 
     useEffect(() => {
         const supabaseClient = getSupabaseClient();
@@ -311,16 +301,6 @@ export const Suppliers: React.FC = () => {
                                              + {supplier.documents.length} Dokumente
                                          </div>
                                     )}
-                                    {supplier.phone && (
-                                        <button
-                                            onClick={() => setPhoneCallSupplier(supplier)}
-                                            className={supplier.preferredOrderMethod === 'phone' ? 'btn btn-sm btn-success' : 'btn btn-sm btn-ghost'}
-                                            style={{ marginLeft: 'auto' }}
-                                        >
-                                            <Phone size={13} />
-                                            {supplier.preferredOrderMethod === 'phone' ? 'Telefonbestellung' : 'Anruf vorbereiten'}
-                                        </button>
-                                    )}
                                 </div>
                             </div>
                         </div>
@@ -335,15 +315,6 @@ export const Suppliers: React.FC = () => {
                     </div>
                 )}
             </div>
-
-            {phoneCallSupplier && (
-                <PhoneCallPanel
-                    mode="order"
-                    supplier={phoneCallSupplier}
-                    lowStockProducts={getLowStockProducts(phoneCallSupplier)}
-                    onClose={() => setPhoneCallSupplier(null)}
-                />
-            )}
 
             {isModalOpen && (
                 <div className="modal-overlay">
@@ -407,14 +378,35 @@ export const Suppliers: React.FC = () => {
                                             </div>
                                             <div className="form-group">
                                                 <label className="form-label">Standard Produktkategorie</label>
-                                                <select value={formData.defaultCategory || ''} onChange={e => setFormData({ ...formData, defaultCategory: e.target.value || undefined })} className="input-field">
-                                                    <option value="">-- Keine Vorgabe --</option>
-                                                    <option value="Lebensmittel">Lebensmittel</option>
-                                                    <option value="Getränke">Getränke</option>
-                                                    <option value="Reinigung">Reinigung</option>
-                                                    <option value="Büro">Büro</option>
-                                                    <option value="Sonstiges">Sonstiges</option>
-                                                </select>
+                                                {isCustomCategoryMode ? (
+                                                    <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                                                        <input
+                                                            value={formData.defaultCategory || ''}
+                                                            onChange={e => setFormData({ ...formData, defaultCategory: e.target.value })}
+                                                            placeholder="Eigene..."
+                                                            autoFocus
+                                                            className="input-field"
+                                                        />
+                                                        <button type="button" onClick={() => { setIsCustomCategoryMode(false); setFormData({ ...formData, defaultCategory: undefined }); }} className="btn btn-ghost btn-icon"><X size={16} /></button>
+                                                    </div>
+                                                ) : (
+                                                    <select
+                                                        value={formData.defaultCategory || ''}
+                                                        onChange={e => {
+                                                            if (e.target.value === 'custom') { setIsCustomCategoryMode(true); setFormData({ ...formData, defaultCategory: '' }); }
+                                                            else { setFormData({ ...formData, defaultCategory: e.target.value || undefined }); }
+                                                        }}
+                                                        className="input-field"
+                                                    >
+                                                        <option value="">-- Keine Vorgabe --</option>
+                                                        <option value="Lebensmittel">Lebensmittel</option>
+                                                        <option value="Getränke">Getränke</option>
+                                                        <option value="Reinigung">Reinigung</option>
+                                                        <option value="Büro">Büro</option>
+                                                        <option value="Sonstiges">Sonstiges</option>
+                                                        <option value="custom">Eigene eingeben...</option>
+                                                    </select>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="form-group">

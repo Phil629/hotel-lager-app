@@ -8,6 +8,7 @@ import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, Ext
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
+import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import QRCode from "react-qr-code";
 import { useSearchParams } from 'react-router-dom';
 
@@ -85,6 +86,7 @@ export const Products: React.FC = () => {
     const [showIoTLink, setShowIoTLink] = useState<{ product: Product, curl: string, powershell: string } | null>(null);
     const [qrTab, setQrTab] = useState<'api' | 'order' | 'stock'>('api');
     const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
+    const [phoneCallProduct, setPhoneCallProduct] = useState<Product | null>(null);
 
     const getEffectiveOrderMethod = (product: Product) => {
         if (product.preferredOrderMethod) return product.preferredOrderMethod;
@@ -836,7 +838,7 @@ export const Products: React.FC = () => {
                                                                     </button>
                                                                 )}
                                                                 {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
-                                                                    <button onClick={() => window.location.href = `tel:${product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone}`} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
+                                                                    <button onClick={() => setPhoneCallProduct(product)} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
                                                                         <Phone size={16} /> Anrufen
                                                                     </button>
                                                                 )}
@@ -946,7 +948,7 @@ export const Products: React.FC = () => {
                                                                                 </button>
                                                                             )}
                                                                             {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
-                                                                                <button onClick={() => window.location.href = `tel:${product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone}`} className="btn btn-sm btn-ghost" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
+                                                                                <button onClick={() => setPhoneCallProduct(product)} className="btn btn-sm btn-ghost" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
                                                                                     <Phone size={13} /> Anrufen
                                                                                 </button>
                                                                             )}
