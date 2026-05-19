@@ -19,23 +19,23 @@ const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: 
 
 const toSupabaseSupplier = (s: Supplier) => ({
     id: s.id,
-    name: s.name,
-    contact_name: s.contactName || null,
-    email: s.email || null,
-    phone: s.phone || null,
-    url: s.url || null,
+    name: s.name?.trim() || 'Unbenannt',
+    contact_name: s.contactName?.trim() || null,
+    email: s.email?.trim() || null,
+    phone: s.phone?.trim() || null,
+    url: s.url?.trim() || null,
     notes: s.notes ? JSON.stringify(s.notes) : null,
-    login_url: s.loginUrl || null,
-    login_username: s.loginUsername || null,
+    login_url: s.loginUrl?.trim() || null,
+    login_username: s.loginUsername?.trim() || null,
     // login_password intentionally omitted — stored encrypted via upsert_supplier_credentials RPC
-    preferred_order_method: s.preferredOrderMethod || null,
-    order_email: s.orderEmail || null,
-    order_phone: s.orderPhone || null,
-    order_url: s.orderUrl || null,
+    preferred_order_method: s.preferredOrderMethod?.trim() || null,
+    order_email: s.orderEmail?.trim() || null,
+    order_phone: s.orderPhone?.trim() || null,
+    order_url: s.orderUrl?.trim() || null,
     ignore_order_proposals: s.ignoreOrderProposals,
-    customer_number: s.customerNumber || null,
-    payment_method: s.paymentMethod || null,
-    default_category: s.defaultCategory || null
+    customer_number: s.customerNumber?.trim() || null,
+    payment_method: s.paymentMethod?.trim() || null,
+    default_category: s.defaultCategory?.trim() || null
 });
 
 const fromSupabaseSupplier = (s: any): Supplier => ({

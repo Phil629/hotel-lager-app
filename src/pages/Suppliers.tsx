@@ -188,9 +188,10 @@ export const Suppliers: React.FC = () => {
             });
             setIsModalOpen(false);
             await loadData();
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            setNotification({ message: 'Fehler beim Speichern.', type: 'error' });
+            const msg = error?.message || error?.details || JSON.stringify(error);
+            setNotification({ message: `Fehler beim Speichern: ${msg}`, type: 'error' });
         } finally {
             setIsSubmitting(false);
         }
