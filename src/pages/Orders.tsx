@@ -2768,8 +2768,8 @@ export const Orders: React.FC = () => {
                                             </p>
                                         </div>
 
-                                        {/* MinStock setup — only shown when no open orders */}
-                                        {orders.filter(o => o.status === 'open').length === 0 && productsWithoutMinStock.length > 0 && (
+                                        {/* MinStock setup */}
+                                        {productsWithoutMinStock.length > 0 && (
                                             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 'var(--spacing-xl)' }}>
                                                 <div style={{ marginBottom: 'var(--spacing-lg)' }}>
                                                     <h3 style={{ margin: '0 0 4px 0', fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
