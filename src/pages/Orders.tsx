@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ShoppingCart, Bot } from 'lucide-react';
+import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ShoppingCart, Bot, Save, Settings } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
@@ -125,6 +125,7 @@ export const Orders: React.FC = () => {
     const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
     const [sessionGeneratedOrderIds, setSessionGeneratedOrderIds] = React.useState<string[]>([]);
     const [modalProposals, setModalProposals] = useState<{product: Product, supplierName: string, supplierId: string, quantity: number, openQty: number, selected: boolean}[]>([]);
+    const [minStockEdits, setMinStockEdits] = useState<Record<string, number | ''>>({});
     
     // Derived state for legacy compatibility
     const selectedProduct = orderCart.length > 0 ? orderCart[0].product : null;
@@ -656,10 +657,24 @@ export const Orders: React.FC = () => {
         return proposals;
     }, [products, orders, suppliers]);
 
+    const productsWithoutMinStock = React.useMemo(
+        () => products.filter(p => !p.ignoreOrderProposals && (!p.minStock || p.minStock === 0)),
+        [products]
+    );
+
     const handleOpenProposals = () => {
         setModalProposals(orderProposals);
         setSessionGeneratedOrderIds([]);
         setIsProposalModalOpen(true);
+    };
+
+    const handleSaveMinStock = async (productId: string) => {
+        const val = minStockEdits[productId];
+        if (val === '' || val === undefined || Number(val) <= 0) return;
+        const prod = products.find(p => p.id === productId);
+        if (!prod) return;
+        await DataService.updateProduct({ ...prod, minStock: Number(val) });
+        loadProducts();
     };
 
     
@@ -1341,9 +1356,13 @@ export const Orders: React.FC = () => {
                 <h2 className="page-title">Bestellungen</h2>
                 <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
 
-                    {orderProposals.length > 0 && (
+                    {orderProposals.length > 0 ? (
                         <button onClick={handleOpenProposals} className="btn btn-warning">
                             ✨ Bestellvorschläge ({orderProposals.length})
+                        </button>
+                    ) : (
+                        <button onClick={handleOpenProposals} className="btn btn-success" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <CheckCircle size={16} /> Alles bestellt
                         </button>
                     )}
 
@@ -1420,7 +1439,13 @@ export const Orders: React.FC = () => {
                         borderRadius: 'var(--radius-lg)',
                         color: 'var(--color-text-muted)'
                     }}>
-                        {orders.filter(o => o.status === 'open').length === 0 ? (
+                        {orders.filter(o => o.status === 'open').length === 0 && orders.some(o => o.status === 'received') ? (
+                            <>
+                                <CheckCircle size={48} color="#22c55e" style={{ marginBottom: '16px' }} />
+                                <h3 style={{ margin: '0 0 8px 0', color: '#16a34a' }}>Alle Bestellungen erledigt</h3>
+                                <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Keine offenen Bestellungen — alles wurde empfangen.</p>
+                            </>
+                        ) : orders.filter(o => o.status === 'open').length === 0 ? (
                             <>
                                 <ShoppingCart size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
                                 <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-main)' }}>Noch keine Bestellungen</h3>
@@ -2733,7 +2758,66 @@ export const Orders: React.FC = () => {
 
                             <div style={{ padding: 'var(--spacing-xl)', overflowY: 'auto', flex: 1, backgroundColor: 'var(--color-surface)' }}>
                                 {modalProposals.length === 0 ? (
-                                    <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--spacing-2xl) 0' }}>Keine offenen Bestellvorschläge gefunden. Alles auf dem neuesten Stand! 🎉</div>
+                                    <div>
+                                        {/* Green "all done" header */}
+                                        <div style={{ textAlign: 'center', padding: 'var(--spacing-xl) 0 var(--spacing-2xl)' }}>
+                                            <CheckCircle size={56} color="#22c55e" style={{ display: 'block', margin: '0 auto 16px' }} />
+                                            <h3 style={{ margin: '0 0 8px 0', color: '#16a34a', fontSize: '20px' }}>Alles erledigt!</h3>
+                                            <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '14px' }}>
+                                                Alle Bestände sind über dem Mindestbestand — keine Bestellungen nötig.
+                                            </p>
+                                        </div>
+
+                                        {/* MinStock setup — only shown when no open orders */}
+                                        {orders.filter(o => o.status === 'open').length === 0 && productsWithoutMinStock.length > 0 && (
+                                            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 'var(--spacing-xl)' }}>
+                                                <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                                                    <h3 style={{ margin: '0 0 4px 0', fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <Settings size={16} color="var(--color-text-muted)" /> Mindestbestände einrichten
+                                                    </h3>
+                                                    <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                                                        {productsWithoutMinStock.length} Produkt{productsWithoutMinStock.length > 1 ? 'e haben' : ' hat'} noch keinen Mindestbestand — ohne diesen kann der Assistent keine Bestellvorschläge machen.
+                                                    </p>
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                    {productsWithoutMinStock.map(p => (
+                                                        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', padding: '10px var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', flexWrap: 'wrap' }}>
+                                                            <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                                                                <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text-main)' }}>{p.name}</div>
+                                                                <div style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>Bestand: {p.stock} {p.unit}</div>
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}>
+                                                                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>Mindestbestand:</span>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    placeholder="z.B. 5"
+                                                                    value={minStockEdits[p.id] ?? ''}
+                                                                    onChange={e => setMinStockEdits(prev => ({ ...prev, [p.id]: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                                    style={{ width: '72px', padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text-main)', fontSize: '14px', fontWeight: 600 }}
+                                                                />
+                                                                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{p.unit}</span>
+                                                                <button
+                                                                    className="btn btn-primary btn-sm"
+                                                                    disabled={!minStockEdits[p.id] || Number(minStockEdits[p.id]) <= 0}
+                                                                    onClick={() => handleSaveMinStock(p.id)}
+                                                                >
+                                                                    <Save size={13} /> Speichern
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-ghost btn-sm"
+                                                                    onClick={() => handleIgnorePermanently(p.id)}
+                                                                    title="Produkt dauerhaft aus Bestellvorschlägen ausblenden"
+                                                                >
+                                                                    <X size={13} /> Ignorieren
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 ) : (
                                     <>
                                         <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xl)', marginTop: 0, fontSize: 'var(--font-size-md)' }}>Diese Produkte liegen unter dem Mindestbestand. Klicke auf Bestellen, um das Ticket anzulegen und optional die Bestellung beim Lieferanten manuell oder per Auto-Mail zu platzieren.</p>

@@ -127,6 +127,7 @@ export const Suppliers: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        let payloadDebug = '';
         try {
             if (!formData.name) {
                 setNotification({ message: 'Name ist ein Pflichtfeld.', type: 'error' });
@@ -160,6 +161,8 @@ export const Suppliers: React.FC = () => {
                 paymentMethod: formData.paymentMethod,
                 defaultCategory: formData.defaultCategory || undefined,
             } as Supplier;
+            
+            payloadDebug = JSON.stringify(supplierToSave);
 
             await DataService.saveSupplier(supplierToSave);
 
@@ -198,7 +201,7 @@ export const Suppliers: React.FC = () => {
         } catch (error: any) {
             console.error(error);
             const msg = error?.message || error?.details || JSON.stringify(error);
-            setNotification({ message: `Fehler beim Speichern: ${msg}. Payload: ${JSON.stringify(supplierToSave)}`, type: 'error' });
+            setNotification({ message: `Fehler beim Speichern: ${msg}. Payload: ${payloadDebug}`, type: 'error' });
         } finally {
             setIsSubmitting(false);
         }
