@@ -33,9 +33,9 @@ const toSupabaseSupplier = (s: Supplier) => ({
     order_phone: s.orderPhone,
     order_url: s.orderUrl,
     ignore_order_proposals: s.ignoreOrderProposals,
-    customer_number: s.customerNumber,
-    payment_method: s.paymentMethod,
-    default_category: s.defaultCategory
+    customer_number: s.customerNumber || null,
+    payment_method: s.paymentMethod || null,
+    default_category: s.defaultCategory || null
 });
 
 const fromSupabaseSupplier = (s: any): Supplier => ({
