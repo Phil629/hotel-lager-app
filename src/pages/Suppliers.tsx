@@ -159,7 +159,8 @@ export const Suppliers: React.FC = () => {
                 orderUrl: formData.orderUrl,
                 ignoreOrderProposals: formData.ignoreOrderProposals,
                 customerNumber: formData.customerNumber,
-                paymentMethod: formData.paymentMethod
+                paymentMethod: formData.paymentMethod,
+                defaultCategory: formData.defaultCategory || undefined,
             } as Supplier;
 
             await DataService.saveSupplier(supplierToSave);
@@ -391,17 +392,30 @@ export const Suppliers: React.FC = () => {
                                             <label className="form-label">Kundennummer (bei diesem Lieferanten)</label>
                                             <input type="text" value={formData.customerNumber || ''} onChange={e => setFormData({ ...formData, customerNumber: e.target.value })} className="input-field" placeholder="z.B. Kd-Nr. 123456" />
                                         </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Zahlungsart</label>
-                                            <select value={formData.paymentMethod || ''} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })} className="input-field">
-                                                <option value="">Bitte wählen...</option>
-                                                <option value="Rechnung">Rechnung</option>
-                                                <option value="Lastschriftmandat / Bankeinzug">Lastschriftmandat / Bankeinzug</option>
-                                                <option value="Kreditkarte">Kreditkarte</option>
-                                                <option value="Vorkasse">Vorkasse</option>
-                                                <option value="PayPal">PayPal</option>
-                                                <option value="Barzahlung">Barzahlung</option>
-                                            </select>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                                            <div className="form-group">
+                                                <label className="form-label">Zahlungsart</label>
+                                                <select value={formData.paymentMethod || ''} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })} className="input-field">
+                                                    <option value="">Bitte wählen...</option>
+                                                    <option value="Rechnung">Rechnung</option>
+                                                    <option value="Lastschriftmandat / Bankeinzug">Lastschriftmandat / Bankeinzug</option>
+                                                    <option value="Kreditkarte">Kreditkarte</option>
+                                                    <option value="Vorkasse">Vorkasse</option>
+                                                    <option value="PayPal">PayPal</option>
+                                                    <option value="Barzahlung">Barzahlung</option>
+                                                </select>
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Standard Produktkategorie</label>
+                                                <select value={formData.defaultCategory || ''} onChange={e => setFormData({ ...formData, defaultCategory: e.target.value || undefined })} className="input-field">
+                                                    <option value="">-- Keine Vorgabe --</option>
+                                                    <option value="Lebensmittel">Lebensmittel</option>
+                                                    <option value="Getränke">Getränke</option>
+                                                    <option value="Reinigung">Reinigung</option>
+                                                    <option value="Büro">Büro</option>
+                                                    <option value="Sonstiges">Sonstiges</option>
+                                                </select>
+                                            </div>
                                         </div>
                                         <div className="form-group">
                                             <label className="form-label">Standard Bestellweg</label>

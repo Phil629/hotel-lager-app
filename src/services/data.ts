@@ -34,7 +34,8 @@ const toSupabaseSupplier = (s: Supplier) => ({
     order_url: s.orderUrl,
     ignore_order_proposals: s.ignoreOrderProposals,
     customer_number: s.customerNumber,
-    payment_method: s.paymentMethod
+    payment_method: s.paymentMethod,
+    default_category: s.defaultCategory
 });
 
 const fromSupabaseSupplier = (s: any): Supplier => ({
@@ -59,7 +60,8 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     orderUrl: s.order_url,
     ignoreOrderProposals: s.ignore_order_proposals,
     customerNumber: s.customer_number,
-    paymentMethod: s.payment_method
+    paymentMethod: s.payment_method,
+    defaultCategory: s.default_category
 });
 
 const toSupabaseProduct = (p: Product) => ({

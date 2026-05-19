@@ -1096,7 +1096,17 @@ export const Products: React.FC = () => {
                                                     </div>
                                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
                                                         <div className="form-group">
-                                                            <label className="form-label">Kategorie</label>
+                                                            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                Kategorie
+                                                                {(() => {
+                                                                    const s = suppliers.find(su => su.id === newProduct.supplierId);
+                                                                    return s?.defaultCategory && newProduct.category === s.defaultCategory ? (
+                                                                        <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-primary)', backgroundColor: 'rgba(37,99,235,0.08)', padding: '1px 6px', borderRadius: '10px' }}>
+                                                                            vom Lieferanten
+                                                                        </span>
+                                                                    ) : null;
+                                                                })()}
+                                                            </label>
                                                             {isCustomCategoryMode ? (
                                                                 <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
                                                                     <input
@@ -1318,7 +1328,8 @@ export const Products: React.FC = () => {
                                                             onChange={e => {
                                                                 const sId = e.target.value; const s = suppliers.find(su => su.id === sId);
                                                                 const fallbackUrl = newProduct.orderUrl ? newProduct.orderUrl : (s?.url || s?.loginUrl || '');
-                                                                setNewProduct({ ...newProduct, supplierId: sId || undefined, emailOrderAddress: s?.email || '', supplierPhone: s?.phone || '', orderUrl: fallbackUrl });
+                                                                const autoCategory = !newProduct.category && s?.defaultCategory ? s.defaultCategory : newProduct.category;
+                                                                setNewProduct({ ...newProduct, supplierId: sId || undefined, emailOrderAddress: s?.email || '', supplierPhone: s?.phone || '', orderUrl: fallbackUrl, category: autoCategory });
                                                             }}
                                                             className="input-field"
                                                             style={{ flex: 1 }}
