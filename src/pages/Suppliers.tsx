@@ -5,6 +5,7 @@ import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
+import { PhoneCallPanel } from '../components/PhoneCallPanel';
 
 export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -24,6 +25,15 @@ export const Suppliers: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [phoneCallSupplier, setPhoneCallSupplier] = useState<Supplier | null>(null);
+
+    const getLowStockProducts = (supplier: Supplier) =>
+        products
+            .filter(p => p.supplierId === supplier.id && p.minStock !== undefined && p.stock < p.minStock)
+            .map(p => ({
+                product: p,
+                suggestedQty: p.standardOrderQuantity ?? Math.max((p.minStock! * 2) - p.stock, 1),
+            }));
 
     useEffect(() => {
         const supabaseClient = getSupabaseClient();
@@ -148,7 +158,8 @@ export const Suppliers: React.FC = () => {
                 orderPhone: formData.orderPhone,
                 orderUrl: formData.orderUrl,
                 ignoreOrderProposals: formData.ignoreOrderProposals,
-                customerNumber: formData.customerNumber
+                customerNumber: formData.customerNumber,
+                paymentMethod: formData.paymentMethod
             } as Supplier;
 
             await DataService.saveSupplier(supplierToSave);
@@ -276,10 +287,10 @@ export const Suppliers: React.FC = () => {
                                 </a>
                                 
                                 {supplier.phone && (
-                                    <a href={`tel:${supplier.phone}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#475569', textDecoration: 'none', fontSize: '14px', padding: '8px', borderRadius: 'var(--radius-md)', transition: 'background-color 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}  onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                        <div style={{ padding: '6px', backgroundColor: '#dcfce7', color: '#16a34a', borderRadius: '50%' }}><Phone size={14} /></div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#475569', fontSize: '14px', padding: '8px', borderRadius: 'var(--radius-md)' }}>
+                                        <div style={{ padding: '6px', backgroundColor: '#dcfce7', color: '#16a34a', borderRadius: '50%', flexShrink: 0 }}><Phone size={14} /></div>
                                         {supplier.phone}
-                                    </a>
+                                    </div>
                                 )}
 
                                 {supplier.url && (
@@ -289,7 +300,7 @@ export const Suppliers: React.FC = () => {
                                     </a>
                                 )}
 
-                                <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                                     <span className="badge badge-neutral">
                                         <Package size={12} />
                                         {linkedProductsCount} {linkedProductsCount === 1 ? 'Produkt' : 'Produkte'}
@@ -298,6 +309,16 @@ export const Suppliers: React.FC = () => {
                                          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                                              + {supplier.documents.length} Dokumente
                                          </div>
+                                    )}
+                                    {supplier.phone && (
+                                        <button
+                                            onClick={() => setPhoneCallSupplier(supplier)}
+                                            className={supplier.preferredOrderMethod === 'phone' ? 'btn btn-sm btn-success' : 'btn btn-sm btn-ghost'}
+                                            style={{ marginLeft: 'auto' }}
+                                        >
+                                            <Phone size={13} />
+                                            {supplier.preferredOrderMethod === 'phone' ? 'Telefonbestellung' : 'Anruf vorbereiten'}
+                                        </button>
                                     )}
                                 </div>
                             </div>
@@ -313,6 +334,15 @@ export const Suppliers: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {phoneCallSupplier && (
+                <PhoneCallPanel
+                    mode="order"
+                    supplier={phoneCallSupplier}
+                    lowStockProducts={getLowStockProducts(phoneCallSupplier)}
+                    onClose={() => setPhoneCallSupplier(null)}
+                />
+            )}
 
             {isModalOpen && (
                 <div className="modal-overlay">
@@ -362,6 +392,18 @@ export const Suppliers: React.FC = () => {
                                             <input type="text" value={formData.customerNumber || ''} onChange={e => setFormData({ ...formData, customerNumber: e.target.value })} className="input-field" placeholder="z.B. Kd-Nr. 123456" />
                                         </div>
                                         <div className="form-group">
+                                            <label className="form-label">Zahlungsart</label>
+                                            <select value={formData.paymentMethod || ''} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })} className="input-field">
+                                                <option value="">Bitte wählen...</option>
+                                                <option value="Rechnung">Rechnung</option>
+                                                <option value="Lastschriftmandat / Bankeinzug">Lastschriftmandat / Bankeinzug</option>
+                                                <option value="Kreditkarte">Kreditkarte</option>
+                                                <option value="Vorkasse">Vorkasse</option>
+                                                <option value="PayPal">PayPal</option>
+                                                <option value="Barzahlung">Barzahlung</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
                                             <label className="form-label">Standard Bestellweg</label>
                                             <div style={{ display: 'flex', gap: 'var(--spacing-md)', flexWrap: 'wrap', backgroundColor: 'var(--color-surface-elevated)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
@@ -369,6 +411,9 @@ export const Suppliers: React.FC = () => {
                                                 </label>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                                                     <input type="radio" name="pom_supplier" value="link" checked={formData.preferredOrderMethod === 'link'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'link' })} /> <ExternalLink size={14}/> Webshop (Link)
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                    <input type="radio" name="pom_supplier" value="webshop" checked={formData.preferredOrderMethod === 'webshop'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'webshop' })} /> <ExternalLink size={14}/> Webshop (System)
                                                 </label>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                                                     <input type="radio" name="pom_supplier" value="phone" checked={formData.preferredOrderMethod === 'phone'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'phone' })} /> <Phone size={14}/> Telefon

@@ -6,6 +6,7 @@ import { StorageService } from '../services/storage';
 import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ShoppingCart, Bot } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
+import { PhoneCallPanel } from '../components/PhoneCallPanel';
 
 // ── KI-Log ───────────────────────────────────────────────────────────────────
 
@@ -93,7 +94,9 @@ const KiLogDetail: React.FC<{ email: InboundEmail }> = ({ email }) => {
                     </div>
                 </div>
             ) : (
-                <div style={{ fontSize: '13px', color: 'var(--color-text-faint)' }}>Keine Positionen extrahiert.</div>
+                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '8px', padding: '12px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                    ℹ️ <strong>Keine Bestell-Daten erkannt:</strong> Diese E-Mail enthielt keine relevanten Positionen (vermutlich Newsletter oder Werbung). Es wurden <u>keine</u> Bestellungen angelegt.
+                </div>
             )}
         </div>
     );
@@ -148,6 +151,14 @@ export const Orders: React.FC = () => {
     const [inboundEmails, setInboundEmails] = useState<InboundEmail[]>([]);
     const [showKiLogModal, setShowKiLogModal] = useState(false);
     const [selectedKiLog, setSelectedKiLog] = useState<InboundEmail | null>(null);
+
+    const [phoneCallPanelData, setPhoneCallPanelData] = useState<{ order: Order; mode: 'order' | 'defect' } | null>(null);
+
+    const getSupplierForOrder = (order: Order) => {
+        const product = products.find(p => p.name === order.productName);
+        if (product?.supplierId) return suppliers.find(s => s.id === product.supplierId) ?? null;
+        return suppliers.find(s => s.name === order.supplierName) ?? null;
+    };
 
     const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
     const toggleSupplier = (supplierKey: string) => {
@@ -920,12 +931,13 @@ export const Orders: React.FC = () => {
                                         </a>
                                     )}
                                     {(order.supplierPhone || product.supplierPhone) && (
-                                        <a href={`tel:${order.supplierPhone || product.supplierPhone}`}
+                                        <button
+                                            onClick={() => setPhoneCallPanelData({ order, mode: 'order' })}
                                             className={getEffectiveOrderMethod(product) === 'phone' ? 'btn btn-sm btn-warning' : 'btn btn-sm btn-ghost'}
                                         >
                                             <Phone size={13} /> Anrufen
                                             {getEffectiveOrderMethod(product) === 'phone' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
-                                        </a>
+                                        </button>
                                     )}
                                 </div>
                             );
@@ -1138,8 +1150,8 @@ export const Orders: React.FC = () => {
                                                     </button>
                                                 )}
                                                 {order.supplierPhone && (
-                                                    <a
-                                                        href={`tel:${order.supplierPhone}`}
+                                                    <button
+                                                        onClick={() => setPhoneCallPanelData({ order, mode: 'defect' })}
                                                         style={{
                                                             display: 'flex', alignItems: 'center', gap: '6px',
                                                             padding: '6px 12px',
@@ -1148,12 +1160,12 @@ export const Orders: React.FC = () => {
                                                             borderRadius: '4px',
                                                             color: '#ff9800',
                                                             fontSize: '12px',
-                                                            textDecoration: 'none'
+                                                            cursor: 'pointer'
                                                         }}
                                                     >
                                                         <Phone size={14} />
-                                                        {order.supplierPhone}
-                                                    </a>
+                                                        Anruf vorbereiten
+                                                    </button>
                                                 )}
                                             </div>
                                         )}
@@ -1162,14 +1174,6 @@ export const Orders: React.FC = () => {
                             </div>
                         )}
 
-                        {(order.supplierPhone || order.supplierEmail) && (!order.hasDefect || order.defectResolved) && (
-                            <div style={{ marginTop: 'var(--spacing-xs)', display: 'flex', gap: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)' }}>
-                                {order.supplierPhone && (
-                                    <a href={`tel:${order.supplierPhone}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    </a>
-                                )}
-                            </div>
-                        )}
                         {order.trackingLink && (
                             <div style={{ marginTop: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: 'var(--font-size-sm)' }}>
                                 <ExternalLink size={14} />
@@ -1762,8 +1766,7 @@ export const Orders: React.FC = () => {
                                                             <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                         )}
                                                     </label>
-                                                    <a
-                                                        href={`tel:${selectedProduct.supplierPhone || suppliers.find(s => s.id === selectedProduct.supplierId)?.phone}`}
+                                                    <div
                                                         style={{
                                                             display: 'flex',
                                                             alignItems: 'center',
@@ -1774,15 +1777,25 @@ export const Orders: React.FC = () => {
                                                             border: '1px solid var(--color-border)',
                                                             backgroundColor: 'var(--color-surface)',
                                                             color: 'var(--color-text-main)',
-                                                            cursor: 'pointer',
-                                                            fontWeight: 500,
-                                                            textDecoration: 'none'
-                                                        }}
-                                                    >
-                                                        <Phone size={16} />
-                                                        {selectedProduct.supplierPhone || suppliers.find(s => s.id === selectedProduct.supplierId)?.phone}
-                                                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>(Anrufen)</span>
-                                                    </a>
+                                                            fontWeight: 500
+                                                        }}>
+                                                            <div
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '6px',
+                                                                    fontWeight: 500
+                                                                }}
+                                                            >
+                                                                <Phone size={16} color="var(--color-primary)" />
+                                                                {selectedProduct.supplierPhone || suppliers.find(s => s.id === selectedProduct.supplierId)?.phone}
+                                                                {suppliers.find(s => s.id === selectedProduct.supplierId)?.customerNumber && (
+                                                                    <span style={{ marginLeft: '12px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                                                                        KdNr: <strong style={{ color: 'var(--color-text-main)' }}>{suppliers.find(s => s.id === selectedProduct.supplierId)?.customerNumber}</strong>
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                    </div>
                                                 </div>
                                             )}
                                             {selectedProduct.orderUrl && (
@@ -2118,6 +2131,18 @@ export const Orders: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Phone Call Panel */}
+            {phoneCallPanelData && (
+                <PhoneCallPanel
+                    mode={phoneCallPanelData.mode}
+                    order={phoneCallPanelData.order}
+                    supplier={getSupplierForOrder(phoneCallPanelData.order)}
+                    supplierPhone={phoneCallPanelData.order.supplierPhone}
+                    supplierName={phoneCallPanelData.order.supplierName}
+                    onClose={() => setPhoneCallPanelData(null)}
+                />
             )}
 
             {/* Defect Modal */}
@@ -2582,7 +2607,7 @@ export const Orders: React.FC = () => {
 
                             <div style={{ padding: 'var(--spacing-xl)', overflowY: 'auto', flex: 1, backgroundColor: 'var(--color-surface)' }}>
                                 {modalProposals.length === 0 ? (
-                                    <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--spacing-2xl) 0' }}>Keine offenen Vorschläge mehr! 🎉</div>
+                                    <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--spacing-2xl) 0' }}>Keine offenen Bestellvorschläge gefunden. Alles auf dem neuesten Stand! 🎉</div>
                                 ) : (
                                     <>
                                         <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xl)', marginTop: 0, fontSize: 'var(--font-size-md)' }}>Diese Produkte liegen unter dem Mindestbestand. Klicke auf Bestellen, um das Ticket anzulegen und optional die Bestellung beim Lieferanten manuell oder per Auto-Mail zu platzieren.</p>
@@ -2695,12 +2720,12 @@ export const Orders: React.FC = () => {
                                                                                                 {supp?.customerNumber && <span>Kd-Nr: <strong style={{ color: 'var(--color-text-main)' }}>{supp.customerNumber}</strong></span>}
                                                                                             </div>
                                                                                         )}
-                                                                                        <a 
-                                                                                            href={`tel:${phoneNum}`}
+                                                                                        <button 
                                                                                             onClick={() => executeProposalDbSave(prop)}
-                                                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                            style={{ border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
                                                                                             <Phone size={16} /> {phoneNum || btnText}
-                                                                                        </a>
+                                                                                            <span style={{ opacity: 0.8, fontSize: '12px', marginLeft: '4px', fontWeight: 400 }}>(Als bestellt markieren)</span>
+                                                                                        </button>
                                                                                     </div>
                                                                                 );
                                                                             } else {

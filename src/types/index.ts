@@ -38,12 +38,13 @@ export interface Supplier {
   loginUsername?: string; // Optional username
   loginPassword?: string; // Optional password
   documents?: { name: string; url: string; date?: string; }[];
-  preferredOrderMethod?: 'email' | 'link' | 'phone';
+  preferredOrderMethod?: 'email' | 'link' | 'phone' | 'webshop';
   orderEmail?: string;
   orderPhone?: string;
   orderUrl?: string;
   ignoreOrderProposals?: boolean;
   customerNumber?: string; // e.g. "Kd-Nr. 12345"
+  paymentMethod?: string; // e.g. "Rechnung", "Lastschriftmandat / Bankeinzug", etc.
 }
 
 export interface Product {

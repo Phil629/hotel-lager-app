@@ -1352,7 +1352,8 @@ export const Products: React.FC = () => {
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                                                         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="" checked={!newProduct.preferredOrderMethod} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: undefined })} /> Vom Lieferanten</label>
                                                         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="email" checked={newProduct.preferredOrderMethod === 'email'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'email' })} /> <Mail size={14}/> Email</label>
-                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="link" checked={newProduct.preferredOrderMethod === 'link'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'link' })} /> <ExternalLink size={14}/> Webshop</label>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="link" checked={newProduct.preferredOrderMethod === 'link'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'link' })} /> <ExternalLink size={14}/> Webshop (Link)</label>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="webshop" checked={newProduct.preferredOrderMethod === 'webshop'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'webshop' })} /> <ShoppingCart size={14}/> Webshop (System)</label>
                                                         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="radio" name="pom" value="phone" checked={newProduct.preferredOrderMethod === 'phone'} onChange={() => setNewProduct({ ...newProduct, preferredOrderMethod: 'phone' })} /> <Phone size={14}/> Telefon</label>
                                                     </div>
                                                 </div>
@@ -1361,11 +1362,11 @@ export const Products: React.FC = () => {
                                                         transition: 'all 0.3s ease', 
                                                         padding: '12px', 
                                                         borderRadius: 'var(--radius-md)', 
-                                                        backgroundColor: newProduct.preferredOrderMethod === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
-                                                        border: newProduct.preferredOrderMethod === 'link' ? '1px solid var(--color-primary)' : '1px solid transparent'
+                                                        backgroundColor: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
+                                                        border: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? '1px solid var(--color-primary)' : '1px solid transparent'
                                                     }}>
-                                                        <label className="form-label" style={{ color: newProduct.preferredOrderMethod === 'link' ? 'var(--color-primary)' : 'inherit' }}>Webshop / Bestell-URL</label>
-                                                        <input type="url" value={newProduct.orderUrl || ''} onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })} onBlur={e => { const val = e.target.value; if (val && !/^https?:\/\//i.test(val)) setNewProduct({ ...newProduct, orderUrl: 'https://' + val }); }} placeholder="https://..." className="input-field" style={{ borderColor: newProduct.preferredOrderMethod === 'link' ? 'var(--color-primary)' : '' }} />
+                                                        <label className="form-label" style={{ color: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : 'inherit' }}>Webshop / Bestell-URL</label>
+                                                        <input type="url" value={newProduct.orderUrl || ''} onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })} onBlur={e => { const val = e.target.value; if (val && !/^https?:\/\//i.test(val)) setNewProduct({ ...newProduct, orderUrl: 'https://' + val }); }} placeholder="https://..." className="input-field" style={{ borderColor: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : '' }} />
                                                     </div>
                                                     <div className="form-group" style={{ 
                                                         transition: 'all 0.3s ease', 
@@ -1633,15 +1634,15 @@ export const Products: React.FC = () => {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                     {(selectedProductForOrder.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.url) && (
                                         <div style={{
-                                            backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
+                                            backgroundColor: (getEffectiveOrderMethod(selectedProductForOrder) === 'link' || getEffectiveOrderMethod(selectedProductForOrder) === 'webshop') ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
                                             padding: 'var(--spacing-md)',
                                             borderRadius: 'var(--radius-md)',
-                                            border: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                            order: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? -1 : 0
+                                            border: (getEffectiveOrderMethod(selectedProductForOrder) === 'link' || getEffectiveOrderMethod(selectedProductForOrder) === 'webshop') ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                            order: (getEffectiveOrderMethod(selectedProductForOrder) === 'link' || getEffectiveOrderMethod(selectedProductForOrder) === 'webshop') ? -1 : 0
                                         }}>
                                             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
                                                 Bestelllink:
-                                                {getEffectiveOrderMethod(selectedProductForOrder) === 'link' && (
+                                                {(getEffectiveOrderMethod(selectedProductForOrder) === 'link' || getEffectiveOrderMethod(selectedProductForOrder) === 'webshop') && (
                                                     <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
                                                 )}
                                             </label>
@@ -1657,8 +1658,8 @@ export const Products: React.FC = () => {
                                                     padding: 'var(--spacing-sm)',
                                                     borderRadius: 'var(--radius-sm)',
                                                     border: '1px solid var(--color-border)',
-                                                    backgroundColor: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? 'var(--color-primary)' : 'var(--color-surface)',
-                                                    color: getEffectiveOrderMethod(selectedProductForOrder) === 'link' ? 'white' : 'var(--color-text-main)',
+                                                    backgroundColor: (getEffectiveOrderMethod(selectedProductForOrder) === 'link' || getEffectiveOrderMethod(selectedProductForOrder) === 'webshop') ? 'var(--color-primary)' : 'var(--color-surface)',
+                                                    color: (getEffectiveOrderMethod(selectedProductForOrder) === 'link' || getEffectiveOrderMethod(selectedProductForOrder) === 'webshop') ? 'white' : 'var(--color-text-main)',
                                                     cursor: 'pointer',
                                                     fontWeight: 500,
                                                     textDecoration: 'none'
