@@ -1718,8 +1718,9 @@ export const Products: React.FC = () => {
                                                 )}
                                             </div>
 
-                                            <a
-                                                href={`tel:${selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone}`}
+                                            <button
+                                                type="button"
+                                                onClick={() => setPhoneCallProduct(selectedProductForOrder)}
                                                 style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -1732,13 +1733,13 @@ export const Products: React.FC = () => {
                                                     color: getEffectiveOrderMethod(selectedProductForOrder) === 'phone' ? 'white' : 'var(--color-text-main)',
                                                     cursor: 'pointer',
                                                     fontWeight: 500,
-                                                    textDecoration: 'none'
+                                                    width: '100%'
                                                 }}
                                             >
                                                 <Phone size={16} />
                                                 {selectedProductForOrder.supplierPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderPhone || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.phone}
-                                                <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.8 }}>(Anrufen)</span>
-                                            </a>
+                                                <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.8 }}>(Anruf vorbereiten)</span>
+                                            </button>
                                         </div>
                                     )}
 
@@ -2131,6 +2132,21 @@ export const Products: React.FC = () => {
                 </div>
             )}
 
+            {phoneCallProduct && (
+                <PhoneCallPanel
+                    mode="order"
+                    supplier={suppliers.find(s => s.id === phoneCallProduct.supplierId) ?? null}
+                    lowStockProducts={[{
+                        product: phoneCallProduct,
+                        suggestedQty: orderCart.find(c => c.product.id === phoneCallProduct.id)?.quantity
+                            ?? phoneCallProduct.standardOrderQuantity
+                            ?? (phoneCallProduct.minStock !== undefined && phoneCallProduct.stock < phoneCallProduct.minStock
+                                ? Math.max((phoneCallProduct.minStock * 2) - phoneCallProduct.stock, 1)
+                                : 1)
+                    }]}
+                    onClose={() => setPhoneCallProduct(null)}
+                />
+            )}
             {
                 notification && (
                     <Notification
