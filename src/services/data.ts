@@ -28,7 +28,7 @@ const toSupabaseSupplier = (s: Supplier) => ({
     login_url: s.loginUrl,
     login_username: s.loginUsername,
     // login_password intentionally omitted — stored encrypted via upsert_supplier_credentials RPC
-    preferred_order_method: s.preferredOrderMethod,
+    preferred_order_method: s.preferredOrderMethod || null,
     order_email: s.orderEmail,
     order_phone: s.orderPhone,
     order_url: s.orderUrl,
@@ -82,7 +82,7 @@ const toSupabaseProduct = (p: Product) => ({
     order_url: p.orderUrl,
     supplier_phone: p.supplierPhone,
     notes: p.notes ? JSON.stringify(p.notes) : null,
-    preferred_order_method: p.preferredOrderMethod,
+    preferred_order_method: p.preferredOrderMethod || null,
     consumption_amount: p.consumptionAmount,
     consumption_period: p.consumptionPeriod,
     last_consumption_date: p.lastConsumptionDate,
