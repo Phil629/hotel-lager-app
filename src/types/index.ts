@@ -63,7 +63,7 @@ export interface Product {
   supplierId?: string; // Link to Supplier
   autoOrder?: boolean;
   notes?: Note[];
-  preferredOrderMethod?: 'email' | 'link' | 'phone';
+  preferredOrderMethod?: 'email' | 'link' | 'phone' | 'webshop';
   productNumber?: string; // e.g. EAN or internal sku
   consumptionAmount?: number;
   consumptionPeriod?: 'day' | 'week';

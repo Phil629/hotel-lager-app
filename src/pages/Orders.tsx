@@ -108,6 +108,8 @@ export const Orders: React.FC = () => {
     const [defectModalOrder, setDefectModalOrder] = useState<Order | null>(null);
     const [defectModalOrderOptions, setDefectModalOrderOptions] = useState<Order[] | null>(null);
     const [defectNotes, setDefectNotes] = useState('');
+    const [defectAdjustStock, setDefectAdjustStock] = useState(false);
+    const [defectUsableQty, setDefectUsableQty] = useState<number | ''>('');
     const [deliveryDateModalOrder, setDeliveryDateModalOrder] = useState<Order | null>(null);
     const [deliveryDateModalOrders, setDeliveryDateModalOrders] = useState<Order[] | null>(null);
     const [deliveryDate, setDeliveryDate] = useState('');
@@ -442,6 +444,8 @@ export const Orders: React.FC = () => {
     };
 
     const openDefectModal = (target: Order | Order[]) => {
+        setDefectAdjustStock(false);
+        setDefectUsableQty('');
         if (Array.isArray(target) && target.length > 1) {
             setDefectModalOrderOptions(target);
             setDefectModalOrder({ id: 'ALL', productName: 'Alle Produkte der Lieferung', quantity: 0 } as any);
@@ -461,43 +465,70 @@ export const Orders: React.FC = () => {
         setDefectModalOrder(null);
         setDefectModalOrderOptions(null);
         setDefectNotes('');
+        setDefectAdjustStock(false);
+        setDefectUsableQty('');
     };
 
     const saveDefect = async () => {
-        if (defectModalOrder && defectNotes.trim()) {
-            try {
-                if (defectModalOrder.id === 'ALL' && defectModalOrderOptions) {
-                    for (const order of defectModalOrderOptions) {
-                        const updatedOrder: Order = {
-                            ...order,
-                            hasDefect: true,
-                            defectNotes: defectNotes.trim(),
-                            defectReportedAt: new Date().toISOString()
-                        };
-                        await DataService.updateOrder(updatedOrder);
-                    }
-                } else {
-                    const updatedOrder: Order = {
-                        ...defectModalOrder,
+        if (!defectModalOrder || !defectNotes.trim()) return;
+        try {
+            const doAdjust = defectAdjustStock && defectUsableQty !== '' && defectModalOrder.id !== 'ALL';
+            const usableQty = doAdjust ? Number(defectUsableQty) : 0;
+            const isOpen = defectModalOrder.status === 'open';
+
+            if (defectModalOrder.id === 'ALL' && defectModalOrderOptions) {
+                for (const order of defectModalOrderOptions) {
+                    await DataService.updateOrder({
+                        ...order,
                         hasDefect: true,
                         defectNotes: defectNotes.trim(),
-                        defectReportedAt: new Date().toISOString()
-                    };
-                    await DataService.updateOrder(updatedOrder);
+                        defectReportedAt: new Date().toISOString(),
+                    });
                 }
-                await loadOrders();
-                closeDefectModal();
-                setNotification({ message: 'Mangel wurde erfolgreich gemeldet!', type: 'success' });
-            } catch (error: any) {
-                console.error('Error saving defect:', error);
-                const errorMsg = error?.message || error?.error_description || JSON.stringify(error);
-                setNotification({ message: 'Fehler beim Speichern des Mangels: ' + errorMsg, type: 'error' });
+            } else {
+                // If open order + stock adjustment: mark as received here so the standard
+                // markOrderReceived RPC is never called later (prevents double-counting).
+                const statusPatch = (doAdjust && isOpen)
+                    ? { status: 'received' as const, receivedAt: new Date().toISOString() }
+                    : {};
+                await DataService.updateOrder({
+                    ...defectModalOrder,
+                    hasDefect: true,
+                    defectNotes: defectNotes.trim(),
+                    defectReportedAt: new Date().toISOString(),
+                    ...statusPatch,
+                });
             }
+
+            if (doAdjust) {
+                const product = products.find(p => p.name === defectModalOrder.productName);
+                if (product) {
+                    // Open order: stock not yet booked → add usable amount.
+                    // Received order: full qty already booked → subtract the unusable difference.
+                    const stockDelta = isOpen ? usableQty : usableQty - defectModalOrder.quantity;
+                    const newStock = Math.max(0, product.stock + stockDelta);
+                    await DataService.updateProduct({ ...product, stock: newStock });
+                }
+            }
+
+            await loadOrders();
+            closeDefectModal();
+            setNotification({
+                message: doAdjust ? 'Mangel gemeldet & Bestand korrigiert!' : 'Mangel wurde erfolgreich gemeldet!',
+                type: 'success',
+            });
+        } catch (error: any) {
+            console.error('Error saving defect:', error);
+            const errorMsg = error?.message || error?.error_description || JSON.stringify(error);
+            setNotification({ message: 'Fehler beim Speichern des Mangels: ' + errorMsg, type: 'error' });
         }
     };
 
     const sendDefectEmail = (order: Order) => {
-        if (!order.supplierEmail) {
+        const product = products.find(p => p.name === order.productName);
+        const supplier = getSupplierForOrder(order);
+        const emailAddr = order.supplierEmail || product?.emailOrderAddress || supplier?.email || '';
+        if (!emailAddr) {
             setNotification({ message: 'Keine Lieferanten-Email hinterlegt!', type: 'error' });
             return;
         }
@@ -514,7 +545,7 @@ export const Orders: React.FC = () => {
             `Einkauf`
         );
 
-        window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${order.supplierEmail}&su=${subject}&body=${body}`, '_blank');
+        window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddr}&su=${subject}&body=${body}`, '_blank');
     };
 
     const openDeliveryDateModal = (target: Order | Order[]) => {
@@ -911,6 +942,9 @@ export const Orders: React.FC = () => {
                         {(() => {
                             const product = products.find((p: Product) => p.name === order.productName);
                             if (!product) return null;
+                            const supplier = suppliers.find(s => s.id === product.supplierId) ?? null;
+                            const effectiveEmail = order.supplierEmail || product.emailOrderAddress || supplier?.email || '';
+                            const effectivePhone = order.supplierPhone || product.supplierPhone || supplier?.orderPhone || supplier?.phone || '';
                             return (
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', marginBottom: '6px' }}>
                                     {product.orderUrl && (
@@ -921,8 +955,8 @@ export const Orders: React.FC = () => {
                                             {getEffectiveOrderMethod(product) === 'link' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
-                                    {order.supplierEmail && !product.autoOrder && (
-                                        <a href={`https://mail.google.com/mail/?view=cm&fs=1&to=${order.supplierEmail}`} target="_blank" rel="noopener noreferrer"
+                                    {effectiveEmail && !product.autoOrder && (
+                                        <a href={`https://mail.google.com/mail/?view=cm&fs=1&to=${effectiveEmail}`} target="_blank" rel="noopener noreferrer"
                                             className={getEffectiveOrderMethod(product) === 'email' ? 'btn btn-sm btn-danger-solid' : 'btn btn-sm btn-ghost'}
                                             style={getEffectiveOrderMethod(product) === 'email' ? { backgroundColor: '#EA4335' } : {}}
                                         >
@@ -930,7 +964,7 @@ export const Orders: React.FC = () => {
                                             {getEffectiveOrderMethod(product) === 'email' && <span style={{ fontSize: '9px', opacity: 0.8 }}>(Standard)</span>}
                                         </a>
                                     )}
-                                    {(order.supplierPhone || product.supplierPhone) && (
+                                    {effectivePhone && (
                                         <button
                                             onClick={() => setPhoneCallPanelData({ order, mode: 'order' })}
                                             className={getEffectiveOrderMethod(product) === 'phone' ? 'btn btn-sm btn-warning' : 'btn btn-sm btn-ghost'}
@@ -1116,59 +1150,66 @@ export const Orders: React.FC = () => {
                                             </div>
                                         )}
 
-                                        {(order.supplierEmail || order.supplierPhone) && (
-                                            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                                {order.supplierEmail && (
-                                                    <button
-                                                        onClick={() => {
-                                                            const subject = encodeURIComponent(`Mangel - Bestellung ${order.productName}`);
-                                                            const body = encodeURIComponent(
-                                                                `Sehr geehrte Damen und Herren,\n\n` +
-                                                                `wir möchten einen Mangel bei folgender Bestellung melden:\n\n` +
-                                                                `Produkt: ${order.productName}\n` +
-                                                                `Menge: ${order.quantity}\n` +
-                                                                `Bestelldatum: ${new Date(order.date).toLocaleDateString('de-DE')}\n\n` +
-                                                                `Mangelbeschreibung:\n${order.defectNotes || 'Keine Details angegeben'}\n\n` +
-                                                                `Mit freundlichen Grüßen\n` +
-                                                                `Einkauf`
-                                                            );
-                                                            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${order.supplierEmail}&su=${subject}&body=${body}`, '_blank');
-                                                        }}
-                                                        style={{
-                                                            display: 'flex', alignItems: 'center', gap: '6px',
-                                                            padding: '6px 12px',
-                                                            backgroundColor: '#EA4335',
-                                                            border: 'none',
-                                                            borderRadius: '4px',
-                                                            color: 'white',
-                                                            fontSize: '12px',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        <Mail size={14} />
-                                                        In Gmail öffnen
-                                                    </button>
-                                                )}
-                                                {order.supplierPhone && (
-                                                    <button
-                                                        onClick={() => setPhoneCallPanelData({ order, mode: 'defect' })}
-                                                        style={{
-                                                            display: 'flex', alignItems: 'center', gap: '6px',
-                                                            padding: '6px 12px',
-                                                            backgroundColor: 'var(--color-surface)',
-                                                            border: '1px solid #ff9800',
-                                                            borderRadius: '4px',
-                                                            color: '#ff9800',
-                                                            fontSize: '12px',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        <Phone size={14} />
-                                                        Anruf vorbereiten
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
+                                        {(() => {
+                                            const prod = products.find(p => p.name === order.productName);
+                                            const supp = getSupplierForOrder(order);
+                                            const effectiveEmail = order.supplierEmail || prod?.emailOrderAddress || supp?.email || '';
+                                            const effectivePhone = order.supplierPhone || prod?.supplierPhone || supp?.orderPhone || supp?.phone || '';
+                                            if (!effectiveEmail && !effectivePhone) return null;
+                                            return (
+                                                <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    {effectiveEmail && (
+                                                        <button
+                                                            onClick={() => {
+                                                                const subject = encodeURIComponent(`Mangel - Bestellung ${order.productName}`);
+                                                                const body = encodeURIComponent(
+                                                                    `Sehr geehrte Damen und Herren,\n\n` +
+                                                                    `wir möchten einen Mangel bei folgender Bestellung melden:\n\n` +
+                                                                    `Produkt: ${order.productName}\n` +
+                                                                    `Menge: ${order.quantity}\n` +
+                                                                    `Bestelldatum: ${new Date(order.date).toLocaleDateString('de-DE')}\n\n` +
+                                                                    `Mangelbeschreibung:\n${order.defectNotes || 'Keine Details angegeben'}\n\n` +
+                                                                    `Mit freundlichen Grüßen\n` +
+                                                                    `Einkauf`
+                                                                );
+                                                                window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${effectiveEmail}&su=${subject}&body=${body}`, '_blank');
+                                                            }}
+                                                            style={{
+                                                                display: 'flex', alignItems: 'center', gap: '6px',
+                                                                padding: '6px 12px',
+                                                                backgroundColor: '#EA4335',
+                                                                border: 'none',
+                                                                borderRadius: '4px',
+                                                                color: 'white',
+                                                                fontSize: '12px',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            <Mail size={14} />
+                                                            In Gmail öffnen
+                                                        </button>
+                                                    )}
+                                                    {effectivePhone && (
+                                                        <button
+                                                            onClick={() => setPhoneCallPanelData({ order, mode: 'defect' })}
+                                                            style={{
+                                                                display: 'flex', alignItems: 'center', gap: '6px',
+                                                                padding: '6px 12px',
+                                                                backgroundColor: 'var(--color-surface)',
+                                                                border: '1px solid #ff9800',
+                                                                borderRadius: '4px',
+                                                                color: '#ff9800',
+                                                                fontSize: '12px',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            <Phone size={14} />
+                                                            Anruf vorbereiten
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </>
                                 )}
                             </div>
@@ -1199,7 +1240,7 @@ export const Orders: React.FC = () => {
                             <button onClick={() => openDefectModal(order)} className="btn btn-sm btn-warning">
                                 <AlertTriangle size={15} /> Mangel
                             </button>
-                            {order.hasDefect && order.supplierEmail && (
+                            {order.hasDefect && !!(order.supplierEmail || products.find(p => p.name === order.productName)?.emailOrderAddress || getSupplierForOrder(order)?.email) && (
                                 <button onClick={() => sendDefectEmail(order)} className="btn btn-sm btn-ghost">
                                     <Mail size={15} /> Email senden
                                 </button>
@@ -1837,7 +1878,7 @@ export const Orders: React.FC = () => {
                                                 </div>
                                             )}
 
-                                            {selectedProduct.emailOrderAddress && !selectedProduct.autoOrder && (
+                                            {(selectedProduct.emailOrderAddress || suppliers.find(s => s.id === selectedProduct.supplierId)?.email) && !selectedProduct.autoOrder && (
                                                 <>
                                                     {selectedProduct.preferredOrderMethod !== 'email' && !isOrderEmailExpanded ? (
                                                         <button
@@ -1901,7 +1942,8 @@ export const Orders: React.FC = () => {
                                                                 onClick={() => {
                                                                     const encodedSubject = encodeURIComponent(emailSubject);
                                                                     const encodedBody = encodeURIComponent(emailBody);
-                                                                    window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedProduct.emailOrderAddress}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
+                                                                    const emailTo = selectedProduct.emailOrderAddress || suppliers.find(s => s.id === selectedProduct.supplierId)?.email || '';
+                                                                    window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${emailTo}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
                                                                 }}
                                                                 style={{
                                                                     display: 'flex',
@@ -2235,6 +2277,73 @@ export const Orders: React.FC = () => {
                                     }}
                                 />
                             </div>
+                            {/* Stock adjustment section — hidden for "ALL" grouped orders */}
+                            {defectModalOrder.id !== 'ALL' && (() => {
+                                const product = products.find(p => p.name === defectModalOrder.productName);
+                                if (!product) return null;
+                                const isOpen = defectModalOrder.status === 'open';
+                                const usable = defectUsableQty === '' ? defectModalOrder.quantity : Number(defectUsableQty);
+                                const stockDelta = isOpen ? usable : usable - defectModalOrder.quantity;
+                                const newStock = Math.max(0, product.stock + stockDelta);
+                                const belowMin = product.minStock !== undefined && newStock < product.minStock;
+                                return (
+                                    <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 'var(--spacing-md)', marginBottom: 'var(--spacing-md)' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: defectAdjustStock ? 'var(--spacing-md)' : 0 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={defectAdjustStock}
+                                                onChange={e => {
+                                                    setDefectAdjustStock(e.target.checked);
+                                                    if (e.target.checked && defectUsableQty === '') setDefectUsableQty(defectModalOrder.quantity);
+                                                }}
+                                                style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }}
+                                            />
+                                            <div>
+                                                <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-main)' }}>Lagerbestand direkt korrigieren</span>
+                                                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginLeft: '6px' }}>optional</span>
+                                            </div>
+                                        </label>
+                                        {defectAdjustStock && (
+                                            <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                <div style={{ display: 'flex', gap: '16px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+                                                    <span>Bestellmenge: <strong style={{ color: 'var(--color-text-main)' }}>{defectModalOrder.quantity} {product.unit}</strong></span>
+                                                    <span>Aktueller Bestand: <strong style={{ color: 'var(--color-text-main)' }}>{product.stock} {product.unit}</strong></span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <label style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                                        Tatsächlich verwendbar:
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        value={defectUsableQty}
+                                                        onChange={e => setDefectUsableQty(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0))}
+                                                        min={0}
+                                                        style={{ width: '80px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: 'var(--font-size-sm)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text-main)', textAlign: 'right' }}
+                                                    />
+                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>{product.unit}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: belowMin ? 'var(--color-warning-bg)' : 'var(--color-success-bg)', border: `1px solid ${belowMin ? '#fcd34d' : 'var(--color-success)'}`, borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-sm)' }}>
+                                                    <span style={{ color: 'var(--color-text-muted)' }}>
+                                                        {isOpen
+                                                            ? `+${usable} ${product.unit} werden auf Lager gebucht`
+                                                            : stockDelta >= 0
+                                                                ? `+${stockDelta} ${product.unit} Korrektur`
+                                                                : `${stockDelta} ${product.unit} werden abgezogen`
+                                                        }
+                                                    </span>
+                                                    <strong style={{ color: 'var(--color-text-main)' }}>→ {newStock} {product.unit}</strong>
+                                                </div>
+                                                {isOpen && (
+                                                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                                                        Die Bestellung wird gleichzeitig als erhalten markiert.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
                             <div style={{ display: 'flex', gap: 'var(--spacing-sm)', justifyContent: 'flex-end' }}>
                                 <button
                                     onClick={closeDefectModal}
@@ -2261,7 +2370,7 @@ export const Orders: React.FC = () => {
                                         cursor: defectNotes.trim() ? 'pointer' : 'not-allowed'
                                     }}
                                 >
-                                    Mangel speichern
+                                    {defectAdjustStock ? 'Mangel & Bestand speichern' : 'Mangel speichern'}
                                 </button>
                             </div>
                         </div>
@@ -2644,7 +2753,7 @@ export const Orders: React.FC = () => {
                                                             
                                                             const prod = prop.product;
                                                             const supp = suppliers.find(s => s.id === prod.supplierId);
-                                                            const emailAddr = supp?.email || prod.emailOrderAddress || '';
+                                                            const emailAddr = prod.emailOrderAddress || supp?.email || '';
                                                             let btnText = "Bestellen";
                                                             if (prod.preferredOrderMethod === 'link' || (!prod.preferredOrderMethod && prod.orderUrl)) btnText = "🔗 Im Tab bestellen";
                                                             else if (prod.preferredOrderMethod === 'phone') btnText = "📞 Anrufen & Bestellen";

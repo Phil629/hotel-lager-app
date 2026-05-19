@@ -543,7 +543,7 @@ export const Products: React.FC = () => {
 
         const mainProduct = orderCart[0].product;
         const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
-        const emailAddr = supplier?.email || mainProduct.emailOrderAddress || '';
+        const emailAddr = mainProduct.emailOrderAddress || supplier?.email || '';
         if (!emailAddr) return;
 
         const encodedSubject = encodeURIComponent(emailSubject);
@@ -1729,7 +1729,7 @@ export const Products: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {selectedProductForOrder.emailOrderAddress && !selectedProductForOrder.autoOrder && (
+                                    {(selectedProductForOrder.emailOrderAddress || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.email) && !selectedProductForOrder.autoOrder && (
                                         <>
                                             {getEffectiveOrderMethod(selectedProductForOrder) !== 'email' && !isOrderEmailExpanded ? (
                                                 <button
