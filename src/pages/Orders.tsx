@@ -679,7 +679,11 @@ export const Orders: React.FC = () => {
             
             await DataService.saveOrder(newOrder);
             setSessionGeneratedOrderIds(prev => [...prev, newOrder.id]);
-            setModalProposals(prev => prev.filter(p => p.product.id !== prod.id));
+            setModalProposals(prev => prev.map(p => 
+                p.product.id === prod.id 
+                ? { ...p, openQty: p.openQty + proposal.quantity } 
+                : p
+            ));
             loadOrders();
             setNotification({ message: 'Bestelldatensatz erfasst.', type: 'success' });
         } catch(e) {
