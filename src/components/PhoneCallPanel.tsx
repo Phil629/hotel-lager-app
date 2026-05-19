@@ -44,8 +44,6 @@ export const PhoneCallPanel: React.FC<PhoneCallPanelProps> = ({
     lowStockProducts = [],
     onClose,
 }) => {
-    const [callNote, setCallNote] = useState('');
-
     const phone = supplier?.orderPhone || supplier?.phone || supplierPhone || '';
     const name = supplier?.name || supplierName || '—';
     const customerNumber = supplier?.customerNumber || '';
@@ -164,20 +162,6 @@ export const PhoneCallPanel: React.FC<PhoneCallPanelProps> = ({
                             </div>
                         </div>
                     )}
-
-                    {/* Ephemeral call note */}
-                    <div>
-                        <label style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>
-                            Gesprächsnotiz
-                        </label>
-                        <textarea
-                            value={callNote}
-                            onChange={e => setCallNote(e.target.value)}
-                            placeholder="Notizen während des Gesprächs..."
-                            rows={3}
-                            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text-main)', fontSize: 'var(--font-size-sm)', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }}
-                        />
-                    </div>
 
                 </div>
 

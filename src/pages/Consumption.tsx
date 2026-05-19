@@ -270,6 +270,18 @@ export const Consumption: React.FC = () => {
         }).filter((d): d is Anomaly => d !== null);
     }, [activePilots, productStats]);
 
+    const adjustmentSuggestions = useMemo((): Anomaly[] => {
+        return activePilots.map(p => {
+            const autoWeekly   = p.consumptionPeriod === 'day' ? (p.consumptionAmount ?? 0) * 7 : (p.consumptionAmount ?? 0);
+            const actualWeekly = productStats.find(s => s.product.id === p.id)?.actualWeeklyRate ?? 0;
+            if (autoWeekly === 0 || actualWeekly === 0) return null;
+            const ratio = actualWeekly / autoWeekly;
+            if (ratio < 0.5 || ratio > 1.5) return null; // >50% deviation, handled by anomalies
+            if (ratio >= 0.8 && ratio <= 1.2) return null; // within ±20%, no suggestion needed
+            return { product: p, autoWeekly, actualWeekly, ratio };
+        }).filter((d): d is Anomaly => d !== null);
+    }, [activePilots, productStats]);
+
     // ── Actions ──────────────────────────────────────────────────────────────
 
     const handleAdopt = async (stat: ProductStat) => {
@@ -294,6 +306,19 @@ export const Consumption: React.FC = () => {
         setSaving(product.id);
         try {
             await DataService.saveProduct({ ...product, ignoreOrderProposals: true });
+            await loadData();
+        } finally { setSaving(null); }
+    };
+
+    const handleAdjustToActual = async (anomaly: Anomaly) => {
+        setSaving(`adjust-${anomaly.product.id}`);
+        try {
+            await DataService.saveProduct({
+                ...anomaly.product,
+                consumptionAmount: anomaly.actualWeekly,
+                consumptionPeriod: 'week',
+                lastConsumptionDate: new Date().toISOString(),
+            });
             await loadData();
         } finally { setSaving(null); }
     };
@@ -499,10 +524,14 @@ export const Consumption: React.FC = () => {
 
                 <div className="stat-card">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--color-text-muted)', marginBottom: '10px', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                        <AlertTriangle size={14} /> Anomalien
+                        <AlertTriangle size={14} /> Abweichungen
                     </div>
-                    <div style={{ fontSize: '36px', fontWeight: 700, color: anomalies.length > 0 ? 'var(--color-danger)' : 'var(--color-text-main)' }}>{anomalies.length}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>Abweichung &gt; 50%</div>
+                    <div style={{ fontSize: '36px', fontWeight: 700, color: (anomalies.length + adjustmentSuggestions.length) > 0 ? (anomalies.length > 0 ? 'var(--color-danger)' : 'var(--color-warning)') : 'var(--color-text-main)' }}>
+                        {anomalies.length + adjustmentSuggestions.length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginTop: '6px' }}>
+                        {anomalies.length > 0 && `${anomalies.length}× stark`}{anomalies.length > 0 && adjustmentSuggestions.length > 0 && ', '}{adjustmentSuggestions.length > 0 && `${adjustmentSuggestions.length}× leicht`}{anomalies.length === 0 && adjustmentSuggestions.length === 0 && 'Abweichung ≥ 20%'}
+                    </div>
                 </div>
 
                 {ignoredProducts.length > 0 && (
@@ -536,6 +565,11 @@ export const Consumption: React.FC = () => {
                     <Zap size={16} /> Laufend
                     {activePilots.length > 0 && (
                         <span className="badge badge-neutral" style={{ marginLeft: '6px' }}>{activePilots.length}</span>
+                    )}
+                    {(anomalies.length + adjustmentSuggestions.length) > 0 && (
+                        <span className={`badge ${anomalies.length > 0 ? 'badge-danger' : 'badge-warning'}`} style={{ marginLeft: '4px' }}>
+                            {anomalies.length + adjustmentSuggestions.length}
+                        </span>
                     )}
                 </button>
                 <button
@@ -573,14 +607,64 @@ export const Consumption: React.FC = () => {
                                             : <>Du bestellst nur <strong>{actualWeekly} {p.unit}/Woche</strong>, aber der Autopilot zieht <strong>{autoWeekly} {p.unit}/Woche</strong> ab — der Bestand könnte rechnerisch unter 0 fallen.</>}
                                     </div>
                                 </div>
-                                <span className={ratio > 1 ? 'badge badge-warning' : 'badge badge-danger'} style={{ flexShrink: 0 }}>
-                                    {ratio > 1 ? '+' : ''}{((ratio - 1) * 100).toFixed(0)}%
-                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                                    <span className={ratio > 1 ? 'badge badge-warning' : 'badge badge-danger'}>
+                                        {ratio > 1 ? '+' : ''}{((ratio - 1) * 100).toFixed(0)}%
+                                    </span>
+                                    <button
+                                        className="btn btn-sm btn-primary"
+                                        onClick={() => handleAdjustToActual({ product: p, autoWeekly, actualWeekly, ratio })}
+                                        disabled={saving === `adjust-${p.id}`}
+                                        title={`Autopilot auf ${actualWeekly} ${p.unit}/Woche anpassen`}
+                                    >
+                                        <CheckCircle2 size={13} /> {saving === `adjust-${p.id}` ? 'Anpassen…' : `Auf ${actualWeekly} ${p.unit}/Wo`}
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
                 </div>
             )}
+
+                    {/* ── Adjustment Suggestions (20–50% deviation) ── */}
+                    {adjustmentSuggestions.length > 0 && (
+                        <div className="card" style={{ overflow: 'hidden' }}>
+                            <div style={{ padding: '14px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'rgba(37,99,235,0.04)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Activity size={16} color="var(--color-primary)" />
+                                <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)' }}>Anpassungsvorschläge</h3>
+                                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginLeft: '4px' }}>— Verbrauch weicht 20–50% von der Konfiguration ab</span>
+                                <span className="badge badge-primary" style={{ marginLeft: 'auto' }}>{adjustmentSuggestions.length}</span>
+                            </div>
+                            <div>
+                                {adjustmentSuggestions.map(({ product: p, autoWeekly, actualWeekly, ratio }) => (
+                                    <div key={p.id} style={{ padding: '16px var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                                        <Activity size={18} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>{p.name}</div>
+                                            <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                                                Konfiguriert: <strong>{autoWeekly} {p.unit}/Woche</strong> · Bestellhistorie: <strong>{actualWeekly} {p.unit}/Woche</strong>
+                                                {' — '}{ratio > 1 ? 'Der tatsächliche Verbrauch könnte höher sein als eingestellt.' : 'Der tatsächliche Verbrauch könnte geringer sein als eingestellt.'}
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                                            <span className="badge badge-neutral">
+                                                {ratio > 1 ? '+' : ''}{((ratio - 1) * 100).toFixed(0)}%
+                                            </span>
+                                            <button
+                                                className="btn btn-sm btn-ghost"
+                                                style={{ color: 'var(--color-primary)' }}
+                                                onClick={() => handleAdjustToActual({ product: p, autoWeekly, actualWeekly, ratio })}
+                                                disabled={saving === `adjust-${p.id}`}
+                                                title={`Autopilot auf ${actualWeekly} ${p.unit}/Woche anpassen`}
+                                            >
+                                                <CheckCircle2 size={13} /> {saving === `adjust-${p.id}` ? 'Anpassen…' : `Auf ${actualWeekly} ${p.unit}/Wo anpassen`}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* ── Active Autopilots (expandable, with runway + inline edit) ── */}
                     <div className="card" style={{ overflow: 'hidden' }}>

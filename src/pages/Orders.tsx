@@ -155,6 +155,7 @@ export const Orders: React.FC = () => {
     const [selectedKiLog, setSelectedKiLog] = useState<InboundEmail | null>(null);
 
     const [phoneCallPanelData, setPhoneCallPanelData] = useState<{ order: Order; mode: 'order' | 'defect' } | null>(null);
+    const [phoneCallProposalData, setPhoneCallProposalData] = useState<{ product: Product, quantity: number } | null>(null);
 
     const getSupplierForOrder = (order: Order) => {
         const product = products.find(p => p.name === order.productName);
@@ -2188,6 +2189,18 @@ export const Orders: React.FC = () => {
                     onClose={() => setPhoneCallPanelData(null)}
                 />
             )}
+            
+            {phoneCallProposalData && (
+                <PhoneCallPanel
+                    mode="order"
+                    supplier={suppliers.find(s => s.id === phoneCallProposalData.product.supplierId) ?? null}
+                    lowStockProducts={[{
+                        product: phoneCallProposalData.product,
+                        suggestedQty: phoneCallProposalData.quantity
+                    }]}
+                    onClose={() => setPhoneCallProposalData(null)}
+                />
+            )}
 
             {/* Defect Modal */}
             {
@@ -2824,7 +2837,6 @@ export const Orders: React.FC = () => {
                                                                                     </a>
                                                                                 );
                                                                             } else if (btnText === '📞 Anrufen & Bestellen') {
-                                                                                const phoneNum = prod.supplierPhone || supp?.orderPhone || supp?.phone || '';
                                                                                 return (
                                                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
                                                                                         {(prod.productNumber || supp?.customerNumber) && (
@@ -2833,12 +2845,18 @@ export const Orders: React.FC = () => {
                                                                                                 {supp?.customerNumber && <span>Kd-Nr: <strong style={{ color: 'var(--color-text-main)' }}>{supp.customerNumber}</strong></span>}
                                                                                             </div>
                                                                                         )}
-                                                                                        <button 
-                                                                                            onClick={() => executeProposalDbSave(prop)}
-                                                                                            style={{ border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
-                                                                                            <Phone size={16} /> {phoneNum || btnText}
-                                                                                            <span style={{ opacity: 0.8, fontSize: '12px', marginLeft: '4px', fontWeight: 400 }}>(Als bestellt markieren)</span>
-                                                                                        </button>
+                                                                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                                                                            <button 
+                                                                                                onClick={() => setPhoneCallProposalData({ product: prod, quantity: prop.quantity || 1 })}
+                                                                                                style={{ border: '1px solid var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                                                                                <Phone size={16} /> Notizen & Details anzeigen
+                                                                                            </button>
+                                                                                            <button 
+                                                                                                onClick={() => executeProposalDbSave(prop)}
+                                                                                                style={{ border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+                                                                                                <CheckSquare size={16} /> Als bestellt markieren
+                                                                                            </button>
+                                                                                        </div>
                                                                                     </div>
                                                                                 );
                                                                             } else {
