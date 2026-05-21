@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, AlertTriangle, X, Info } from 'lucide-react';
 
-export type NotificationType = 'success' | 'error' | 'info';
+export type NotificationType = 'success' | 'error' | 'info' | 'warning';| 'error' | 'info';
 
 export interface NotificationProps {
     message: string;
@@ -14,6 +14,7 @@ const CONFIG = {
     success: { icon: CheckCircle, accent: 'var(--color-success)', bg: 'rgba(34, 197, 94, 0.09)',  color: '#15803d', label: 'Erfolg' },
     error:   { icon: AlertTriangle, accent: 'var(--color-danger)',  bg: 'rgba(239, 68, 68, 0.09)', color: '#b91c1c', label: 'Fehler' },
     info:    { icon: Info,          accent: 'var(--color-primary)', bg: 'rgba(37, 99, 235, 0.09)', color: '#1d4ed8', label: 'Info' },
+    warning: { icon: AlertTriangle, accent: '#f59e0b',  bg: 'rgba(245, 158, 11, 0.09)', color: '#b45309', label: 'Warnung' },
 } as const;
 
 export const Notification: React.FC<NotificationProps> = ({
