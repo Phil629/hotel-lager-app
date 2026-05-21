@@ -463,7 +463,7 @@ export const Suppliers: React.FC = () => {
                                         <div className="form-group">
                                             <label className="form-label">Passwort</label>
                                             <div style={{ position: 'relative' }}>
-                                                <input type={showPassword ? "text" : "password"} value={formData.loginPassword || ''} onChange={e => setFormData({ ...formData, loginPassword: e.target.value })} className="input-field" style={{ paddingRight: '40px' }} placeholder="••••••••" />
+                                                <input type={showPassword ? "text" : "password"} value={formData.loginPassword || ''} onChange={e => setFormData({ ...formData, loginPassword: e.target.value })} className="input-field" style={{ paddingRight: '40px' }} placeholder="••••••••" autoComplete="new-password" />
                                                 <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-faint)' }}>
                                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                                 </button>
