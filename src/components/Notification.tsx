@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, AlertTriangle, X, Info } from 'lucide-react';
 
-export type NotificationType = 'success' | 'error' | 'info' | 'warning';| 'error' | 'info';
+export type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
 export interface NotificationProps {
     message: string;
