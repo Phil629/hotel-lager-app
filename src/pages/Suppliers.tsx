@@ -458,7 +458,7 @@ export const Suppliers: React.FC = () => {
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
                                         <div className="form-group">
                                             <label className="form-label">Benutzername / Kundennummer</label>
-                                            <input type="text" value={formData.loginUsername || ''} onChange={e => setFormData({ ...formData, loginUsername: e.target.value })} className="input-field" placeholder="MaxMuster123" />
+                                            <input type="text" value={formData.loginUsername || ''} onChange={e => setFormData({ ...formData, loginUsername: e.target.value })} className="input-field" placeholder="MaxMuster123" autoComplete="new-password" />
                                         </div>
                                         <div className="form-group">
                                             <label className="form-label">Passwort</label>
