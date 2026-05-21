@@ -4,7 +4,7 @@ import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
-import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp } from 'lucide-react';
+import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -201,8 +201,18 @@ export const Products: React.FC = () => {
                         const supabaseClient = getSupabaseClient();
                         if (supabaseClient) {
                             await supabaseClient.rpc('trigger_auto_consumption');
-                            // Frische Daten nach serverseitiger Berechnung laden
                             const fresh = await DataService.getProducts();
+                            // Detect products whose stock just hit 0 due to autopilot
+                            const newlyZeroed = fresh.filter(fp => {
+                                const before = loadedProducts.find(lp => lp.id === fp.id);
+                                return fp.consumptionAmount && fp.stock === 0 && before && before.stock > 0;
+                            });
+                            if (newlyZeroed.length > 0) {
+                                setNotification({
+                                    message: `Autopilot: ${newlyZeroed.map(p => p.name).join(', ')} ${newlyZeroed.length === 1 ? 'ist' : 'sind'} auf 0 gefallen — bitte nachbestellen.`,
+                                    type: 'warning',
+                                });
+                            }
                             setProducts(fresh);
                             return;
                         }
@@ -214,6 +224,7 @@ export const Products: React.FC = () => {
                     const now = new Date();
                     let updatedAny = false;
                     const updatedProducts = loadedProducts.map(p => ({ ...p }));
+                    const zeroedNames: string[] = [];
 
                     for (let i = 0; i < updatedProducts.length; i++) {
                         const p = updatedProducts[i];
@@ -229,7 +240,9 @@ export const Products: React.FC = () => {
                                 const diffDays = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
                                 let periodsPassed = p.consumptionPeriod === 'day' ? diffDays : Math.floor(diffDays / 7);
                                 if (periodsPassed > 0) {
+                                    const prevStock = p.stock;
                                     p.stock = Math.max(0, p.stock - periodsPassed * p.consumptionAmount);
+                                    if (p.stock === 0 && prevStock > 0) zeroedNames.push(p.name);
                                     const newLastDate = new Date(lastDate);
                                     if (p.consumptionPeriod === 'day') newLastDate.setDate(newLastDate.getDate() + periodsPassed);
                                     else newLastDate.setDate(newLastDate.getDate() + periodsPassed * 7);
@@ -241,6 +254,12 @@ export const Products: React.FC = () => {
                         } catch (err) {
                             console.error('Auto-consume failed for', p.id, err);
                         }
+                    }
+                    if (zeroedNames.length > 0) {
+                        setNotification({
+                            message: `Autopilot: ${zeroedNames.join(', ')} ${zeroedNames.length === 1 ? 'ist' : 'sind'} auf 0 gefallen — bitte nachbestellen.`,
+                            type: 'warning',
+                        });
                     }
                     if (updatedAny) setProducts(updatedProducts);
                 };
@@ -260,10 +279,14 @@ export const Products: React.FC = () => {
     };
 
     const handleStockUpdate = async (product: Product, newStock: number) => {
-        const updatedProduct = { ...product, stock: newStock };
-        // Optimistic update
+        const updatedProduct = {
+            ...product,
+            stock: newStock,
+            // Reset consumption clock so the next autopilot run doesn't retroactively
+            // deduct for the time between the last deduction and this manual correction.
+            lastConsumptionDate: product.consumptionAmount ? new Date().toISOString() : product.lastConsumptionDate,
+        };
         setProducts(products.map(p => p.id === product.id ? updatedProduct : p));
-        // Save to backend
         await DataService.updateProduct(updatedProduct);
     };
 
@@ -798,24 +821,28 @@ export const Products: React.FC = () => {
                                                                     </div>
                                                                     {(() => {
                                                                         const openOrder = orders.find(o => o.productName === product.name && o.status === 'open');
+                                                                        const badges = [];
                                                                         if (openOrder) {
-                                                                            return (
-                                                                                <div style={{ marginTop: '4px' }}>
-                                                                                    <span className="badge badge-warning" style={{ fontSize: '10px' }} title="Bestellung ist unterwegs">
-                                                                                        <ShoppingCart size={10} /> Unterwegs
-                                                                                    </span>
-                                                                                </div>
+                                                                            badges.push(
+                                                                                <span key="open" className="badge badge-warning" style={{ fontSize: '10px' }} title="Bestellung ist unterwegs">
+                                                                                    <ShoppingCart size={10} /> Unterwegs
+                                                                                </span>
                                                                             );
                                                                         } else if (Number(product.minStock) > 0 && Number(product.stock) <= Number(product.minStock)) {
-                                                                            return (
-                                                                                <div style={{ marginTop: '4px' }}>
-                                                                                    <span className="badge badge-danger" style={{ fontSize: '10px' }}>
-                                                                                        <AlertTriangle size={10} /> Nachbestellen
-                                                                                    </span>
-                                                                                </div>
+                                                                            badges.push(
+                                                                                <span key="low" className="badge badge-danger" style={{ fontSize: '10px' }}>
+                                                                                    <AlertTriangle size={10} /> Nachbestellen
+                                                                                </span>
                                                                             );
                                                                         }
-                                                                        return null;
+                                                                        if (product.consumptionAmount && product.consumptionPeriod) {
+                                                                            badges.push(
+                                                                                <span key="auto" className="badge badge-neutral" style={{ fontSize: '10px', color: 'var(--color-primary)' }} title={`Autopilot: ${product.consumptionAmount} ${product.unit} ${product.consumptionPeriod === 'day' ? 'pro Tag' : 'pro Woche'}`}>
+                                                                                    <Zap size={10} /> {product.consumptionAmount}/{product.consumptionPeriod === 'day' ? 'Tag' : 'Wo'}
+                                                                                </span>
+                                                                            );
+                                                                        }
+                                                                        return badges.length > 0 ? <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>{badges}</div> : null;
                                                                     })()}
                                                                 </div>
                                                                 <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
@@ -926,6 +953,11 @@ export const Products: React.FC = () => {
                                                                             ) : isLowStock && (
                                                                                 <span className="badge badge-danger" style={{ fontSize: '10.5px' }}>
                                                                                     <AlertTriangle size={10} /> Nachbestellen
+                                                                                </span>
+                                                                            )}
+                                                                            {product.consumptionAmount && product.consumptionPeriod && (
+                                                                                <span className="badge badge-neutral" style={{ fontSize: '10.5px', color: 'var(--color-primary)' }} title={`Autopilot aktiv: ${product.consumptionAmount} ${product.unit} ${product.consumptionPeriod === 'day' ? 'pro Tag' : 'pro Woche'}`}>
+                                                                                    <Zap size={10} /> {product.consumptionAmount}/{product.consumptionPeriod === 'day' ? 'Tag' : 'Wo'}
                                                                                 </span>
                                                                             )}
                                                                             {product.price && (

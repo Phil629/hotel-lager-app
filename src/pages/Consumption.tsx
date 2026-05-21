@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
-import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap, ChevronDown, ChevronRight, RotateCcw, Save, Pencil } from 'lucide-react';
+import { StorageService } from '../services/storage';
+import { Activity, Bot, CheckCircle2, X, AlertTriangle, Zap, ChevronDown, ChevronRight, RotateCcw, Save, Pencil, PauseCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -503,6 +504,19 @@ export const Consumption: React.FC = () => {
                     </p>
                 </div>
             </div>
+
+            {/* ── Inventory Mode Banner ── */}
+            {StorageService.getSettings().inventoryMode && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', backgroundColor: '#fef9c3', border: '1px solid #fde047', borderRadius: 'var(--radius-lg)' }}>
+                    <PauseCircle size={18} color="#a16207" style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#92400e' }}>Inventory-Modus aktiv — Autopilot pausiert</div>
+                        <div style={{ fontSize: '12px', color: '#a16207', marginTop: '2px' }}>
+                            Der automatische Bestandsabzug ist deaktiviert. Einstellungen können trotzdem geändert werden, wirken aber erst nach Deaktivierung des Inventory-Modus.
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── KPI Cards ── */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--spacing-md)' }}>

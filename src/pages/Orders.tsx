@@ -638,8 +638,7 @@ export const Orders: React.FC = () => {
                 );
                 const openQty = openOrdersForProduct.reduce((sum, o) => sum + o.quantity, 0);
 
-                if (openQty > 0) continue; // Do not propose products that are already ordered
-
+                
                 const needed = standardQty;
                 if (needed > 0) {
                     const supplier = suppliers.find(s => s.id === product.supplierId);
