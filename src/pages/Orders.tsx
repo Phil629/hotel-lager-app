@@ -249,22 +249,22 @@ export const Orders: React.FC = () => {
         };
     }, []);
 
-    const loadOrders = async () => {
+    async function loadOrders() {
         const data = await DataService.getOrders();
         setOrders(data);
     };
 
-    const loadProducts = async () => {
+    async function loadProducts() {
         const data = await DataService.getProducts();
         setProducts(data);
     };
 
-    const loadSuppliers = async () => {
+    async function loadSuppliers() {
         const data = await DataService.getSuppliers();
         setSuppliers(data);
     };
 
-    const loadInboundEmails = async () => {
+    async function loadInboundEmails() {
         const supabase = getSupabaseClient();
         if (!supabase) return;
         const { data, error } = await supabase

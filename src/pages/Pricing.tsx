@@ -96,6 +96,15 @@ type PieMode = 'category' | 'supplier';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+const CardHdr = ({ icon: Icon, title, iconColor, right }: { icon: React.ElementType; title: string; iconColor?: string; right?: React.ReactNode }) => (
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon size={16} color={iconColor || 'var(--color-primary)'} /> {title}
+            </h3>
+            {right}
+        </div>
+    );
+
 export const Pricing: React.FC = () => {
     const [products, setProducts]   = useState<Product[]>([]);
     const [orders, setOrders]       = useState<Order[]>([]);
@@ -391,14 +400,7 @@ export const Pricing: React.FC = () => {
 
     // ── Shared card header ────────────────────────────────────────────────────
 
-    const CardHdr = ({ icon: Icon, title, iconColor, right }: { icon: React.ElementType; title: string; iconColor?: string; right?: React.ReactNode }) => (
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Icon size={16} color={iconColor || 'var(--color-primary)'} /> {title}
-            </h3>
-            {right}
-        </div>
-    );
+    
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)', paddingBottom: '40px' }}>

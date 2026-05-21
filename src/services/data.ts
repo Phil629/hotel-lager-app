@@ -7,8 +7,7 @@ const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: 
     try {
         const parsed = JSON.parse(notesStr);
         if (Array.isArray(parsed)) return parsed;
-    } catch (e) {
-    }
+    } catch (e) { console.error("Ignored error:", e); }
     return [{
         id: generateId(),
         text: notesStr,

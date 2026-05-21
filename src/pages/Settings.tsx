@@ -612,6 +612,7 @@ export const Settings: React.FC = () => {
                 </div>
 
                 {/* 4. Developer Options (Hidden globally unless unlocked) */}
+                {/* eslint-disable-next-line no-constant-binary-expression */}
                 {false && (
                     <div style={{
                         backgroundColor: '#1e293b',
