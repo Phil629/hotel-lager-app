@@ -10,7 +10,7 @@ import { Notification, type NotificationType } from '../components/Notification'
 export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
-    const { canManageSuppliers, role: userRole } = usePermissions();
+    const { canManageSuppliers, role: userRole, canSeePasswords } = usePermissions();
     const [currentCompanyId, setCurrentCompanyId] = useState<string>('');
     const [currentUserId, setCurrentUserId] = useState<string>('');
 
@@ -97,7 +97,7 @@ export const Suppliers: React.FC = () => {
             setFormData(supplier);
             setSelectedProductIds(products.filter(p => p.supplierId === supplier.id).map(p => p.id));
             // Load encrypted credentials only for admin/owner
-            if (userRole === 'owner' || userRole === 'admin') {
+            if (userRole === 'owner' || userRole === 'admin' || canSeePasswords) {
                 try {
                     const creds = await DataService.getSupplierCredentials(supplier.id);
                     if (creds) {
@@ -168,7 +168,7 @@ export const Suppliers: React.FC = () => {
             await DataService.saveSupplier(supplierToSave);
 
             // Save credentials encrypted via RPC (admin/owner only)
-            if ((userRole === 'owner' || userRole === 'admin') && (formData.loginUsername || formData.loginPassword)) {
+            if ((userRole === 'owner' || userRole === 'admin' || canSeePasswords) && (formData.loginUsername || formData.loginPassword)) {
                 await DataService.saveSupplierCredentials(targetSupplierId, {
                     loginUrl: formData.loginUrl,
                     loginUsername: formData.loginUsername,

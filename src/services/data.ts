@@ -361,7 +361,7 @@ export const DataService = {
             const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
             if (!profile?.company_id) return null;
             const { data: company } = await supabase.from('companies').select('settings').eq('id', profile.company_id).single();
-            return company?.settings || { staffCanSeePrices: false, staffCanManageSuppliers: false };
+            return company?.settings || { staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false };
         } catch (e) { return null; }
     },
 

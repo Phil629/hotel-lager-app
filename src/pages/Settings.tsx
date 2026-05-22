@@ -22,7 +22,8 @@ const SectionCard = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const Settings: React.FC = () => {
-    const [companySettings, setCompanySettings] = useState({ staffCanSeePrices: false, staffCanManageSuppliers: false });
+    const [activeTab, setActiveTab] = useState<'general' | 'team' | 'data'>('general');
+    const [companySettings, setCompanySettings] = useState({ staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false });
     const [settings, setSettings] = useState<AppSettings>({
         serviceId: '',
         templateId: '',
@@ -293,7 +294,16 @@ export const Settings: React.FC = () => {
             </div>
 
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: 'var(--spacing-xl)', overflowX: 'auto', paddingBottom: '4px' }}>
+                    <button type="button" onClick={() => setActiveTab('general')} className={`btn ${activeTab === 'general' ? 'btn-primary' : 'btn-ghost'}`}><Building2 size={18} /> Allgemein & Darstellung</button>
+                    {(role === 'owner' || role === 'admin') && (
+                        <button type="button" onClick={() => setActiveTab('team')} className={`btn ${activeTab === 'team' ? 'btn-primary' : 'btn-ghost'}`}><Users size={18} /> Team & Rechte</button>
+                    )}
+                    <button type="button" onClick={() => setActiveTab('data')} className={`btn ${activeTab === 'data' ? 'btn-primary' : 'btn-ghost'}`}><Database size={18} /> Daten, Backup & System</button>
+                </div>
                 
+                {activeTab === 'general' && (
+                    <>
                 {/* 1. Unternehmensprofil */}
                 {(role === 'owner' || role === 'admin') && (
                 <SectionCard>
@@ -376,6 +386,44 @@ export const Settings: React.FC = () => {
                 </SectionCard>
                 )}
 
+                {/* Darstellung / Theme */}
+                <SectionCard>
+                    <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                        <Sun size={22} color="var(--color-primary)" /> Darstellung
+                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                        <div>
+                            <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Dark Mode (Dunkles Design)</div>
+                            <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>Wechselt das Design der gesamten App in den dunklen Modus.</div>
+                        </div>
+                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <input
+                                type="checkbox"
+                                checked={document.documentElement.getAttribute('data-theme') === 'dark'}
+                                onChange={(e) => {
+                                    const isDark = e.target.checked;
+                                    if (isDark) {
+                                        document.documentElement.setAttribute('data-theme', 'dark');
+                                        localStorage.setItem('theme', 'dark');
+                                    } else {
+                                        document.documentElement.removeAttribute('data-theme');
+                                        localStorage.setItem('theme', 'light');
+                                    }
+                                    setSettings(prev => ({...prev}));
+                                }}
+                                style={{ opacity: 0, width: 0, height: 0 }}
+                            />
+                            <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 'var(--color-primary)' : '#ccc', borderRadius: '24px', transition: '.4s' }}>
+                                <span style={{ position: 'absolute', content: '""', height: '18px', width: '18px', left: document.documentElement.getAttribute('data-theme') === 'dark' ? '26px' : '4px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '.4s' }}></span>
+                            </span>
+                        </label>
+                    </div>
+                </SectionCard>
+                    </>
+                )}
+
+                {activeTab === 'team' && (
+                    <>
                 {/* Team & Mitarbeiter */}
                 <SectionCard>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: 'var(--spacing-md)' }}>
@@ -641,10 +689,32 @@ export const Settings: React.FC = () => {
                                 </span>
                             </label>
                         </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                            <div>
+                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Passwörter der Lieferanten sehen</div>
+                                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Dürfen Mitarbeiter die Zugangsdaten der Lieferanten sehen?</div>
+                            </div>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={companySettings.staffCanSeePasswords}
+                                    onChange={(e) => setCompanySettings({...companySettings, staffCanSeePasswords: e.target.checked})}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: companySettings.staffCanSeePasswords ? 'var(--color-primary)' : '#ccc', borderRadius: '24px', transition: '.4s' }}>
+                                    <span style={{ position: 'absolute', content: '""', height: '18px', width: '18px', left: companySettings.staffCanSeePasswords ? '26px' : '4px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '.4s' }}></span>
+                                </span>
+                            </label>
+                        </div>
                     </div>
                 </SectionCard>
                 )}
+                    </>
+                )}
 
+                {activeTab === 'data' && (
+                    <>
                 {/* 4. Datensicherheit & Backups */}
                 {(role === 'owner' || role === 'admin') && (
                 <SectionCard>
@@ -719,6 +789,8 @@ export const Settings: React.FC = () => {
                         </button>
                     </div>
                 </div>
+                    </>
+                )}
 
                 {/* Secret Developer Mode Toggle */}
                 <div style={{ textAlign: 'center', marginTop: '40px' }}>

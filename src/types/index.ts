@@ -6,6 +6,7 @@ export interface Company {
   settings?: {
     staffCanSeePrices: boolean;
     staffCanManageSuppliers: boolean;
+    staffCanSeePasswords: boolean;
   };
 }
 

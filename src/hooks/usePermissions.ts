@@ -6,6 +6,7 @@ export const usePermissions = () => {
     const [role, setRole] = useState<string>('');
     const [canSeePrices, setCanSeePrices] = useState<boolean>(false);
     const [canManageSuppliers, setCanManageSuppliers] = useState<boolean>(false);
+    const [canSeePasswords, setCanSeePasswords] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(true);
 
     useEffect(() => {
@@ -27,6 +28,7 @@ export const usePermissions = () => {
                     if (isMounted) {
                         setCanSeePrices(r === 'owner' || r === 'admin' || !!settings?.staffCanSeePrices);
                         setCanManageSuppliers(r === 'owner' || r === 'admin' || !!settings?.staffCanManageSuppliers);
+                        setCanSeePasswords(r === 'owner' || r === 'admin' || !!settings?.staffCanSeePasswords);
                     }
                 }
             } catch (e) {
@@ -39,5 +41,5 @@ export const usePermissions = () => {
         return () => { isMounted = false; };
     }, []);
 
-    return { role, canSeePrices, canManageSuppliers, loading };
+    return { role, canSeePrices, canManageSuppliers, canSeePasswords, loading };
 };
