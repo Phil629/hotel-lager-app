@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
 import { DataService } from '../services/data';
-import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check, LogOut, Users, UserPlus, Sun, AlertTriangle } from 'lucide-react';
+import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as SettingsIcon, Check, LogOut, Users, UserPlus, Sun, AlertTriangle, Download } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -231,6 +231,38 @@ export const Settings: React.FC = () => {
             setNotification({ message: `Fehler bei der Migration: ${error.message}`, type: 'error' });
         } finally {
             setIsMigrating(false);
+        }
+    };
+
+
+    const handleExportData = async () => {
+        try {
+            setNotification({ message: 'Backup wird erstellt...', type: 'info' });
+            
+            // Collect all local state data
+            const suppliers = StorageService.getSuppliers();
+            const products = StorageService.getProducts();
+            const orders = StorageService.getOrders();
+            
+            const backupData = {
+                timestamp: new Date().toISOString(),
+                hotelName: settings.hotelName,
+                data: { suppliers, products, orders }
+            };
+            
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `hotel_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            setNotification({ message: 'Backup erfolgreich heruntergeladen!', type: 'success' });
+        } catch (err) {
+            setNotification({ message: 'Fehler beim Erstellen des Backups.', type: 'error' });
         }
     };
 
@@ -554,6 +586,35 @@ export const Settings: React.FC = () => {
                 </SectionCard>
 
                 
+
+                {/* 4. Datensicherheit & Backups */}
+                {(role === 'owner' || role === 'admin') && (
+                <SectionCard>
+                    <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                        <Database size={22} color="var(--color-primary)" /> Datensicherheit & Backups
+                    </h3>
+                    
+                    <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)' }}>
+                        <h4 style={{ margin: '0 0 12px 0', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Check size={18} color="var(--color-success)" /> Automatische Cloud-Sicherung (Pro)
+                        </h4>
+                        <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: '1.5' }}>
+                            Die Enterprise Point-in-Time-Recovery (PITR) ist aktiv. Sämtliche Datenbankänderungen werden im Hintergrund fortlaufend und manipulationssicher in der Cloud gesichert. Bei einem Notfall kann der Support den Zustand auf jede beliebige Minute der letzten Tage zurücksetzen.
+                        </p>
+                    </div>
+
+                    <div style={{ backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div>
+                            <h4 style={{ margin: '0 0 4px 0', color: 'var(--color-text)' }}>Offline Backup (JSON)</h4>
+                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>Sichere alle Produkte, Lieferanten und die gesamte Bestellhistorie als lokale Datei auf deinem Rechner. Ideal für die eigene Ablage.</p>
+                        </div>
+                        <button type="button" onClick={handleExportData} className="btn btn-secondary" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Download size={16} /> Daten herunterladen
+                        </button>
+                    </div>
+                </SectionCard>
+                )}
+
                 {/* Logout Zone */}
                 <div style={{ marginTop: 'var(--spacing-2xl)', padding: 'var(--spacing-lg)', backgroundColor: 'var(--color-danger-bg)', border: '1px solid #fecdd3', borderRadius: 'var(--radius-lg)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                     <div>

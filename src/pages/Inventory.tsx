@@ -11,9 +11,7 @@ export const Inventory: React.FC = () => {
     const [sortBy, setSortBy] = useState<'category' | 'date_asc' | 'alpha'>('category');
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     
-    useEffect(() => {
-        loadProducts();
-    }, []);
+
 
     const loadProducts = async () => {
         try {
@@ -70,6 +68,10 @@ export const Inventory: React.FC = () => {
     const categories = Array.from(new Set(filteredProducts.map(p => p.category || 'Sonstiges'))).sort();
     const totalCounted = Object.values(checkedMap).filter(Boolean).length;
     const progress = products.length === 0 ? 0 : Math.round((totalCounted / products.length) * 100);
+
+    useEffect(() => {
+        loadProducts();
+    }, []);
 
     return (
         <div style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '100px' }}>
