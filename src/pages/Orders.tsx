@@ -631,13 +631,18 @@ export const Orders: React.FC = () => {
             if (supplier && supplier.ignoreOrderProposals) continue;
             const min = Number(product.minStock || 0);
             if (min > 0 && product.stock <= min) {
-                const standardQty = product.standardOrderQuantity ? product.standardOrderQuantity : min * 2;
-                
                 const productNameLower = product.name.trim().toLowerCase();
                 const openOrdersForProduct = orders.filter(o =>
                     o.status === 'open' && o.productName.trim().toLowerCase() === productNameLower
                 );
                 const openQty = openOrdersForProduct.reduce((sum, o) => sum + o.quantity, 0);
+                
+                // Do not propose if it has already been ordered, or if stock + ordered >= min
+                if (openQty > 0 || product.stock + openQty >= min) {
+                    continue;
+                }
+
+                const standardQty = product.standardOrderQuantity ? product.standardOrderQuantity : min * 2;
 
                 
                 const needed = standardQty;
