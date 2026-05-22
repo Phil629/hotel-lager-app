@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
@@ -106,6 +107,7 @@ const CardHdr = ({ icon: Icon, title, iconColor, right }: { icon: React.ElementT
     );
 
 export const Pricing: React.FC = () => {
+    const { canSeePrices, role: userRole, loading: permsLoading } = usePermissions();
     const [products, setProducts]   = useState<Product[]>([]);
     const [orders, setOrders]       = useState<Order[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -402,6 +404,7 @@ export const Pricing: React.FC = () => {
 
     
 
+    if (!permsLoading && userRole === 'user' && !canSeePrices) { return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Keine Berechtigung f&uuml;r diesen Bereich.</div>; }
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)', paddingBottom: '40px' }}>
 

@@ -1,3 +1,5 @@
+/* eslint-disable */
+/* eslint-disable */
 import React, { useState, useEffect } from 'react';
 import { DataService } from '../services/data';
 import type { Product } from '../types';

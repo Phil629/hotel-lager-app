@@ -22,6 +22,7 @@ const SectionCard = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const Settings: React.FC = () => {
+    const [companySettings, setCompanySettings] = useState({ staffCanSeePrices: false, staffCanManageSuppliers: false });
     const [settings, setSettings] = useState<AppSettings>({
         serviceId: '',
         templateId: '',
@@ -66,6 +67,7 @@ export const Settings: React.FC = () => {
                 }
             }
         });
+        DataService.getCompanySettings().then(res => { if (res) setCompanySettings(res as any); });
         setSettings({
             serviceId: stored.serviceId || '',
             templateId: stored.templateId || '',
@@ -90,6 +92,10 @@ export const Settings: React.FC = () => {
             supabase.from('profiles').update({ inventory_valuation_method: settings.inventoryValuationMethod }).eq('id', userId).then(() => {});
         }
         // W9: kein window.location.reload() — State direkt aktualisieren
+
+        if (role === 'owner' || role === 'admin') {
+            DataService.updateCompanySettings(companySettings).catch(console.error);
+        }
         setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
     };
 
@@ -586,6 +592,58 @@ export const Settings: React.FC = () => {
                 </SectionCard>
 
                 
+
+
+                {/* 3.5 Mitarbeiter-Rechte */}
+                {(role === 'owner' || role === 'admin') && (
+                <SectionCard>
+                    <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                        <Users size={22} color="var(--color-primary)" /> Mitarbeiter-Rechte (Team)
+                    </h3>
+                    
+                    <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', marginBottom: 'var(--spacing-xl)' }}>
+                        Lege fest, was deine Mitarbeiter (Rolle: <strong>user</strong>) in der App sehen und tun dürfen.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                            <div>
+                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Einkaufspreise & Summen sehen</div>
+                                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Dürfen Mitarbeiter die Einkaufspreise und Warenkorb-Summen sehen? (Wenn aus, werden Preise für Mitarbeiter ausgeblendet)</div>
+                            </div>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={companySettings.staffCanSeePrices}
+                                    onChange={(e) => setCompanySettings({...companySettings, staffCanSeePrices: e.target.checked})}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: companySettings.staffCanSeePrices ? 'var(--color-primary)' : '#ccc', borderRadius: '24px', transition: '.4s' }}>
+                                    <span style={{ position: 'absolute', content: '""', height: '18px', width: '18px', left: companySettings.staffCanSeePrices ? '26px' : '4px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '.4s' }}></span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                            <div>
+                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Lieferanten anlegen & bearbeiten</div>
+                                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Dürfen Mitarbeiter neue Lieferanten hinzufügen oder bearbeiten? (Passwörter sind immer nur für Inhaber sichtbar)</div>
+                            </div>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={companySettings.staffCanManageSuppliers}
+                                    onChange={(e) => setCompanySettings({...companySettings, staffCanManageSuppliers: e.target.checked})}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: companySettings.staffCanManageSuppliers ? 'var(--color-primary)' : '#ccc', borderRadius: '24px', transition: '.4s' }}>
+                                    <span style={{ position: 'absolute', content: '""', height: '18px', width: '18px', left: companySettings.staffCanManageSuppliers ? '26px' : '4px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '.4s' }}></span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </SectionCard>
+                )}
 
                 {/* 4. Datensicherheit & Backups */}
                 {(role === 'owner' || role === 'admin') && (

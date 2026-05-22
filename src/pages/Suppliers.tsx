@@ -1,6 +1,7 @@
 import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { usePermissions } from '../hooks/usePermissions';
 import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
 import { getSupabaseClient } from '../services/supabase';
@@ -9,7 +10,7 @@ import { Notification, type NotificationType } from '../components/Notification'
 export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
-    const [userRole, setUserRole] = useState<string>('');
+    const { canManageSuppliers, role: userRole } = usePermissions();
     const [currentCompanyId, setCurrentCompanyId] = useState<string>('');
     const [currentUserId, setCurrentUserId] = useState<string>('');
 
@@ -35,7 +36,7 @@ export const Suppliers: React.FC = () => {
                 if (user) {
                     setCurrentUserId(user.id);
                     supabaseClient.from('profiles').select('role, company_id').eq('id', user.id).maybeSingle().then(({ data }) => {
-                        setUserRole(data?.role || '');
+
                         setCurrentCompanyId(data?.company_id || '');
                     });
                 }
@@ -241,9 +242,9 @@ export const Suppliers: React.FC = () => {
 
             <div className="page-header">
                 <h2 className="page-title">Lieferanten Netzwerk</h2>
-                <button onClick={() => handleOpenModal()} className="btn btn-primary">
+                {canManageSuppliers && <button onClick={() => handleOpenModal()} className="btn btn-primary">
                     <Plus size={18} /> Neuer Lieferant
-                </button>
+                </button>}
             </div>
 
             <div style={{ position: 'relative', marginBottom: 'var(--spacing-2xl)' }}>

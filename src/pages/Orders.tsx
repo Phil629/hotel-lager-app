@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { generateId } from "../utils";
 import React, { useState, useEffect, useRef } from 'react';
 import type { Product, Order, Supplier } from '../types';

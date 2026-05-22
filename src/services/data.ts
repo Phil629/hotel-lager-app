@@ -351,4 +351,30 @@ export const DataService = {
         });
         if (error) throw error;
     },
+
+    getCompanySettings: async () => {
+        try {
+            const supabase = getSupabaseClient();
+            if (!supabase) return null;
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return null;
+            const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
+            if (!profile?.company_id) return null;
+            const { data: company } = await supabase.from('companies').select('settings').eq('id', profile.company_id).single();
+            return company?.settings || { staffCanSeePrices: false, staffCanManageSuppliers: false };
+        } catch (e) { return null; }
+    },
+
+    updateCompanySettings: async (settings: any) => {
+        try {
+            const supabase = getSupabaseClient();
+            if (!supabase) return false;
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return false;
+            const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
+            if (!profile?.company_id) return false;
+            await supabase.from('companies').update({ settings }).eq('id', profile.company_id);
+            return true;
+        } catch (e) { return false; }
+    }
 };

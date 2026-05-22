@@ -5,6 +5,7 @@ import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
 import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap } from 'lucide-react';
+import { usePermissions } from '../hooks/usePermissions';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -55,6 +56,7 @@ const PriceHistoryChart = ({ productName }: { productName: string }) => {
 };
 
 export const Products: React.FC = () => {
+    const { canSeePrices } = usePermissions();
     const [products, setProducts] = useState<Product[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [orders, setOrders] = useState<Order[]>([]);
@@ -807,7 +809,7 @@ export const Products: React.FC = () => {
                                                                     <div style={{ flex: 1 }}>
                                                                         <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 700, color: 'var(--color-text-main)' }}>{product.name}</h3>
                                                                         <div style={{ color: '#64748b', fontSize: '14px', fontWeight: 500 }}>
-                                                                            {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
+                                                                            {canSeePrices && product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -848,7 +850,7 @@ export const Products: React.FC = () => {
                                                                 <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                                                                     <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Gesamtwert</div>
                                                                     <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--color-text-main)' }}>
-                                                                        {product.price ? (product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'}
+                                                                        {canSeePrices && product.price ? (product.stock * product.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -923,7 +925,7 @@ export const Products: React.FC = () => {
                                                                     <td style={{ minWidth: '200px' }}>
                                                                         <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--color-text-main)', marginBottom: '2px' }}>{product.name}</div>
                                                                         <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 500 }}>
-                                                                            {product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
+                                                                            {canSeePrices && product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
                                                                         </div>
                                                                         
                                                                         {(() => {

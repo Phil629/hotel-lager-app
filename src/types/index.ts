@@ -3,6 +3,10 @@ export interface Company {
   name: string;
   join_code: string;
   created_at?: string;
+  settings?: {
+    staffCanSeePrices: boolean;
+    staffCanManageSuppliers: boolean;
+  };
 }
 
 export interface Profile {
