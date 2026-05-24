@@ -96,6 +96,7 @@ export const Settings: React.FC = () => {
 
         if (role === 'owner' || role === 'admin') {
             DataService.updateCompanySettings(companySettings).catch(console.error);
+            DataService.updateCompanyName(settings.hotelName || '').catch(console.error);
         }
         setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
     };

@@ -56,7 +56,14 @@ function App() {
 
         const { data } = await supabase!
           .from('profiles')
-          .select('is_banned, company_id, role')
+          .select(`
+            is_banned, 
+            company_id, 
+            role,
+            companies (
+              name
+            )
+          `)
           .eq('id', currentSession.user.id)
           .single();
 
@@ -69,6 +76,15 @@ function App() {
           setUserRole(data?.role || '');
           setNeedsSetup(!data?.company_id);
           setIsBanned(false);
+
+          // Sync company name to local storage
+          if (data?.companies && typeof data.companies === 'object' && 'name' in data.companies) {
+              const settings = StorageService.getSettings();
+              if (settings.hotelName !== data.companies.name) {
+                  settings.hotelName = data.companies.name as string;
+                  StorageService.saveSettings(settings);
+              }
+          }
 
           // K4: Plan aus der Datenbank laden und lokal cachen
           const { data: sub } = await supabase!
