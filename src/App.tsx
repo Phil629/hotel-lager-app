@@ -169,7 +169,7 @@ function App() {
             <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
             {/* K2: Admin-Route nur für phdehos@gmail.com */}
             <Route path="/admin" element={
-              session?.user?.email === 'phdehos@gmail.com' ? (
+              session?.user?.email?.toLowerCase() === 'phdehos@gmail.com' ? (
                 <ProtectedRoute session={session}>
                   <Admin />
                 </ProtectedRoute>
