@@ -803,6 +803,7 @@ export const Settings: React.FC = () => {
                         >
                             Konto abmelden
                         </button>
+                        {role === 'owner' && (
                         <button
                             type="button"
                             onClick={() => setConfirm({
@@ -824,6 +825,7 @@ export const Settings: React.FC = () => {
                         >
                             Konto & Daten unwiderruflich löschen
                         </button>
+                        )}
                     </div>
                 </div>
                     </>
