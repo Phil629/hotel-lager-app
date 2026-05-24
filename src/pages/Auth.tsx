@@ -36,10 +36,15 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                 if (error) throw error;
                 onAuthSuccess();
             } else {
-                const { error } = await supabase.auth.signUp({ email, password });
+                const { data, error } = await supabase.auth.signUp({ email, password });
                 if (error) throw error;
-                setMessage('Registrierung erfolgreich! Bitte überprüfe deine E-Mails.');
-                setIsLogin(true); // Switch to login view
+                
+                if (data.session) {
+                    onAuthSuccess();
+                } else {
+                    setMessage('Registrierung erfolgreich! Bitte überprüfe deine E-Mails.');
+                    setIsLogin(true); // Switch to login view
+                }
             }
         } catch (err: any) {
             console.error("Auth error:", err);
