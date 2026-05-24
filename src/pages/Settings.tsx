@@ -513,7 +513,7 @@ export const Settings: React.FC = () => {
                                                 }}
                                                 style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '12px', textTransform: 'uppercase' }}
                                             >
-                                                <option value="user">User</option>
+                                                <option value="employee">Mitarbeiter</option>
                                                 <option value="manager">Manager</option>
                                                 <option value="owner">Owner</option>
                                             </select>
