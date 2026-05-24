@@ -246,10 +246,10 @@ export const Settings: React.FC = () => {
         try {
             setNotification({ message: 'Backup wird erstellt...', type: 'info' });
             
-            // Collect all local state data
-            const suppliers = StorageService.getSuppliers();
-            const products = StorageService.getProducts();
-            const orders = StorageService.getOrders();
+            // Collect all data from Supabase
+            const suppliers = await DataService.getSuppliers();
+            const products = await DataService.getProducts();
+            const orders = await DataService.getOrders();
             
             const backupData = {
                 timestamp: new Date().toISOString(),
@@ -270,6 +270,38 @@ export const Settings: React.FC = () => {
             setNotification({ message: 'Backup erfolgreich heruntergeladen!', type: 'success' });
         } catch (err) {
             setNotification({ message: 'Fehler beim Erstellen des Backups.', type: 'error' });
+        }
+    };
+
+    const handleExportCSV = async () => {
+        try {
+            setNotification({ message: 'CSV Export wird vorbereitet...', type: 'info' });
+            const products = await DataService.getProducts();
+            const suppliers = await DataService.getSuppliers();
+            
+            // Build CSV for products
+            let csvContent = "ID,Name,Kategorie,Bestand,Mindestbestand,Einheit,Lieferant,Preis\n";
+            products.forEach(p => {
+                const supplierName = suppliers.find(s => s.id === p.supplierId)?.name || '';
+                const name = `"${p.name.replace(/"/g, '""')}"`;
+                const cat = `"${(p.category || '').replace(/"/g, '""')}"`;
+                const supp = `"${supplierName.replace(/"/g, '""')}"`;
+                csvContent += `${p.id},${name},${cat},${p.stock},${p.minStock || 0},${p.unit || ''},${supp},${p.price || ''}\n`;
+            });
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `inventar_export_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            setNotification({ message: 'CSV Export erfolgreich heruntergeladen!', type: 'success' });
+        } catch (err) {
+            setNotification({ message: 'Fehler beim Erstellen des CSV Exports.', type: 'error' });
         }
     };
 
@@ -733,12 +765,17 @@ export const Settings: React.FC = () => {
 
                     <div style={{ backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-lg)', marginTop: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div>
-                            <h4 style={{ margin: '0 0 4px 0', color: 'var(--color-text)' }}>Offline Backup (JSON)</h4>
-                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>Sichere alle Produkte, Lieferanten und die gesamte Bestellhistorie als lokale Datei auf deinem Rechner. Ideal für die eigene Ablage.</p>
+                            <h4 style={{ margin: '0 0 4px 0', color: 'var(--color-text)' }}>Daten-Export (Backup & CSV)</h4>
+                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>Sichere alle Produkte, Lieferanten und die gesamte Bestellhistorie als JSON-Datei (für eine spätere Wiederherstellung) oder exportiere dein Inventar als CSV (für Excel/Numbers).</p>
                         </div>
-                        <button type="button" onClick={handleExportData} className="btn btn-secondary" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Download size={16} /> Daten herunterladen
-                        </button>
+                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <button type="button" onClick={handleExportData} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Download size={16} /> JSON Backup laden
+                            </button>
+                            <button type="button" onClick={handleExportCSV} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Download size={16} /> CSV Export (Excel)
+                            </button>
+                        </div>
                     </div>
                 </SectionCard>
                 )}
