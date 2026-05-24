@@ -402,7 +402,7 @@ export const DataService = {
             const supabase = getSupabaseClient();
             if (!supabase) return false;
             const { error } = await supabase.rpc('update_user_role', { target_user_id: targetUserId, new_role: newRole });
-            return !error;
+            if(error) console.error("RPC ERROR:", error); return !error;
         } catch (e) { return false; }
     }
 };
