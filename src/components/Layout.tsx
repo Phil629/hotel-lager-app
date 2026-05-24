@@ -62,7 +62,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             : null;
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--color-background)' }}>
+        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--color-background)' }}>
             {/* ── Dark Sidebar ── */}
             <aside style={{
                 width: 'var(--sidebar-width)',
@@ -179,7 +179,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
 
                 {/* Admin — pinned to bottom */}
-                {(isAdmin || userEmail === 'philipp.dehne@hotmail.com' || userEmail?.toLowerCase() === 'phdehos@gmail.com') && (
+                {(isAdmin || userEmail?.toLowerCase() === 'phdehos@gmail.com') && (
                     <div style={{ padding: '8px', borderTop: '1px solid var(--sidebar-border)' }}>
                         <Link to="/admin" className={navLink('/admin', 'admin')}>
                             <ShieldAlert size={17} style={{ flexShrink: 0 }} />
