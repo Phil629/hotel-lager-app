@@ -382,6 +382,12 @@ export const DataService = {
         try {
             const supabase = getSupabaseClient();
             if (!supabase) return false;
+            
+            // Try updating via RPC (security definer bypasses RLS)
+            const { error: rpcError } = await supabase.rpc('update_company_name', { new_name: name });
+            if (!rpcError) return true;
+
+            // Fallback: try direct update
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return false;
             const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
