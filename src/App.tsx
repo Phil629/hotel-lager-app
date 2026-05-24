@@ -167,9 +167,9 @@ function App() {
             <Route path="/pricing"     element={<ProtectedRoute session={session}><Pricing /></ProtectedRoute>} />
             <Route path="/consumption" element={<ProtectedRoute session={session}><Consumption /></ProtectedRoute>} />
             <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
-            {/* K2: Admin-Route nur für pdehos@gmail.com */}
+            {/* K2: Admin-Route nur für phdehos@gmail.com */}
             <Route path="/admin" element={
-              session?.user?.email === 'pdehos@gmail.com' ? (
+              session?.user?.email === 'phdehos@gmail.com' ? (
                 <ProtectedRoute session={session}>
                   <Admin />
                 </ProtectedRoute>

@@ -38,7 +38,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 setUserEmail(user.email || '');
                 const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
                 setUserRole(data?.role || '');
-                if (user.email === 'pdehos@gmail.com') setIsAdmin(true);
+                if (user.email === 'phdehos@gmail.com') setIsAdmin(true);
             }
         };
         checkAdmin();
