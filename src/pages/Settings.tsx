@@ -498,7 +498,28 @@ export const Settings: React.FC = () => {
                                             </div>
                                             <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{member.email}</span>
                                         </div>
-                                        <span className="badge badge-neutral" style={{ textTransform: 'uppercase' }}>{member.role}</span>
+                                        {role === 'owner' && member.id !== userId ? (
+                                            <select 
+                                                value={member.role}
+                                                onChange={async (e) => {
+                                                    const newRole = e.target.value;
+                                                    const success = await DataService.updateUserRole(member.id, newRole);
+                                                    if (success) {
+                                                        setTeamMembers(teamMembers.map(m => m.id === member.id ? { ...m, role: newRole } : m));
+                                                        setNotification({ message: 'Rolle erfolgreich geändert', type: 'success' });
+                                                    } else {
+                                                        setNotification({ message: 'Fehler beim Ändern der Rolle. Bitte lade die Seite neu und versuche es noch einmal.', type: 'error' });
+                                                    }
+                                                }}
+                                                style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '12px', textTransform: 'uppercase' }}
+                                            >
+                                                <option value="user">User</option>
+                                                <option value="admin">Admin</option>
+                                                <option value="owner">Owner</option>
+                                            </select>
+                                        ) : (
+                                            <span className="badge badge-neutral" style={{ textTransform: 'uppercase' }}>{member.role}</span>
+                                        )}
                                     </li>
                                 ))}
                             </ul>

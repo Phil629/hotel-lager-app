@@ -395,5 +395,14 @@ export const DataService = {
             await supabase.from('companies').update({ name }).eq('id', profile.company_id);
             return true;
         } catch (e) { return false; }
+    },
+
+    updateUserRole: async (targetUserId: string, newRole: string) => {
+        try {
+            const supabase = getSupabaseClient();
+            if (!supabase) return false;
+            const { error } = await supabase.rpc('update_user_role', { target_user_id: targetUserId, new_role: newRole });
+            return !error;
+        } catch (e) { return false; }
     }
 };
