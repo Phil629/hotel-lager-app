@@ -139,7 +139,7 @@ function App() {
         </Routes>
       ) : needsSetup ? (
         <Routes>
-          <Route path="/setup" element={<Setup />} />
+          <Route path="/setup" element={<Setup onSetupComplete={() => setNeedsSetup(false)} />} />
           <Route path="*" element={<Navigate to="/setup" replace />} />
         </Routes>
       ) : (

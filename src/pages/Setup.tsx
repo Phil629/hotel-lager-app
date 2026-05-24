@@ -5,7 +5,11 @@ import { Building2, UserPlus, ArrowRight, LogOut } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 import { StorageService } from '../services/storage';
 
-export const Setup: React.FC = () => {
+interface SetupProps {
+    onSetupComplete: () => void;
+}
+
+export const Setup: React.FC<SetupProps> = ({ onSetupComplete }) => {
     const navigate = useNavigate();
     const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
     const [companyName, setCompanyName] = useState('');
@@ -20,11 +24,12 @@ export const Setup: React.FC = () => {
             if (!user) return;
             const { data } = await supabase!.from('profiles').select('company_id').eq('id', user.id).single();
             if (data?.company_id) {
+                onSetupComplete();
                 navigate('/', { replace: true });
             }
         };
         checkCompany();
-    }, [navigate]);
+    }, [navigate, onSetupComplete]);
 
     const handleCreateCompany = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -41,7 +46,10 @@ export const Setup: React.FC = () => {
             StorageService.saveSettings(settings);
 
             setNotification({ message: 'Unternehmen erfolgreich erstellt!', type: 'success' });
-            setTimeout(() => navigate('/', { replace: true }), 1000);
+            setTimeout(() => {
+                onSetupComplete();
+                navigate('/', { replace: true });
+            }, 1000);
         } catch (error: any) {
             setNotification({ message: 'Fehler beim Erstellen: ' + error.message, type: 'error' });
             setLoading(false);
@@ -64,7 +72,10 @@ export const Setup: React.FC = () => {
             StorageService.saveSettings(settings);
 
             setNotification({ message: `Erfolgreich dem Unternehmen „${companyData.name}" beigetreten!`, type: 'success' });
-            setTimeout(() => navigate('/', { replace: true }), 1000);
+            setTimeout(() => {
+                onSetupComplete();
+                navigate('/', { replace: true });
+            }, 1000);
         } catch (error: any) {
             setNotification({ message: error.message, type: 'error' });
             setLoading(false);
