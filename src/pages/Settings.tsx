@@ -94,7 +94,7 @@ export const Settings: React.FC = () => {
         }
         // W9: kein window.location.reload() — State direkt aktualisieren
 
-        if (role === 'owner' || role === 'admin') {
+        if (role === 'owner' || role === 'manager') {
             DataService.updateCompanySettings(companySettings).catch(console.error);
             DataService.updateCompanyName(settings.hotelName || '').catch(console.error);
         }
@@ -329,7 +329,7 @@ export const Settings: React.FC = () => {
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: 'var(--spacing-xl)', overflowX: 'auto', paddingBottom: '4px' }}>
                     <button type="button" onClick={() => setActiveTab('general')} className={`btn ${activeTab === 'general' ? 'btn-primary' : 'btn-ghost'}`}><Building2 size={18} /> Allgemein & Darstellung</button>
-                    {(role === 'owner' || role === 'admin') && (
+                    {(role === 'owner' || role === 'manager') && (
                         <button type="button" onClick={() => setActiveTab('team')} className={`btn ${activeTab === 'team' ? 'btn-primary' : 'btn-ghost'}`}><Users size={18} /> Team & Rechte</button>
                     )}
                     <button type="button" onClick={() => setActiveTab('data')} className={`btn ${activeTab === 'data' ? 'btn-primary' : 'btn-ghost'}`}><Database size={18} /> Daten, Backup & System</button>
@@ -338,7 +338,7 @@ export const Settings: React.FC = () => {
                 {activeTab === 'general' && (
                     <>
                 {/* 1. Unternehmensprofil */}
-                {(role === 'owner' || role === 'admin') && (
+                {(role === 'owner' || role === 'manager') && (
                 <SectionCard>
                     <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
                         <Building2 size={22} color="var(--color-primary)" /> Unternehmensprofil
@@ -464,7 +464,7 @@ export const Settings: React.FC = () => {
                         <h3 style={{ margin: 0, color: 'var(--color-text)' }}>Team & Mitarbeiter</h3>
                     </div>
                     
-                    {(role === 'owner' || role === 'admin') && (
+                    {(role === 'owner' || role === 'manager') && (
                         <div style={{ marginBottom: 'var(--spacing-xl)', paddingBottom: 'var(--spacing-md)', borderBottom: '1px solid var(--color-border)' }}>
                             <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }}>Du bist aktuell der Inhaber deines eigenen Bereiches. Gib diesen Code weiter, um Mitarbeiter in dein Unternehmen einzuladen:</p>
                             <div style={{ display: 'inline-flex', gap: '10px', alignItems: 'center', backgroundColor: 'var(--color-background)', padding: '12px 24px', borderRadius: '8px', fontSize: '24px', fontWeight: 'bold', letterSpacing: '4px', border: '1px dashed var(--color-primary)' }}>
@@ -473,7 +473,7 @@ export const Settings: React.FC = () => {
                         </div>
                     )}
 
-                    {(role === 'owner' || role === 'admin') && (
+                    {(role === 'owner' || role === 'manager') && (
                         <div style={{ marginBottom: 'var(--spacing-xl)', paddingBottom: 'var(--spacing-md)', borderBottom: '1px solid var(--color-border)' }}>
                             <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--color-text)' }}>Mitarbeiter einladen</h4>
                             <p style={{ color: 'var(--color-text-muted)', marginBottom: '16px', fontSize: '14px' }}>Gib die E-Mail-Adresse ein, um eine automatische Einladung zu versenden.</p>
@@ -514,7 +514,7 @@ export const Settings: React.FC = () => {
                                                 style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '12px', textTransform: 'uppercase' }}
                                             >
                                                 <option value="user">User</option>
-                                                <option value="admin">Admin</option>
+                                                <option value="manager">Manager</option>
                                                 <option value="owner">Owner</option>
                                             </select>
                                         ) : (
@@ -533,7 +533,7 @@ export const Settings: React.FC = () => {
                 </SectionCard>
 
                 {/* 2. Abo & Funktionen - Nur für Owner */}
-                {(role === 'owner' || role === 'admin') && (
+                {(role === 'owner' || role === 'manager') && (
                     <SectionCard>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
@@ -697,7 +697,7 @@ export const Settings: React.FC = () => {
 
 
                 {/* 3.5 Mitarbeiter-Rechte */}
-                {(role === 'owner' || role === 'admin') && (
+                {(role === 'owner' || role === 'manager') && (
                 <SectionCard>
                     <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
                         <Users size={22} color="var(--color-primary)" /> Mitarbeiter-Rechte (Team)
@@ -770,7 +770,7 @@ export const Settings: React.FC = () => {
                 {activeTab === 'data' && (
                     <>
                 {/* 4. Datensicherheit & Backups */}
-                {(role === 'owner' || role === 'admin') && (
+                {(role === 'owner' || role === 'manager') && (
                 <SectionCard>
                     <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
                         <Database size={22} color="var(--color-primary)" /> Datensicherheit & Backups

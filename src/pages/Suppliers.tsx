@@ -97,7 +97,7 @@ export const Suppliers: React.FC = () => {
             setFormData(supplier);
             setSelectedProductIds(products.filter(p => p.supplierId === supplier.id).map(p => p.id));
             // Load encrypted credentials only for admin/owner
-            if (userRole === 'owner' || userRole === 'admin' || canSeePasswords) {
+            if (userRole === 'owner' || userRole === 'manager' || canSeePasswords) {
                 try {
                     const creds = await DataService.getSupplierCredentials(supplier.id);
                     if (creds) {
@@ -168,7 +168,7 @@ export const Suppliers: React.FC = () => {
             await DataService.saveSupplier(supplierToSave);
 
             // Save credentials encrypted via RPC (admin/owner only)
-            if ((userRole === 'owner' || userRole === 'admin' || canSeePasswords) && (formData.loginUsername || formData.loginPassword)) {
+            if ((userRole === 'owner' || userRole === 'manager' || canSeePasswords) && (formData.loginUsername || formData.loginPassword)) {
                 await DataService.saveSupplierCredentials(targetSupplierId, {
                     loginUrl: formData.loginUrl,
                     loginUsername: formData.loginUsername,
@@ -448,7 +448,7 @@ export const Suppliers: React.FC = () => {
                                 </div>
 
                                 {/* Section: Portal Login — admin/owner only */}
-                                {(userRole === 'owner' || userRole === 'admin') && (
+                                {(userRole === 'owner' || userRole === 'manager') && (
                                 <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
                                     <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         <Key size={13} /> Kunden-Login / Portal
