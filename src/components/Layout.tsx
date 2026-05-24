@@ -173,8 +173,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                     </Link>
                 </nav>
 
+                {/* DEBUG EMAIL */}
+                <div style={{ padding: '8px', fontSize: '10px', color: 'gray' }}>
+                    Logged in as: {userEmail}
+                </div>
+
                 {/* Admin — pinned to bottom */}
-                {isAdmin && (
+                {(isAdmin || userEmail === 'philipp.dehne@hotmail.com' || userEmail?.toLowerCase() === 'phdehos@gmail.com') && (
                     <div style={{ padding: '8px', borderTop: '1px solid var(--sidebar-border)' }}>
                         <Link to="/admin" className={navLink('/admin', 'admin')}>
                             <ShieldAlert size={17} style={{ flexShrink: 0 }} />
