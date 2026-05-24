@@ -31,7 +31,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [isRecovery, setIsRecovery] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
-  const [userRole, setUserRole] = useState<string>('');
   // K3: Ban-Meldung als State statt alert()
   const [isBanned, setIsBanned] = useState(false);
   // Verhindert Race Condition zwischen getSession und onAuthStateChange
@@ -73,7 +72,6 @@ function App() {
           setIsBanned(true);
         } else {
           setSession(currentSession);
-          setUserRole(data?.role || '');
           setNeedsSetup(!data?.company_id);
           setIsBanned(false);
 
@@ -169,11 +167,15 @@ function App() {
             <Route path="/pricing"     element={<ProtectedRoute session={session}><Pricing /></ProtectedRoute>} />
             <Route path="/consumption" element={<ProtectedRoute session={session}><Consumption /></ProtectedRoute>} />
             <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
-            {/* K2: Admin-Route nur für role='admin' */}
+            {/* K2: Admin-Route nur für pdehos@gmail.com */}
             <Route path="/admin" element={
-              <ProtectedRoute session={session} requiredRole="admin" userRole={userRole}>
-                <Admin />
-              </ProtectedRoute>
+              session?.user?.email === 'pdehos@gmail.com' ? (
+                <ProtectedRoute session={session}>
+                  <Admin />
+                </ProtectedRoute>
+              ) : (
+                <Navigate to="/products" replace />
+              )
             } />
             <Route path="/settings"   element={<ProtectedRoute session={session}><Settings /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/products" replace />} />
