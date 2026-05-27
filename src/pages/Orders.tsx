@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ShoppingCart, Bot, Save, Settings } from 'lucide-react';
+import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ShoppingCart, Bot, Save, Settings, Truck } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
@@ -1720,45 +1720,57 @@ export const Orders: React.FC = () => {
                                                 const hiddenCount = prods.length - visibleProds.length;
 
                                                 return (
-                                                    <div key={supplierId}>
-                                                        <div style={{ padding: '6px 12px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', borderTop: '1px solid var(--color-border)', fontWeight: 600, fontSize: '13px', color: 'var(--color-text-muted)', position: 'sticky', top: 0, zIndex: 1 }}>
-                                                            {supplierName}
+                                                    <div key={supplierId} style={{ marginBottom: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', backgroundColor: 'var(--color-surface)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                                                        <div style={{ padding: '10px 14px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: '8px', position: 'sticky', top: 0, zIndex: 1 }}>
+                                                            <Truck size={16} color="var(--color-text-muted)" />
+                                                            <strong style={{ fontSize: '14px', color: 'var(--color-text-main)' }}>{supplierName}</strong>
+                                                            <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--color-text-muted)', backgroundColor: 'var(--color-background)', padding: '2px 8px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>{prods.length} {prods.length === 1 ? 'Produkt' : 'Produkte'}</span>
                                                         </div>
-                                                        {visibleProds.map(product => (
-                                                            <div
-                                                                key={product.id}
-                                                                onClick={() => handleProductSelect(product)}
-                                                                style={{
-                                                                    padding: '10px 12px',
-                                                                    borderBottom: '1px solid var(--color-border)',
-                                                                    cursor: 'pointer',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '10px'
-                                                                }}
-                                                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
-                                                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                            >
-                                                                {product.image ? (
-                                                                    <img src={product.image} alt="" style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '4px' }} />
-                                                                ) : (
-                                                                    <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--color-surface)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                        <Package size={16} color="var(--color-text-muted)" />
+                                                        <div style={{ padding: '0' }}>
+                                                            {visibleProds.map(product => (
+                                                                <div
+                                                                    key={product.id}
+                                                                    onClick={() => handleProductSelect(product)}
+                                                                    style={{
+                                                                        padding: '12px 14px',
+                                                                        borderBottom: '1px solid var(--color-border)',
+                                                                        cursor: 'pointer',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '12px',
+                                                                        transition: 'background-color 0.2s'
+                                                                    }}
+                                                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                                                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                                >
+                                                                    {product.image ? (
+                                                                        <img src={product.image} alt="" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border)' }} />
+                                                                    ) : (
+                                                                        <div style={{ width: '40px', height: '40px', backgroundColor: '#f1f5f9', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--color-border)' }}>
+                                                                            <Package size={20} color="#94a3b8" />
+                                                                        </div>
+                                                                    )}
+                                                                    <div>
+                                                                        <div style={{ fontWeight: 600, color: 'var(--color-text-main)', fontSize: '14px' }}>{product.name}</div>
+                                                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>Bestand: {product.stock} {product.unit}</div>
                                                                     </div>
-                                                                )}
-                                                                <div>
-                                                                    <div style={{ fontWeight: 500 }}>{product.name}</div>
-                                                                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Bestand: {product.stock} {product.unit}</div>
+                                                                    <div style={{ marginLeft: 'auto' }}>
+                                                                        <button type="button" className="btn btn-sm btn-ghost" style={{ padding: '6px', color: 'var(--color-primary)' }}>
+                                                                            <Plus size={16} />
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ))}
+                                                            ))}
+                                                        </div>
                                                         {!isExpanded && hiddenCount > 0 && (
                                                             <button 
                                                                 type="button" 
                                                                 onClick={() => setExpandedSupplierGroups(prev => ({ ...prev, [supplierId]: true }))}
-                                                                style={{ padding: '8px 12px', width: '100%', textAlign: 'center', border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', borderBottom: '1px solid var(--color-border)' }}
+                                                                style={{ padding: '10px 14px', width: '100%', textAlign: 'center', border: 'none', backgroundColor: '#f8fafc', color: 'var(--color-primary)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                                                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
                                                             >
-                                                                + {hiddenCount} weitere anzeigen
+                                                                <ChevronDown size={16} /> {hiddenCount} weitere Produkte einblenden
                                                             </button>
                                                         )}
                                                     </div>
