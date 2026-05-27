@@ -272,9 +272,12 @@ async function runCloudAutomation(params: {
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
-function respond(data: unknown, status = 200): Response {
+function respond(data: any, status = 200): Response {
+  if (status !== 200 && typeof data === 'object' && data !== null) {
+    data.http_status = status;
+  }
   return new Response(JSON.stringify(data), {
-    status,
+    status: 200, // Always 200 so client gets JSON instead of generic error
     headers: { 'Content-Type': 'application/json', ...CORS },
   })
 }

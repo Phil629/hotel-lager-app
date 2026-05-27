@@ -181,6 +181,7 @@ export function useCheckout({
       })
 
       if (error) throw new Error(error.message ?? JSON.stringify(error))
+      if (data?.error) throw new Error(data.error)
       if (data?.code === 'MFA_INCOMPATIBLE') throw new Error(data.error)
 
       const {
