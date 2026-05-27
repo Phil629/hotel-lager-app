@@ -140,6 +140,8 @@ export const Orders: React.FC = () => {
 
     const [isCreatingNewProduct, setIsCreatingNewProduct] = useState(false);
     const [newSupplierProduct, setNewSupplierProduct] = useState('');
+    const [filterCategory, setFilterCategory] = useState('');
+    const [expandedSupplierGroups, setExpandedSupplierGroups] = useState<Record<string, boolean>>({});
 
     const getEffectiveOrderMethod = (product: Product) => {
         if (product.preferredOrderMethod) return product.preferredOrderMethod;
@@ -1655,27 +1657,50 @@ export const Orders: React.FC = () => {
                         <div className="modal-body">
                         {createTab === 'existing' ? (
                             <>
-                                <div style={{ position: 'relative', marginBottom: 'var(--spacing-md)' }}>
-                                    <Search size={20} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-                                    <input
-                                        type="text"
-                                        placeholder="Produkt suchen..."
-                                        value={searchTerm}
-                                        onChange={e => setSearchTerm(e.target.value)}
+                                <div style={{ display: 'flex', gap: '8px', marginBottom: 'var(--spacing-md)' }}>
+                                    <div style={{ position: 'relative', flex: 1 }}>
+                                        <Search size={20} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                                        <input
+                                            type="text"
+                                            placeholder="Produkt suchen..."
+                                            value={searchTerm}
+                                            onChange={e => setSearchTerm(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '10px 10px 10px 40px',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--color-border)',
+                                                fontSize: 'var(--font-size-md)'
+                                            }}
+                                        />
+                                    </div>
+                                    <select
+                                        value={filterCategory}
+                                        onChange={e => setFilterCategory(e.target.value)}
                                         style={{
-                                            width: '100%',
-                                            padding: '10px 10px 10px 40px',
+                                            padding: '10px',
                                             borderRadius: 'var(--radius-md)',
                                             border: '1px solid var(--color-border)',
-                                            fontSize: 'var(--font-size-md)'
+                                            fontSize: 'var(--font-size-md)',
+                                            backgroundColor: 'var(--color-surface)',
+                                            color: 'var(--color-text-main)'
                                         }}
-                                    />
+                                    >
+                                        <option value="">Alle Kategorien</option>
+                                        {Array.from(new Set(products.map(p => p.category).filter(Boolean))).map(cat => (
+                                            <option key={cat} value={cat}>{cat}</option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 {!selectedProduct ? (
                                     <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
                                         {(() => {
-                                            const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                                            const filteredProducts = products.filter(p => {
+                                                const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+                                                const matchesCategory = filterCategory ? p.category === filterCategory : true;
+                                                return matchesSearch && matchesCategory;
+                                            });
                                             if (filteredProducts.length === 0) return <div style={{ padding: '16px', color: 'var(--color-text-muted)', textAlign: 'center' }}>Keine Produkte gefunden.</div>;
                                             
                                             // Group by supplier
@@ -1686,14 +1711,20 @@ export const Orders: React.FC = () => {
                                                 grouped[sId].push(p);
                                             });
 
+                                            const isSearchingOrFiltering = searchTerm !== '' || filterCategory !== '';
+
                                             return Object.entries(grouped).map(([supplierId, prods]) => {
                                                 const supplierName = supplierId === 'none' ? 'Sonstige / Ohne Lieferant' : (suppliers.find(s => s.id === supplierId)?.name || 'Unbekannter Lieferant');
+                                                const isExpanded = isSearchingOrFiltering || expandedSupplierGroups[supplierId];
+                                                const visibleProds = isExpanded ? prods : prods.slice(0, 2);
+                                                const hiddenCount = prods.length - visibleProds.length;
+
                                                 return (
                                                     <div key={supplierId}>
                                                         <div style={{ padding: '6px 12px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', borderTop: '1px solid var(--color-border)', fontWeight: 600, fontSize: '13px', color: 'var(--color-text-muted)', position: 'sticky', top: 0, zIndex: 1 }}>
                                                             {supplierName}
                                                         </div>
-                                                        {prods.map(product => (
+                                                        {visibleProds.map(product => (
                                                             <div
                                                                 key={product.id}
                                                                 onClick={() => handleProductSelect(product)}
@@ -1721,6 +1752,15 @@ export const Orders: React.FC = () => {
                                                                 </div>
                                                             </div>
                                                         ))}
+                                                        {!isExpanded && hiddenCount > 0 && (
+                                                            <button 
+                                                                type="button" 
+                                                                onClick={() => setExpandedSupplierGroups(prev => ({ ...prev, [supplierId]: true }))}
+                                                                style={{ padding: '8px 12px', width: '100%', textAlign: 'center', border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', borderBottom: '1px solid var(--color-border)' }}
+                                                            >
+                                                                + {hiddenCount} weitere anzeigen
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 );
                                             });
