@@ -10,6 +10,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
+import { CheckoutButton } from '../components/CheckoutButton';
 import QRCode from "react-qr-code";
 import { useSearchParams } from 'react-router-dom';
 
@@ -1740,6 +1741,31 @@ export const Products: React.FC = () => {
 
                                 {/* Order Methods Wrapper */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                    {selectedProductForOrder.supplierId && (
+                                        <div style={{
+                                            backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                                            padding: 'var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '2px solid var(--color-primary)',
+                                            order: -2
+                                        }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                KI-Checkout Autopilot:
+                                            </label>
+                                            <CheckoutButton 
+                                                supplierId={selectedProductForOrder.supplierId}
+                                                supplierName={suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.name || 'Lieferant'}
+                                                items={orderCart.map(c => ({
+                                                    product_id: c.product.id,
+                                                    product_name: c.product.name,
+                                                    quantity: c.quantity,
+                                                    unit: c.product.unit,
+                                                    price_expected: c.product.price || undefined
+                                                }))}
+                                            />
+                                        </div>
+                                    )}
+
                                     {(selectedProductForOrder.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.url) && (
                                         <div style={{
                                             backgroundColor: (getEffectiveOrderMethod(selectedProductForOrder) === 'link' || getEffectiveOrderMethod(selectedProductForOrder) === 'webshop') ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
