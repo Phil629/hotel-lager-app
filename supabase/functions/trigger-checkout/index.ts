@@ -40,13 +40,17 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) return respond({ error: 'Missing Authorization header' }, 401)
 
+    const token = authHeader.replace('Bearer ', '').trim()
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { Authorization: authHeader } },
     })
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
 
-    const { data: { user }, error: authErr } = await userClient.auth.getUser()
-    if (authErr || !user) return respond({ error: 'Unauthorized' }, 401)
+    const { data: { user }, error: authErr } = await userClient.auth.getUser(token)
+    if (authErr || !user) return respond({ error: `Unauthorized: ${authErr?.message || 'No user'}` }, 401)
 
     // 2. Parse & validate body
     const body: {
