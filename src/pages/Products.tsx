@@ -98,6 +98,8 @@ export const Products: React.FC = () => {
     const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
         
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+    const [isCreatingNewProduct, setIsCreatingNewProduct] = useState(false);
+    const [newSupplierProduct, setNewSupplierProduct] = useState('');
     const [orderCart, setOrderCart] = useState<{product: Product, quantity: number}[]>([]);
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
     const [orderNotes, setOrderNotes] = useState('');
@@ -1570,6 +1572,66 @@ export const Products: React.FC = () => {
                                                             <Plus size={14} /> {p.name}
                                                         </button>
                                                     ))}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        {isCreatingNewProduct ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="Produktname..." 
+                                                                    value={newSupplierProduct} 
+                                                                    onChange={e => setNewSupplierProduct(e.target.value)}
+                                                                    style={{ padding: '4px 8px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--color-border)', width: '150px' }}
+                                                                    autoFocus
+                                                                    onKeyDown={async e => {
+                                                                        if (e.key === 'Enter') {
+                                                                            e.preventDefault();
+                                                                            if (!newSupplierProduct.trim()) return;
+                                                                            const newProduct: import('../types').Product = {
+                                                                                id: generateId(),
+                                                                                name: newSupplierProduct.trim(),
+                                                                                supplierId: supplierId,
+                                                                                category: 'Sonstiges',
+                                                                                unit: 'Stück',
+                                                                                stock: 0,
+                                                                                price: 0
+                                                                            };
+                                                                            await DataService.saveProduct(newProduct);
+                                                                            await loadProducts();
+                                                                            addToCart(newProduct);
+                                                                            setNewSupplierProduct('');
+                                                                            setIsCreatingNewProduct(false);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <button type="button" onClick={async () => {
+                                                                    if (!newSupplierProduct.trim()) return;
+                                                                    const newProduct: import('../types').Product = {
+                                                                        id: generateId(),
+                                                                        name: newSupplierProduct.trim(),
+                                                                        supplierId: supplierId,
+                                                                        category: 'Sonstiges',
+                                                                        unit: 'Stück',
+                                                                        stock: 0,
+                                                                        price: 0
+                                                                    };
+                                                                    await DataService.saveProduct(newProduct);
+                                                                    await loadProducts();
+                                                                    addToCart(newProduct);
+                                                                    setNewSupplierProduct('');
+                                                                    setIsCreatingNewProduct(false);
+                                                                }} className="btn btn-sm btn-primary" style={{ padding: '4px 8px' }}>Hinzufügen</button>
+                                                                <button type="button" onClick={() => { setIsCreatingNewProduct(false); setNewSupplierProduct(''); }} className="btn btn-sm btn-ghost" style={{ padding: '4px' }}><X size={14} /></button>
+                                                            </div>
+                                                        ) : (
+                                                            <button 
+                                                                type="button" 
+                                                                onClick={() => setIsCreatingNewProduct(true)}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: 'var(--radius-md)', border: '1px dashed var(--color-border)', backgroundColor: 'transparent', fontSize: 'var(--font-size-xs)', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600 }}
+                                                            >
+                                                                <Plus size={14} /> Neues Produkt anlegen
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         );

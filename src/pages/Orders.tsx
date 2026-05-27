@@ -138,6 +138,9 @@ export const Orders: React.FC = () => {
     const [emailBody, setEmailBody] = useState('');
     const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
 
+    const [isCreatingNewProduct, setIsCreatingNewProduct] = useState(false);
+    const [newSupplierProduct, setNewSupplierProduct] = useState('');
+
     const getEffectiveOrderMethod = (product: Product) => {
         if (product.preferredOrderMethod) return product.preferredOrderMethod;
         const supplier = suppliers.find(s => s.id === product.supplierId);
@@ -1671,33 +1674,57 @@ export const Orders: React.FC = () => {
 
                                 {!selectedProduct ? (
                                     <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
-                                        {products
-                                            .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                                            .map(product => (
-                                                <div
-                                                    key={product.id}
-                                                    onClick={() => handleProductSelect(product)}
-                                                    style={{
-                                                        padding: '10px',
-                                                        borderBottom: '1px solid var(--color-border)',
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '10px'
-                                                    }}
-                                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
-                                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                >
-                                                    {product.image ? (
-                                                        <img src={product.image} alt={product.name} style={{ width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover' }} />
-                                                    ) : (
-                                                        <div style={{ width: '40px', height: '40px', borderRadius: '4px', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                            <Package size={20} color="#888" />
+                                        {(() => {
+                                            const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                                            if (filteredProducts.length === 0) return <div style={{ padding: '16px', color: 'var(--color-text-muted)', textAlign: 'center' }}>Keine Produkte gefunden.</div>;
+                                            
+                                            // Group by supplier
+                                            const grouped: Record<string, Product[]> = {};
+                                            filteredProducts.forEach(p => {
+                                                const sId = p.supplierId || 'none';
+                                                if (!grouped[sId]) grouped[sId] = [];
+                                                grouped[sId].push(p);
+                                            });
+
+                                            return Object.entries(grouped).map(([supplierId, prods]) => {
+                                                const supplierName = supplierId === 'none' ? 'Sonstige / Ohne Lieferant' : (suppliers.find(s => s.id === supplierId)?.name || 'Unbekannter Lieferant');
+                                                return (
+                                                    <div key={supplierId}>
+                                                        <div style={{ padding: '6px 12px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', borderTop: '1px solid var(--color-border)', fontWeight: 600, fontSize: '13px', color: 'var(--color-text-muted)', position: 'sticky', top: 0, zIndex: 1 }}>
+                                                            {supplierName}
                                                         </div>
-                                                    )}
-                                                    <span style={{ fontWeight: 500 }}>{product.name}</span>
-                                                </div>
-                                            ))}
+                                                        {prods.map(product => (
+                                                            <div
+                                                                key={product.id}
+                                                                onClick={() => handleProductSelect(product)}
+                                                                style={{
+                                                                    padding: '10px 12px',
+                                                                    borderBottom: '1px solid var(--color-border)',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '10px'
+                                                                }}
+                                                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--color-background)'}
+                                                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                {product.image ? (
+                                                                    <img src={product.image} alt="" style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '4px' }} />
+                                                                ) : (
+                                                                    <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--color-surface)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        <Package size={16} color="var(--color-text-muted)" />
+                                                                    </div>
+                                                                )}
+                                                                <div>
+                                                                    <div style={{ fontWeight: 500 }}>{product.name}</div>
+                                                                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Bestand: {product.stock} {product.unit}</div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            });
+                                        })()}
                                     </div>
                                 ) : (
                                     <div style={{ padding: '0', border: 'none', borderRadius: '0' }}>
@@ -1785,7 +1812,6 @@ export const Orders: React.FC = () => {
                                                 const supplierId = selectedProduct?.supplierId;
                                                 if (!supplierId) return null;
                                                 const suggestions = products.filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id));
-                                                if (suggestions.length === 0) return null;
                                                 return (
                                                     <div style={{ padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                                                         <h6 style={{ margin: '0 0 10px 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Weitere Produkte vom Lieferanten hinzufügen:</h6>
@@ -1797,9 +1823,69 @@ export const Orders: React.FC = () => {
                                                                     onClick={() => addToCart(p)}
                                                                     style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', fontSize: 'var(--font-size-xs)', cursor: 'pointer', color: 'var(--color-text-main)' }}
                                                                 >
-                                                                    + {p.name}
+                                                                    <Plus size={14} /> {p.name}
                                                                 </button>
                                                             ))}
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                {isCreatingNewProduct ? (
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                        <input 
+                                                                            type="text" 
+                                                                            placeholder="Produktname..." 
+                                                                            value={newSupplierProduct} 
+                                                                            onChange={e => setNewSupplierProduct(e.target.value)}
+                                                                            style={{ padding: '4px 8px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--color-border)', width: '150px' }}
+                                                                            autoFocus
+                                                                            onKeyDown={async e => {
+                                                                                if (e.key === 'Enter') {
+                                                                                    e.preventDefault();
+                                                                                    if (!newSupplierProduct.trim()) return;
+                                                                                    const newProduct: any = {
+                                                                                        id: generateId(),
+                                                                                        name: newSupplierProduct.trim(),
+                                                                                        supplierId: supplierId,
+                                                                                        category: 'Sonstiges',
+                                                                                        unit: 'Stück',
+                                                                                        stock: 0,
+                                                                                        price: 0
+                                                                                    };
+                                                                                    await DataService.saveProduct(newProduct);
+                                                                                    await loadProducts();
+                                                                                    addToCart(newProduct);
+                                                                                    setNewSupplierProduct('');
+                                                                                    setIsCreatingNewProduct(false);
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                        <button type="button" onClick={async () => {
+                                                                            if (!newSupplierProduct.trim()) return;
+                                                                            const newProduct: any = {
+                                                                                id: generateId(),
+                                                                                name: newSupplierProduct.trim(),
+                                                                                supplierId: supplierId,
+                                                                                category: 'Sonstiges',
+                                                                                unit: 'Stück',
+                                                                                stock: 0,
+                                                                                price: 0
+                                                                            };
+                                                                            await DataService.saveProduct(newProduct);
+                                                                            await loadProducts();
+                                                                            addToCart(newProduct);
+                                                                            setNewSupplierProduct('');
+                                                                            setIsCreatingNewProduct(false);
+                                                                        }} className="btn btn-sm btn-primary" style={{ padding: '4px 8px' }}>Hinzufügen</button>
+                                                                        <button type="button" onClick={() => { setIsCreatingNewProduct(false); setNewSupplierProduct(''); }} className="btn btn-sm btn-ghost" style={{ padding: '4px' }}><X size={14} /></button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button 
+                                                                        type="button" 
+                                                                        onClick={() => setIsCreatingNewProduct(true)}
+                                                                        style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: 'var(--radius-md)', border: '1px dashed var(--color-border)', backgroundColor: 'transparent', fontSize: 'var(--font-size-xs)', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600 }}
+                                                                    >
+                                                                        <Plus size={14} /> Neues Produkt anlegen
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 );
