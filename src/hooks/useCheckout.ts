@@ -154,7 +154,7 @@ export function useCheckout({
             errorMessage:      (row.error_message as string) ?? null,
           })
 
-          if ['ready', 'error', 'expired'].includes(row.status as string) {
+          if (['ready', 'error', 'expired'].includes(row.status as string)) {
             setIsActive(false)
           }
         }
@@ -286,11 +286,12 @@ export function useCheckout({
 
   const cancel = useCallback(async () => {
     if (session?.id && supabase) {
-      await supabase
-        .from('checkout_sessions')
-        .update({ status: 'expired', status_message: 'Vom Nutzer abgebrochen.' })
-        .eq('id', session.id)
-        .catch(() => {})
+      try {
+        await supabase
+          .from('checkout_sessions')
+          .update({ status: 'expired', status_message: 'Vom Nutzer abgebrochen.' })
+          .eq('id', session.id)
+      } catch {}
     }
     if (channelRef.current && supabase) {
       supabase.removeChannel(channelRef.current)
