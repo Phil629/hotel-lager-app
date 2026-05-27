@@ -8,6 +8,8 @@ import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Ma
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
+import { CheckoutButton } from '../components/CheckoutButton';
+import QRCode from "react-qr-code";
 
 // ── KI-Log ───────────────────────────────────────────────────────────────────
 
@@ -1966,6 +1968,31 @@ export const Orders: React.FC = () => {
 
                                         {/* Order Methods Wrapper */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
+                                            {selectedProduct.supplierId && (
+                                                <div style={{
+                                                    backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                                                    padding: 'var(--spacing-md)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '2px solid var(--color-primary)',
+                                                    order: -2
+                                                }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                        KI-Checkout Autopilot:
+                                                    </label>
+                                                    <CheckoutButton 
+                                                        supplierId={selectedProduct.supplierId}
+                                                        supplierName={suppliers.find(s => s.id === selectedProduct.supplierId)?.name || 'Lieferant'}
+                                                        items={orderCart.map(c => ({
+                                                            product_id: c.product.id,
+                                                            product_name: c.product.name,
+                                                            quantity: c.quantity,
+                                                            unit: c.product.unit,
+                                                            price_expected: c.product.price || undefined
+                                                        }))}
+                                                    />
+                                                </div>
+                                            )}
+
                                             {(selectedProduct.supplierPhone || (suppliers.find(s => s.id === selectedProduct.supplierId)?.phone)) && (
                                                 <div style={{
                                                     backgroundColor: getEffectiveOrderMethod(selectedProduct) === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
@@ -2974,21 +3001,38 @@ export const Orders: React.FC = () => {
                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '8px', marginBottom: 'var(--spacing-md)' }}>
                                                         <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--color-text-main)' }}>{supplierName}</h3>
                                                         {supplierName !== 'Kein Lieferant' && (
-                                                            <button 
-                                                                onClick={async () => {
-                                                                    const supplierToIgnore = suppliers.find(s => s.name === supplierName);
-                                                                    if (supplierToIgnore) {
-                                                                        await DataService.saveSupplier({ ...supplierToIgnore, ignoreOrderProposals: true });
-                                                                        setNotification({ message: `${supplierName} wird nun von Vorschlägen ausgeschlossen.`, type: 'success' });
-                                                                        setModalProposals(prev => prev.filter(p => p.supplierName !== supplierName));
-                                                                        loadSuppliers();
-                                                                    }
-                                                                }}
-                                                                title="Lieferant aus automatischen Vorschlägen ausblenden"
-                                                                style={{ fontSize: '12px', padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid #fca5a5', backgroundColor: '#fee2e2', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500, transition: 'all 0.2s' }}>
-                                                                <AlertTriangle size={14} />
-                                                                Lieferant ignorieren
-                                                            </button>
+                                                            <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+                                                                <CheckoutButton
+                                                                    supplierId={supplierProposals[0].supplierId}
+                                                                    supplierName={supplierName}
+                                                                    items={supplierProposals.map(p => ({
+                                                                        product_id: p.product.id,
+                                                                        product_name: p.product.name,
+                                                                        quantity: p.quantity,
+                                                                        unit: p.product.unit,
+                                                                        price_expected: p.product.price ?? undefined,
+                                                                    }))}
+                                                                    priceThresholdPct={5}
+                                                                    onCartReady={(url) => {
+                                                                        console.log('Warenkorb übergeben:', url);
+                                                                    }}
+                                                                />
+                                                                <button 
+                                                                    onClick={async () => {
+                                                                        const supplierToIgnore = suppliers.find(s => s.name === supplierName);
+                                                                        if (supplierToIgnore) {
+                                                                            await DataService.saveSupplier({ ...supplierToIgnore, ignoreOrderProposals: true });
+                                                                            setNotification({ message: `${supplierName} wird nun von Vorschlägen ausgeschlossen.`, type: 'success' });
+                                                                            setModalProposals(prev => prev.filter(p => p.supplierName !== supplierName));
+                                                                            loadSuppliers();
+                                                                        }
+                                                                    }}
+                                                                    title="Lieferant aus automatischen Vorschlägen ausblenden"
+                                                                    style={{ fontSize: '12px', padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid #fca5a5', backgroundColor: '#fee2e2', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500, transition: 'all 0.2s' }}>
+                                                                    <AlertTriangle size={14} />
+                                                                    Lieferant ignorieren
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>

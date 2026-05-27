@@ -1,0 +1,118 @@
+// content-scripts/automation-worker.js
+// Injected by the service worker into the supplier shop tab.
+// Executes individual DOM commands and replies via sendResponse.
+
+// Prevent double-injection if the tab navigates and the script is re-injected.
+if (window.__checkoutWorkerActive) {
+  console.log('[worker] Already active - skipping re-init.')
+} else {
+  window.__checkoutWorkerActive = true
+  console.log('[worker] Automation worker initialised.')
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.type !== 'DOM_ACTION') return false
+
+    handleDomAction(message)
+      .then(sendResponse)
+      .catch((err) => sendResponse({ success: false, error: err.message }))
+
+    return true // keep channel open for async sendResponse
+  })
+}
+
+// ── DOM action dispatcher ─────────────────────────────────────────────────────
+
+async function handleDomAction({ command, selector, value, timeout = 8000 }) {
+  switch (command) {
+    case 'FILL':       return fill(selector, value, timeout)
+    case 'CLICK':      return click(selector, timeout)
+    case 'GET_TEXT':   return getText(selector, timeout)
+    case 'GET_HTML':   return { success: true, html: document.documentElement.outerHTML }
+    case 'KEY_PRESS':  return keyPress(value)
+    case 'WAIT_READY': return waitForReady(timeout)
+    default:
+      return { success: false, error: `Unknown command: ${command}` }
+  }
+}
+
+// ── Commands ──────────────────────────────────────────────────────────────────
+
+async function fill(selector, value, timeout) {
+  const el = await waitForElement(selector, timeout)
+
+  // Use native value setter so React/Vue synthetic events fire correctly
+  const proto = Object.getPrototypeOf(el)
+  const descriptor =
+    Object.getOwnPropertyDescriptor(proto, 'value') ||
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+
+  if (descriptor?.set) {
+    descriptor.set.call(el, value)
+  } else {
+    el.value = value
+  }
+
+  el.dispatchEvent(new Event('input',  { bubbles: true }))
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+  el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }))
+
+  return { success: true }
+}
+
+async function click(selector, timeout) {
+  const el = await waitForElement(selector, timeout)
+  el.scrollIntoView({ block: 'center', behavior: 'instant' })
+  el.click()
+  return { success: true }
+}
+
+async function getText(selector, timeout) {
+  const el = await waitForElement(selector, timeout)
+  return { success: true, text: el.textContent?.trim() ?? '' }
+}
+
+async function keyPress(key) {
+  document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  document.activeElement?.dispatchEvent(new KeyboardEvent('keyup',   { key, bubbles: true }))
+  return { success: true }
+}
+
+async function waitForReady(timeout) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (document.readyState === 'complete') return { success: true }
+    await sleep(200)
+  }
+  // Non-fatal: page may still be functional even if not fully "complete"
+  return { success: true, warning: 'readyState timeout — page may still be loading' }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function waitForElement(selector, timeout) {
+  return new Promise((resolve, reject) => {
+    const el = document.querySelector(selector)
+    if (el) return resolve(el)
+
+    const deadline = Date.now() + timeout
+    const observer = new MutationObserver(() => {
+      const found = document.querySelector(selector)
+      if (found) {
+        observer.disconnect()
+        resolve(found)
+      } else if (Date.now() > deadline) {
+        observer.disconnect()
+        reject(new Error(`Element not found within ${timeout}ms: ${selector}`))
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    // Also reject if deadline passes without any DOM mutations
+    setTimeout(() => {
+      observer.disconnect()
+      reject(new Error(`Timeout waiting for element: ${selector}`))
+    }, timeout)
+  })
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
