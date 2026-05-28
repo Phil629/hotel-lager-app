@@ -100,7 +100,6 @@ export const Suppliers: React.FC = () => {
             if (userRole === 'owner' || userRole === 'admin' || canSeePasswords) {
                 try {
                     const creds = await DataService.getSupplierCredentials(supplier.id!);
-                    setNotification({ type: 'success', message: 'DEBUG LOAD: ' + JSON.stringify(creds) });
                     if (creds) {
                         setFormData(prev => ({
                             ...prev,
@@ -111,7 +110,6 @@ export const Suppliers: React.FC = () => {
                     }
                 } catch (e: any) {
                     console.error("Fehler beim Laden der Credentials:", e);
-                    setNotification({ type: 'error', message: 'DEBUG LOAD ERR: ' + e.message });
                 }
             }
         } else {
