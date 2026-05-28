@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const ANTHROPIC_API_KEY    = Deno.env.get('ANTHROPIC_API_KEY')!
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -98,10 +98,10 @@ serve(async (req) => {
     }
     const logId = logEntry?.id ?? null
 
-    // ── Build Claude Vision API payload ──────────────────────────────────────
+    // ── Build Gemini API payload ──────────────────────────────────────
 
-    if (!ANTHROPIC_API_KEY) {
-      console.error('[self-heal] ANTHROPIC_API_KEY not configured')
+    if (!GEMINI_API_KEY) {
+      console.error('[self-heal] GEMINI_API_KEY not configured')
       return respond({ new_selector: null, healed: false, error: 'AI not configured' })
     }
 
@@ -136,47 +136,42 @@ Antworte ausschließlich als JSON (kein Markdown, kein erklärender Text):
   "reasoning": "Kurze Begründung auf Deutsch warum dieses Element korrekt ist"
 }`
 
-    const messageContent: unknown[] = []
+    const geminiParts: any[] = [{ text: taskPrompt }];
 
     if (screenshot_base64) {
-      messageContent.push({
-        type: 'image',
-        source: {
-          type:       'base64',
-          media_type: 'image/png',
-          data:       screenshot_base64,
-        },
-      })
+      geminiParts.push({
+        inlineData: {
+          mimeType: 'image/png',
+          data: screenshot_base64
+        }
+      });
     }
 
     if (html_snippet) {
-      messageContent.push({
-        type: 'text',
-        text: `HTML der Seite (Ausschnitt, max. 45 KB):\n\`\`\`html\n${html_snippet.substring(0, 45_000)}\n\`\`\``,
-      })
+      geminiParts.push({
+        text: `HTML der Seite (Ausschnitt, max. 45 KB):\n\`\`\`html\n${html_snippet.substring(0, 45_000)}\n\`\`\``
+      });
     }
 
-    messageContent.push({ type: 'text', text: taskPrompt })
+    // ── Call Gemini API ───────────────────────────────────────────────────────
 
-    // ── Call Claude API ───────────────────────────────────────────────────────
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
 
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+    const claudeRes = await fetch(geminiUrl, {
       method: 'POST',
-      headers: {
-        'x-api-key':         ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'Content-Type':      'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 512,
-        messages:   [{ role: 'user', content: messageContent }],
-      }),
+        contents: [{ parts: geminiParts }],
+        generationConfig: {
+            temperature: 0.2, 
+            responseMimeType: "application/json"
+        }
+      })
     })
 
     if (!claudeRes.ok) {
       const errText = await claudeRes.text()
-      console.error('[self-heal] Claude API HTTP', claudeRes.status, errText.substring(0, 300))
+      console.error('[self-heal] Gemini API HTTP', claudeRes.status, errText.substring(0, 300))
 
       if (logId) {
         await adminClient
@@ -188,10 +183,10 @@ Antworte ausschließlich als JSON (kein Markdown, kein erklärender Text):
     }
 
     const claudeData = await claudeRes.json()
-    const rawText    = (claudeData?.content?.[0]?.text ?? '') as string
-    const inputTokens: number | null = claudeData?.usage?.input_tokens ?? null
+    const rawText    = claudeData?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    const inputTokens: number | null = claudeData?.usageMetadata?.promptTokenCount ?? null
 
-    console.log('[self-heal] Claude raw output:', rawText.substring(0, 400))
+    console.log('[self-heal] Gemini raw output:', rawText.substring(0, 400))
 
     // ── Parse AI response ─────────────────────────────────────────────────────
 

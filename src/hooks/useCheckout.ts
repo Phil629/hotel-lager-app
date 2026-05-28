@@ -35,6 +35,7 @@ export interface CheckoutRequestItem {
   quantity:        number
   unit?:           string
   price_expected?: number
+  url?:            string
 }
 
 interface UseCheckoutOptions {

@@ -102,23 +102,59 @@ async function runAutomation(payload) {
     for (let idx = 0; idx < ITEMS.length; idx++) {
       const item = ITEMS[idx]
 
-      // Search
-      await patch('searching', `Suche ${item.product_name}...`, { items: updatedItems })
+      // Try direct product link first
+      let usedSearch = false
+      if (item.url && item.url.startsWith('http')) {
+        await patch('searching', `Öffne Direktlink für ${item.product_name}...`, { items: updatedItems })
+        await chrome.tabs.update(supplierTabId, { url: item.url })
+        await waitForTabLoad(supplierTabId, 10_000)
+        await sleep(1000)
+        
+        // Simple heuristic to check if it's a valid product page: look for the add-to-cart button or quantity field
+        // If neither exists, we assume the direct link is broken/changed and fallback to search
+        const healRes = await domAction(supplierTabId, { command: 'GET_TEXT', selector: SEL.add_to_cart || SEL.product_qty || 'body', timeout: 3000 })
+        if (!healRes.success) {
+           console.log(`[sw] Direct link seems invalid, falling back to search for: ${item.product_name}`)
+           usedSearch = true
+        }
+      } else {
+         usedSearch = true
+      }
 
-      if (SEL.search_box) {
-        await withHeal({
-          supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-          ctx: 'search', command: 'FILL', selector: SEL.search_box, value: item.product_name,
-        })
-        if (SEL.search_submit) {
+      // Fallback: Search
+      if (usedSearch) {
+        await patch('searching', `Suche ${item.product_name}...`, { items: updatedItems })
+
+        if (SEL.search_box) {
           await withHeal({
             supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-            ctx: 'search', command: 'CLICK', selector: SEL.search_submit,
+            ctx: 'search', command: 'FILL', selector: SEL.search_box, value: item.product_name,
           })
-        } else {
-          await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+          if (SEL.search_submit) {
+            await withHeal({
+              supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+              ctx: 'search', command: 'CLICK', selector: SEL.search_submit,
+            })
+          } else {
+            await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+          }
+          await waitForTabLoad(supplierTabId, 10_000)
         }
-        await waitForTabLoad(supplierTabId, 10_000)
+        
+        // If we found it via search and we didn't have a URL, update the DB!
+        if (item.product_id) {
+           try {
+              const currentTab = await chrome.tabs.get(supplierTabId)
+              if (currentTab.url && currentTab.url !== item.url) {
+                 await fetch(`${supabaseUrl}/rest/v1/products?id=eq.${item.product_id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userJwt}`, 'apikey': supabaseAnonKey },
+                    body: JSON.stringify({ url: currentTab.url })
+                 })
+                 console.log(`[sw] Updated product URL in DB to: ${currentTab.url}`)
+              }
+           } catch(e) { console.warn('Failed to update product url', e) }
+        }
       }
 
       await patch('adding', `${item.product_name} wird hinzugefuegt...`, { items: updatedItems })

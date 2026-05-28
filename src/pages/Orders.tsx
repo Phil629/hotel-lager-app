@@ -3010,6 +3010,7 @@ export const Orders: React.FC = () => {
                                                                         quantity: p.quantity,
                                                                         unit: p.product.unit,
                                                                         price_expected: p.product.price ?? undefined,
+                                                                        url: p.product.url ?? undefined,
                                                                     }))}
                                                                     priceThresholdPct={5}
                                                                     onCartReady={(url) => {
