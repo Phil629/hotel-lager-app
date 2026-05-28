@@ -96,10 +96,11 @@ export const Suppliers: React.FC = () => {
             setEditingSupplier(supplier);
             setFormData(supplier);
             setSelectedProductIds(products.filter(p => p.supplierId === supplier.id).map(p => p.id));
-            // Load encrypted credentials only for admin/owner
+            // Fetch credentials (only works for admins/owners, backend will reject otherwise)
             if (userRole === 'owner' || userRole === 'admin' || canSeePasswords) {
                 try {
-                    const creds = await DataService.getSupplierCredentials(supplier.id);
+                    const creds = await DataService.getSupplierCredentials(supplier.id!);
+                    setNotification({ type: 'success', message: 'DEBUG LOAD: ' + JSON.stringify(creds) });
                     if (creds) {
                         setFormData(prev => ({
                             ...prev,
@@ -108,8 +109,9 @@ export const Suppliers: React.FC = () => {
                             loginPassword: creds.loginPassword,
                         }));
                     }
-                } catch {
-                    // Credentials not available — silently ignore
+                } catch (e: any) {
+                    console.error("Fehler beim Laden der Credentials:", e);
+                    setNotification({ type: 'error', message: 'DEBUG LOAD ERR: ' + e.message });
                 }
             }
         } else {
