@@ -154,25 +154,15 @@ async function runAutomation(payload) {
         await navigateAndReinject(supplierTabId, item.url, 10_000)
         await sleep(1000)
         
-        // Robust 404 / Invalid URL detection
-        let isValidProductPage = false
-        if (SEL.add_to_cart || SEL.product_qty) {
-          const checkRes = await domAction(supplierTabId, {
-            command:  'CHECK_EXISTS',
-            selector: SEL.add_to_cart || SEL.product_qty,
-            timeout:  4000,
-          })
-          isValidProductPage = checkRes.success
-        } else {
-          const titleRes = await domAction(supplierTabId, {
-            command: 'GET_TEXT', selector: 'title', timeout: 2000,
-          })
-          const title = (titleRes.text ?? '').toLowerCase()
-          isValidProductPage = !title.includes('404') && !title.includes('not found') && !title.includes('fehler')
-        }
+        // Check if it's a 404 page
+        const titleRes = await domAction(supplierTabId, {
+          command: 'GET_TEXT', selector: 'title', timeout: 2000,
+        })
+        const title = (titleRes.text ?? '').toLowerCase()
+        const is404 = title.includes('404') || title.includes('not found') || title.includes('fehler')
 
-        if (!isValidProductPage) {
-           console.log(`[sw] Direktlink ungültig, Fallback auf Suche: ${item.product_name}`)
+        if (is404) {
+           console.log(`[sw] Direktlink 404, Fallback auf Suche: ${item.product_name}`)
            usedSearch = true
         }
       } else {
@@ -181,44 +171,48 @@ async function runAutomation(payload) {
 
       // Fallback: Search
       if (usedSearch) {
-        // Are we trapped on an Auth-Wall / Login page? (Lücke 1)
         if (await isAuthWall(supplierTabId)) {
-          console.error('[sw] Redirected to login page. Authentication failed!')
-          throw new Error('Auth-Wall erkannt! Der Login ist fehlgeschlagen oder abgelaufen. Bitte Zugangsdaten prüfen.')
+          console.warn('[sw] We might be on a login page, but proceeding with search anyway.')
         }
 
         await patch('searching', `Suche ${item.product_name}...`, { items: updatedItems })
 
-        if (SEL.search_box) {
-          await withHeal({
-            supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-            ctx: 'search', command: 'FILL', selector: SEL.search_box, value: item.product_name,
-          })
-          if (SEL.search_submit) {
+        try {
+          if (SEL.search_box) {
             await withHeal({
               supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-              ctx: 'search', command: 'CLICK', selector: SEL.search_submit,
+              ctx: 'search', command: 'FILL', selector: SEL.search_box, value: item.product_name,
             })
-          } else {
-            await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+            if (SEL.search_submit) {
+              await withHeal({
+                supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+                ctx: 'search', command: 'CLICK', selector: SEL.search_submit,
+              })
+            } else {
+              await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+            }
+            await waitForTabLoad(supplierTabId, 10_000)
+            await chrome.scripting.executeScript({
+              target: { tabId: supplierTabId },
+              files:  ['content-scripts/automation-worker.js'],
+            }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
           }
-          await waitForTabLoad(supplierTabId, 10_000)
-          await chrome.scripting.executeScript({
-            target: { tabId: supplierTabId },
-            files:  ['content-scripts/automation-worker.js'],
-          }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
+        } catch (searchErr) {
+          console.error(`[sw] Search failed for ${item.product_name}:`, searchErr)
+          // Continue to next item if search fails
+          updatedItems[idx].status = 'error'
+          await patch('error', `Fehler bei Suche: ${item.product_name}`, { items: updatedItems })
+          continue
         }
-        
-        // Removed URL update from here (moved to add-to-cart)
       }
 
-      // Are we trapped on an Auth-Wall / Login page? (Lücke 2 & 3)
       if (await isAuthWall(supplierTabId)) {
-        console.error('[sw] Redirected to login page. Authentication failed!')
-        throw new Error('Auth-Wall erkannt! Der Login ist fehlgeschlagen oder abgelaufen. Bitte Zugangsdaten prüfen.')
+        console.warn('[sw] We might be on a login page, but proceeding to add to cart anyway.')
       }
 
       await patch('adding', `${item.product_name} wird hinzugefuegt...`, { items: updatedItems })
+
+      try {
 
       // Set quantity
       if (SEL.product_qty) {
@@ -293,12 +287,15 @@ async function runAutomation(payload) {
               console.log(`[sw] Produkt-URL in DB aktualisiert: ${newUrl}`)
             }
           } catch (err) {
-            if (err.message && (err.message.includes('API Error') || err.message.includes('Auth session'))) {
-              throw err; // Niemals kritische KI- oder Auth-Fehler verschlucken!
-            }
             console.warn('[sw] Produkt-URL-Update fehlgeschlagen:', err)
           }
         }
+      }
+
+      } catch (cartErr) {
+        console.error(`[sw] Add to cart failed for ${item.product_name}:`, cartErr)
+        updatedItems[idx].status = 'error'
+        await patch('error', `Fehler beim Warenkorb: ${item.product_name}`, { items: updatedItems })
       }
 
       console.log(
