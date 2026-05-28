@@ -248,7 +248,15 @@ export function useCheckout({
 
         const loginUrlFinal = creds?.login_url || supplierRow?.login_url || supplierRow?.url || ''
 
-        const dbSelectors = supplierRow?.selectors || {}
+        let dbSelectors = supplierRow?.selectors || {}
+        
+        // Auto-Wipe: Falls die DB mit den alten, dummen Selektoren vergiftet ist, löschen wir sie!
+        if (dbSelectors.login_username && dbSelectors.login_username.includes('input[type="email"]')) {
+          console.warn('[checkout] Vergiftete Selektoren in DB erkannt! Werden gelöscht...')
+          dbSelectors = {}
+          supabase.from('suppliers').update({ selectors: {} }).eq('id', supplierId).then()
+        }
+
         const finalSelectors = Object.keys(dbSelectors).length > 0 ? dbSelectors : {
           login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
           login_username: 'input[name*="login"], input[name*="user"], input[autocomplete="username"]',
