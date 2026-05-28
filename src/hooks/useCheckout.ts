@@ -161,6 +161,20 @@ export function useCheckout({
         }
       )
       .subscribe()
+
+    // Listen for synchronous errors from the bridge (e.g. extension reloaded context invalidation)
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'HOTEL_CHECKOUT_ERROR') {
+        setSession(prev => prev ? { ...prev, status: 'error', statusMessage: event.data.error, errorMessage: event.data.error } : null)
+        setIsActive(false)
+        window.removeEventListener('message', handleMessage)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
   }, [supabase])
 
   // ── start() ───────────────────────────────────────────────────────────────
