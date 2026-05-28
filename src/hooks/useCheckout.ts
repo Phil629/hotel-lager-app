@@ -251,10 +251,10 @@ export function useCheckout({
         const dbSelectors = supplierRow?.selectors || {}
         const finalSelectors = Object.keys(dbSelectors).length > 0 ? dbSelectors : {
           login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
-          login_username: 'input[type="email"]',
+          login_username: 'input[name*="login"], input[name*="user"], input[name*="email"], input[type="email"]',
           login_password: 'input[type="password"]',
           login_submit:   'button[type="submit"]',
-          search_box:     'input[type="text"]',
+          search_box:     'input[type="search"], input[name*="search"], input[name*="suche"], input[type="text"]',
           search_submit:  '',
           add_to_cart:    'button',
           product_qty:    'input[type="number"]',
