@@ -262,6 +262,17 @@ export function useCheckout({
           price:          '.price'
         }
 
+        // Initialize selectors in DB on first run so self-healing can persist improvements
+        if (Object.keys(dbSelectors).length === 0) {
+          supabase.from('suppliers')
+            .update({ selectors: finalSelectors })
+            .eq('id', supplierId)
+            .then(({ error }) => {
+              if (error) console.warn('[checkout] Could not initialize selectors in DB:', error.message)
+            })
+          // Fire-and-forget: don't block checkout start
+        }
+
         window.postMessage(
           {
             type: 'HOTEL_CHECKOUT_START',

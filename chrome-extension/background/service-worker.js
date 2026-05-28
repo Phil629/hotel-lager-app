@@ -275,8 +275,11 @@ async function runAutomation(payload) {
               })
               console.log(`[sw] Produkt-URL in DB aktualisiert: ${newUrl}`)
             }
-          } catch (e) {
-            console.warn('[sw] Produkt-URL-Update fehlgeschlagen:', e)
+          } catch (err) {
+            if (err.message && (err.message.includes('API Error') || err.message.includes('Auth session'))) {
+              throw err; // Niemals kritische KI- oder Auth-Fehler verschlucken!
+            }
+            console.warn('[sw] Produkt-URL-Update fehlgeschlagen:', err)
           }
         }
       }
