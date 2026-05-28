@@ -237,13 +237,15 @@ export function useCheckout({
         // Load selectors and loginUrl for this supplier
         const { data: supplierRow } = await supabase
           .from('suppliers')
-          .select('login_url, selectors')
+          .select('login_url, url, selectors')
           .eq('id', supplierId)
           .single()
 
         // Current session JWT — used by extension for authenticated Supabase REST calls
         const { data: { session: authSession } } = await supabase.auth.getSession()
         if (!authSession?.access_token) throw new Error('Keine aktive Sitzung.')
+
+        const loginUrlFinal = creds?.login_url || supplierRow?.login_url || supplierRow?.url || ''
 
         window.postMessage(
           {
@@ -256,7 +258,7 @@ export function useCheckout({
               userJwt:         authSession.access_token,
               selfHealUrl:     `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/self-heal-selector`,
               supplierId,
-              loginUrl:        creds?.login_url  ?? supplierRow?.login_url  ?? '',
+              loginUrl:        loginUrlFinal,
               username:        creds?.login_username ?? '',
               password:        creds?.login_password ?? '',
               selectors:       supplierRow?.selectors ?? {},

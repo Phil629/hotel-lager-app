@@ -340,6 +340,21 @@ export const DataService = {
         };
     },
 
+    async triggerAutomatedCheckout(supplierId: string, items: { product_id?: string; product_name: string; quantity: number; unit?: string; price_expected?: number }[]) {
+        const supabase = getSupabaseClient();
+        if (!supabase) throw new Error("Supabase client not found");
+        
+        const { data, error } = await supabase.functions.invoke('trigger-checkout', {
+            body: {
+                supplier_id: supplierId,
+                items: items
+            }
+        });
+        
+        if (error) throw error;
+        return data;
+    },
+
     async saveSupplierCredentials(supplierId: string, credentials: { loginUrl?: string; loginUsername?: string; loginPassword?: string }): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;
