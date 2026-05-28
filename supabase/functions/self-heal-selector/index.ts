@@ -132,6 +132,8 @@ ${contextDescription}
 - Bevorzuge \`id\`, \`name\`, \`data-*\`, \`aria-label\`, \`type\`-Attribute (stabil über Layout-Änderungen)
 - Meide rein positionsbasierte Selektoren wie \`:nth-child(3)\` oder \`:first-child\`
 - Meide generierte Hash-Klassen wie \`._3xKj8\` oder \`.css-1a2b3c\`
+- **WICHTIG:** Gib NIEMALS generische Selektoren wie \`input[type="text"]\` oder \`div\` zurück!
+- Achte darauf, dass das Element im HTML nicht \`type="hidden"\` hat und sichtbar wirkt.
 - Der Selektor muss auf GENAU EIN Element matchen
 
 Antworte ausschließlich als JSON (kein Markdown, kein erklärender Text):

@@ -124,6 +124,8 @@ async function runAutomation(payload) {
         // Fehler wird hier bewusst nicht weitergeworfen.
         // Der Post-Login-Check direkt danach stellt sicher, dass wir tatsächlich eingeloggt sind.
         console.warn('[sw] Login step failed, continuing (user might already be logged in).', loginErr.message)
+        await patch('logging_in', 'Login-Schritt übersprungen/fehlgeschlagen...')
+        await sleep(1000)
       }
     } else {
       console.log('[sw] No login credentials provided, skipping login step')
