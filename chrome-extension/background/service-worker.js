@@ -164,14 +164,8 @@ async function runAutomation(payload) {
 
       // Fallback: Search
       if (usedSearch) {
-        // Are we trapped on an Auth-Wall / Login page?
-        const isLoginPage = await domAction(supplierTabId, {
-          command: 'CHECK_EXISTS',
-          selector: 'input[type="password"]',
-          timeout: 2000
-        })
-        
-        if (isLoginPage.success) {
+        // Are we trapped on an Auth-Wall / Login page? (Lücke 1)
+        if (await isAuthWall(supplierTabId)) {
           console.error('[sw] Redirected to login page. Authentication failed!')
           throw new Error('Auth-Wall erkannt! Der Login ist fehlgeschlagen oder abgelaufen. Bitte Zugangsdaten prüfen.')
         }
@@ -199,6 +193,12 @@ async function runAutomation(payload) {
         }
         
         // Removed URL update from here (moved to add-to-cart)
+      }
+
+      // Are we trapped on an Auth-Wall / Login page? (Lücke 2 & 3)
+      if (await isAuthWall(supplierTabId)) {
+        console.error('[sw] Redirected to login page. Authentication failed!')
+        throw new Error('Auth-Wall erkannt! Der Login ist fehlgeschlagen oder abgelaufen. Bitte Zugangsdaten prüfen.')
       }
 
       await patch('adding', `${item.product_name} wird hinzugefuegt...`, { items: updatedItems })
@@ -434,6 +434,20 @@ function waitForTabLoad(tabId, timeout = 20_000) {
     chrome.tabs.onUpdated.addListener(onUpdated)
     const deadline = setTimeout(settle, timeout)
   })
+}
+
+async function isAuthWall(tabId) {
+  const currentTab = await chrome.tabs.get(tabId)
+  const currentUrl = currentTab.url ?? ''
+  const urlLooksLikeLogin = /(login|signin|anmelden|auth|konto|account)/i.test(currentUrl)
+
+  const passwordFieldExists = await domAction(tabId, {
+    command: 'CHECK_EXISTS',
+    selector: 'input[type="password"]',
+    timeout: 2000
+  })
+
+  return passwordFieldExists.success && urlLooksLikeLogin
 }
 
 async function navigateAndReinject(tabId, url, timeout = 20_000) {
