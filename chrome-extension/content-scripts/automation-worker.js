@@ -38,8 +38,23 @@ async function handleDomAction({ command, selector, value, timeout = 8000 }) {
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
+function isInteractable(el) {
+  if (el.type === 'hidden') return false
+  if (el.disabled) return false
+  const style = window.getComputedStyle(el)
+  if (style.display === 'none') return false
+  if (style.visibility === 'hidden') return false
+  if (parseFloat(style.opacity) === 0) return false
+  const rect = el.getBoundingClientRect()
+  if (rect.width === 0 && rect.height === 0) return false
+  return true
+}
+
 async function fill(selector, value, timeout) {
   const el = await waitForElement(selector, timeout)
+  if (!isInteractable(el)) {
+    throw new Error(`Element not interactable (hidden/disabled/zero-size): ${selector}`)
+  }
 
   // Use native value setter so React/Vue synthetic events fire correctly
   const proto = Object.getPrototypeOf(el)
@@ -62,6 +77,9 @@ async function fill(selector, value, timeout) {
 
 async function click(selector, timeout) {
   const el = await waitForElement(selector, timeout)
+  if (!isInteractable(el)) {
+    throw new Error(`Element not interactable (hidden/disabled/zero-size): ${selector}`)
+  }
   el.scrollIntoView({ block: 'center', behavior: 'instant' })
   el.click()
   return { success: true }

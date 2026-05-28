@@ -35,7 +35,7 @@ async function runAutomation(payload) {
   } = payload
 
   // FORCE OVERRIDE to bypass any old DB poisoning from the Web App
-  SEL.login_submit = 'button[name="login"], button[id*="login"], input[name="login"]'
+  SEL.login_submit = 'button[type="submit"], input[type="submit"], button[name="login"], button[id*="login"]'
   SEL.login_username = 'input[name="email_address"], input[name="email"], input[autocomplete="username"]'
   
   // Persist to session storage so popup can read current state
