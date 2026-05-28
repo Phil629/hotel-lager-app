@@ -155,18 +155,6 @@ async function runAutomation(payload) {
         }
 
         if (!isValidProductPage) {
-           // Are we trapped on an Auth-Wall / Login page?
-           const isLoginPage = await domAction(supplierTabId, {
-             command: 'CHECK_EXISTS',
-             selector: 'input[type="password"]',
-             timeout: 2000
-           })
-           
-           if (isLoginPage.success) {
-             console.error('[sw] Redirected to login page. Authentication failed!')
-             throw new Error('Auth-Wall erkannt! Der Login ist fehlgeschlagen oder abgelaufen. Bitte Zugangsdaten prüfen.')
-           }
-
            console.log(`[sw] Direktlink ungültig, Fallback auf Suche: ${item.product_name}`)
            usedSearch = true
         }
@@ -176,6 +164,18 @@ async function runAutomation(payload) {
 
       // Fallback: Search
       if (usedSearch) {
+        // Are we trapped on an Auth-Wall / Login page?
+        const isLoginPage = await domAction(supplierTabId, {
+          command: 'CHECK_EXISTS',
+          selector: 'input[type="password"]',
+          timeout: 2000
+        })
+        
+        if (isLoginPage.success) {
+          console.error('[sw] Redirected to login page. Authentication failed!')
+          throw new Error('Auth-Wall erkannt! Der Login ist fehlgeschlagen oder abgelaufen. Bitte Zugangsdaten prüfen.')
+        }
+
         await patch('searching', `Suche ${item.product_name}...`, { items: updatedItems })
 
         if (SEL.search_box) {
