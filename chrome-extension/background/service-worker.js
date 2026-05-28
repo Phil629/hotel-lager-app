@@ -117,6 +117,9 @@ async function runAutomation(payload) {
         await sleep(500)
         console.log('[sw] Login completed')
       } catch (loginErr) {
+        if (loginErr.message && (loginErr.message.includes('API Error') || loginErr.message.includes('Auth session'))) {
+          throw loginErr
+        }
         console.warn('[sw] Login step failed, but continuing anyway. User might already be logged in.', loginErr.message)
       }
     } else {
