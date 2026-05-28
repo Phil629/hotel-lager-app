@@ -439,7 +439,12 @@ function waitForTabLoad(tabId, timeout = 20_000) {
 async function isAuthWall(tabId) {
   const currentTab = await chrome.tabs.get(tabId)
   const currentUrl = currentTab.url ?? ''
-  const urlLooksLikeLogin = /(login|signin|anmelden|auth|konto|account)/i.test(currentUrl)
+  
+  const titleRes = await domAction(tabId, { command: 'GET_TEXT', selector: 'title', timeout: 2000 })
+  const currentTitle = (titleRes.text ?? '').toLowerCase()
+  
+  const loginKeywords = /(login|signin|anmelden|anmeldung|auth|konto|account|kundenbereich|customer)/i
+  const looksLikeLogin = loginKeywords.test(currentUrl) || loginKeywords.test(currentTitle)
 
   const passwordFieldExists = await domAction(tabId, {
     command: 'CHECK_EXISTS',
@@ -447,7 +452,7 @@ async function isAuthWall(tabId) {
     timeout: 2000
   })
 
-  return passwordFieldExists.success && urlLooksLikeLogin
+  return passwordFieldExists.success && looksLikeLogin
 }
 
 async function navigateAndReinject(tabId, url, timeout = 20_000) {
