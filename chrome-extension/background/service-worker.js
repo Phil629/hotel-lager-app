@@ -71,29 +71,34 @@ async function runAutomation(payload) {
     // ── Step 3: Login ───────────────────────────────────────────────────────
 
     if (SEL.login_username && SEL.login_password && username) {
-      await withHeal({
-        supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-        ctx: 'login', command: 'FILL', selector: SEL.login_username, value: username,
-      })
-      await withHeal({
-        supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-        ctx: 'login', command: 'FILL', selector: SEL.login_password, value: password,
-      })
-
-      if (SEL.login_submit) {
+      try {
         await withHeal({
           supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-          ctx: 'login', command: 'CLICK', selector: SEL.login_submit,
+          ctx: 'login', command: 'FILL', selector: SEL.login_username, value: username,
         })
-      } else {
-        await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+        await withHeal({
+          supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+          ctx: 'login', command: 'FILL', selector: SEL.login_password, value: password,
+        })
+
+        if (SEL.login_submit) {
+          await withHeal({
+            supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+            ctx: 'login', command: 'CLICK', selector: SEL.login_submit,
+          })
+        } else {
+          await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+        }
+
+        await waitForTabLoad(supplierTabId)
+        await sleep(500)
+        console.log('[sw] Login completed')
+      } catch (loginErr) {
+        console.warn('[sw] Login step failed, but continuing anyway. User might already be logged in.', loginErr.message)
       }
-
-      await waitForTabLoad(supplierTabId)
-      await sleep(500)
+    } else {
+      console.log('[sw] No login credentials provided, skipping login step')
     }
-
-    console.log('[sw] Login completed')
 
     // ── Step 4: Add items to cart ───────────────────────────────────────────
 
