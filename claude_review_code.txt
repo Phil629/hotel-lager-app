@@ -272,8 +272,14 @@ async function runAutomation(payload) {
               newUrl?.includes('search') ||
               newUrl?.includes('query') ||
               newUrl?.includes('?q=')
+              
+            const looksLikeLoginPage = 
+              newUrl?.includes('login') || 
+              newUrl?.includes('anmeldung') || 
+              newUrl?.includes('auth') || 
+              newUrl?.includes('account')
 
-            if (newUrl && !looksLikeSearchPage && newUrl !== item.url) {
+            if (newUrl && !looksLikeSearchPage && !looksLikeLoginPage && newUrl !== item.url) {
               await fetch(`${supabaseUrl}/rest/v1/products?id=eq.${item.product_id}`, {
                 method: 'PATCH',
                 headers: {
