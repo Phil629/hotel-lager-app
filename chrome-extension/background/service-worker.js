@@ -314,7 +314,13 @@ async function withHeal({ supplierTabId, sessionId, supplierId, selfHealUrl, use
       console.log(`[sw] Self-heal → new selector: "${body.new_selector}"`)
       const retryResult = await domAction(supplierTabId, { command, selector: body.new_selector, value, timeout })
       if (retryResult.success) return retryResult
+    } else {
+      console.warn('[sw] Self-heal returned ok, but no new_selector:', body)
     }
+  } else {
+    const errText = healRes ? await healRes.text().catch(() => 'unknown') : 'fetch failed'
+    console.error('[sw] Self-heal HTTP error:', healRes?.status, errText)
+    throw new Error(`Step failed after self-heal [${ctx}]: ${selector}. API Error: ${errText.substring(0, 100)}`)
   }
 
   throw new Error(`Step failed after self-heal [${ctx}]: ${selector}`)
