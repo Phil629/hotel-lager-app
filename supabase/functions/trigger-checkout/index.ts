@@ -93,8 +93,8 @@ serve(async (req) => {
       }, 422)
     }
 
-    // Default to 'extension' for testing, since Browserless is not configured yet.
-    const strategy: 'cloud' | 'extension' = supplier.strategy ?? 'extension'
+    // Force 'extension' strategy for testing! Ignore DB setting.
+    const strategy: 'cloud' | 'extension' = 'extension'
 
     // 5. Load credentials via user-scoped RPC so SECURITY DEFINER can resolve auth.uid()
     let credentials: { loginUrl?: string; loginUsername?: string; loginPassword?: string } = {}

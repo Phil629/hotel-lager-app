@@ -415,13 +415,15 @@ const ItemRow: React.FC<{
   spinning:          boolean
   priceThresholdPct: number
 }> = ({ item, spinning }) => {
-  const hasPriceData = item.price_actual !== null
+  const hasPriceData = item.price_actual != null
   const isWarn       = item.price_ok === false
   const isOk         = item.price_ok === true
   const isPending    = item.price_ok === null
 
-  const fmtPrice = (v: number) =>
-    v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
+  const fmtPrice = (v: number | null | undefined) => {
+    if (v == null) return '-'
+    return Number(v).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
+  }
 
   const fmtDelta = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`
 
