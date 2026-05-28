@@ -24,6 +24,15 @@ window.addEventListener('message', (event) => {
 
   console.log('[bridge] Relaying checkout start to service worker. session=', payload.sessionId)
 
+  if (!chrome?.runtime?.sendMessage) {
+    console.error('[bridge] chrome.runtime.sendMessage is undefined. Extension was likely reloaded.')
+    window.postMessage(
+      { type: 'HOTEL_CHECKOUT_ERROR', error: 'Extension-Verbindung abgebrochen. Bitte lade diese Seite neu (F5).' },
+      window.location.origin
+    )
+    return
+  }
+
   chrome.runtime.sendMessage(
     { type: 'CHECKOUT_START', payload },
     (response) => {
