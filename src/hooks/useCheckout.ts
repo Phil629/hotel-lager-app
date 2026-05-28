@@ -247,6 +247,18 @@ export function useCheckout({
 
         const loginUrlFinal = creds?.login_url || supplierRow?.login_url || supplierRow?.url || ''
 
+        const dbSelectors = supplierRow?.selectors || {}
+        const finalSelectors = Object.keys(dbSelectors).length > 0 ? dbSelectors : {
+          login_username: 'input[type="email"]',
+          login_password: 'input[type="password"]',
+          login_submit:   'button[type="submit"]',
+          search_box:     'input[type="text"]',
+          search_submit:  'button[type="submit"]',
+          product_qty:    'input[type="number"]',
+          add_to_cart:    'button, .add-to-cart',
+          price:          '.price'
+        }
+
         window.postMessage(
           {
             type: 'HOTEL_CHECKOUT_START',
@@ -261,7 +273,7 @@ export function useCheckout({
               loginUrl:        loginUrlFinal,
               username:        creds?.login_username ?? '',
               password:        creds?.login_password ?? '',
-              selectors:       supplierRow?.selectors ?? {},
+              selectors:       finalSelectors,
               items,
               priceThresholdPct,
             },
