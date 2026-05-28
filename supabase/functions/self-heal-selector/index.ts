@@ -40,7 +40,10 @@ serve(async (req) => {
         global: { headers: { Authorization: authHeader } },
       })
       const { error: authErr } = await tmpClient.auth.getUser()
-      if (authErr) return respond({ error: 'Unauthorized' }, 401)
+      if (authErr) {
+        console.error('[auth] getUser failed:', authErr.message)
+        return respond({ error: 'Unauthorized', details: authErr.message }, 401)
+      }
     }
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
