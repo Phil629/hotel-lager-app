@@ -446,6 +446,8 @@ async function isAuthWall(tabId) {
   const loginKeywords = /(login|signin|anmelden|anmeldung|auth|konto|account|kundenbereich|customer)/i
   const looksLikeLogin = loginKeywords.test(currentUrl) || loginKeywords.test(currentTitle)
 
+  if (!looksLikeLogin) return false
+
   const passwordFieldExists = await domAction(tabId, {
     command: 'CHECK_EXISTS',
     selector: 'input[type="password"]',

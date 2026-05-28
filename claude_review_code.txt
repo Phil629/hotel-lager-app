@@ -439,7 +439,12 @@ function waitForTabLoad(tabId, timeout = 20_000) {
 async function isAuthWall(tabId) {
   const currentTab = await chrome.tabs.get(tabId)
   const currentUrl = currentTab.url ?? ''
-  const urlLooksLikeLogin = /(login|signin|anmelden|auth|konto|account)/i.test(currentUrl)
+  
+  const titleRes = await domAction(tabId, { command: 'GET_TEXT', selector: 'title', timeout: 2000 })
+  const currentTitle = (titleRes.text ?? '').toLowerCase()
+  
+  const loginKeywords = /(login|signin|anmelden|anmeldung|auth|konto|account|kundenbereich|customer)/i
+  const looksLikeLogin = loginKeywords.test(currentUrl) || loginKeywords.test(currentTitle)
 
   const passwordFieldExists = await domAction(tabId, {
     command: 'CHECK_EXISTS',
@@ -447,7 +452,7 @@ async function isAuthWall(tabId) {
     timeout: 2000
   })
 
-  return passwordFieldExists.success && urlLooksLikeLogin
+  return passwordFieldExists.success && looksLikeLogin
 }
 
 async function navigateAndReinject(tabId, url, timeout = 20_000) {
@@ -875,10 +880,10 @@ export function useCheckout({
         const dbSelectors = supplierRow?.selectors || {}
         const finalSelectors = Object.keys(dbSelectors).length > 0 ? dbSelectors : {
           login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
-          login_username: 'input[name*="login"], input[name*="user"], input[name*="email"], input[type="email"]',
+          login_username: 'input[name*="login"], input[name*="user"], input[autocomplete="username"]',
           login_password: 'input[type="password"]',
-          login_submit:   'button[type="submit"]',
-          search_box:     'input[type="search"], input[name*="search"], input[name*="suche"], input[type="text"]',
+          login_submit:   'button[type="submit"], button:has(span:contains("Login")), button:has(span:contains("Anmelden"))',
+          search_box:     'input[type="search"], input[name*="search"], input[name*="suche"]',
           search_submit:  '',
           add_to_cart:    'button',
           product_qty:    'input[type="number"]',
@@ -997,8 +1002,12 @@ serve(async (req) => {
       const tmpClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: { headers: { Authorization: authHeader } },
       })
-      const { error: authErr } = await tmpClient.auth.getUser()
-      if (authErr) return respond({ error: 'Unauthorized' }, 401)
+      const token = authHeader.replace('Bearer ', '').trim()
+      const { error: authErr } = await tmpClient.auth.getUser(token)
+      if (authErr) {
+        console.error('[auth] getUser failed:', authErr.message)
+        return respond({ error: 'Unauthorized', details: authErr.message }, 401)
+      }
     }
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)

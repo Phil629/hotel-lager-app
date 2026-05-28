@@ -253,7 +253,7 @@ export function useCheckout({
           login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
           login_username: 'input[name*="login"], input[name*="user"], input[autocomplete="username"]',
           login_password: 'input[type="password"]',
-          login_submit:   'button[type="submit"], button:has(span:contains("Login")), button:has(span:contains("Anmelden"))',
+          login_submit:   'button[type="submit"], input[type="submit"], button[name="login"], button[id*="login"]',
           search_box:     'input[type="search"], input[name*="search"], input[name*="suche"]',
           search_submit:  '',
           add_to_cart:    'button',
