@@ -253,10 +253,10 @@ export function useCheckout({
           login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
           login_username: 'input[name*="login"], input[name*="user"], input[autocomplete="username"]',
           login_password: 'input[type="password"]',
-          login_submit:   'button[type="submit"], input[type="submit"], button[name="login"], button[id*="login"]',
+          login_submit:   'button[name*="login"], button[id*="login"], input[name*="login"], input[id*="login"]',
           search_box:     'input[type="search"], input[name*="search"], input[name*="suche"]',
           search_submit:  '',
-          add_to_cart:    'button',
+          add_to_cart:    'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]',
           product_qty:    'input[type="number"]',
           cart_url:       '/cart',
           price:          '.price'
