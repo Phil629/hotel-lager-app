@@ -67,7 +67,7 @@ function detectExtension(timeoutMs = 1500): Promise<boolean> {
     function cleanup(found: boolean) {
       window.removeEventListener('message', onMessage)
       clearTimeout(timer)
-      _detectionResult = found
+      if (found) _detectionResult = found
       resolve(found)
     }
 
@@ -259,7 +259,7 @@ export function useCheckout({
           add_to_cart:    'button',
           product_qty:    'input[type="number"]',
           cart_url:       '/cart',
-          price_element:  '.price'
+          price:          '.price'
         }
 
         window.postMessage(

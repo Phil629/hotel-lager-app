@@ -1,15 +1,19 @@
-# Supabase Setup Context (Hotel Inventory App / Bestell-App)
+# CLI Setup Context (Hotel Inventory App / Bestell-App)
 
-**WICHTIG FÜR DEN KI-ASSISTENTEN (Antigravity):**
-Wenn du diesen Text in einem neuen Chat liest, weißt du, dass die Supabase-Kommandozeile auf diesem PC bereits fertig eingerichtet ist.
+**WICHTIG FÜR DEN KI-ASSISTENTEN (Antigravity & Claude Code):**
+Wenn du diesen Text in einem neuen Chat liest, weißt du, dass die Kommandozeilen-Tools (Supabase & Netlify) auf diesem PC fertig eingerichtet sind.
 
 - **Lokaler Projekt-Ordner:** `C:\Users\phdeh\.gemini\antigravity\hotel-inventory-app`
-- **Supabase CLI Status:** Erfolgreich global eingeloggt (Access Token ist hinterlegt).
-- **Test-Umgebung:** `tfsqkzjvonuzmspgqaby`
-- **Live-Umgebung:** `owofhbbrywryehlnqmfj`
+- **Umgebung:** Windows PowerShell
 
-**Wichtige Regeln für die Ausführung:**
-1. Der lokale Ordner hat bereits einen `supabase` Ordner.
-2. Führe CLI-Befehle immer mit `npx.cmd` anstelle von `npx` aus, um PowerShell-Blockaden unter Windows zu umgehen (z.B. `npx.cmd supabase db push`).
-3. Datenbank-Änderungen machst du standardmäßig über Migrationen (im Ordner `supabase/migrations/`) und pushst sie auf die Testumgebung.
-4. Wenn ein Push auf die Live-Umgebung angefordert wird, nutze `npx.cmd supabase db push --project-ref owofhbbrywryehlnqmfj` (der User wird dann im Terminal einmalig nach dem Live-Passwort gefragt).
+## Supabase CLI
+- **Status:** Erfolgreich global eingeloggt.
+- **Test-Umgebung:** `tfsqkzjvonuzmspgqaby` (Lokal verknüpft)
+- **Live-Umgebung:** `owofhbbrywryehlnqmfj`
+- **Wichtig:** Führe Befehle immer mit `npx.cmd supabase` (statt `npx`) aus.
+- **Workflow:** Push auf Test (`npx.cmd supabase db push`), Push auf Live (`npx.cmd supabase db push --project-ref owofhbbrywryehlnqmfj`).
+
+## Netlify CLI
+- **Status:** Erfolgreich eingeloggt und verknüpft (Lager Hotel / kunden.bestellwesen.com).
+- **Wichtig:** Führe Befehle immer mit `npx.cmd netlify` aus.
+- **Workflow:** Für ein Live-Deployment nutze z.B. `npx.cmd netlify deploy --prod`.

@@ -104,24 +104,28 @@ function waitForElement(selector, timeout) {
     const el = document.querySelector(selector)
     if (el) return resolve(el)
 
-    const deadline = Date.now() + timeout
+    let settled = false
+    function done(result, err) {
+      if (settled) return
+      settled = true
+      observer.disconnect()
+      clearTimeout(timer)
+      if (err) reject(err)
+      else resolve(result)
+    }
+
     const observer = new MutationObserver(() => {
       const found = document.querySelector(selector)
       if (found) {
-        observer.disconnect()
-        resolve(found)
-      } else if (Date.now() > deadline) {
-        observer.disconnect()
-        reject(new Error(`Element not found within ${timeout}ms: ${selector}`))
+        done(found, null)
       }
     })
+    
     observer.observe(document.body, { childList: true, subtree: true })
-
-    // Also reject if deadline passes without any DOM mutations
-    setTimeout(() => {
-      observer.disconnect()
-      reject(new Error(`Timeout waiting for element: ${selector}`))
-    }, timeout)
+    const timer = setTimeout(
+      () => done(null, new Error(`Timeout: ${selector}`)),
+      timeout
+    )
   })
 }
 

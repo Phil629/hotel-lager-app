@@ -83,6 +83,10 @@ async function runAutomation(payload) {
             ctx: 'login_navigate', command: 'CLICK', selector: SEL.login_navigate || 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]', timeout: 5000
           })
           await waitForTabLoad(supplierTabId, 10_000)
+          await chrome.scripting.executeScript({
+            target: { tabId: supplierTabId },
+            files:  ['content-scripts/automation-worker.js'],
+          }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
           await sleep(1000)
         }
 
@@ -106,6 +110,10 @@ async function runAutomation(payload) {
         }
 
         await waitForTabLoad(supplierTabId)
+        await chrome.scripting.executeScript({
+          target: { tabId: supplierTabId },
+          files:  ['content-scripts/automation-worker.js'],
+        }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
         await sleep(500)
         console.log('[sw] Login completed')
       } catch (loginErr) {
@@ -126,15 +134,28 @@ async function runAutomation(payload) {
       let usedSearch = false
       if (item.url && item.url.startsWith('http')) {
         await patch('searching', `Öffne Direktlink für ${item.product_name}...`, { items: updatedItems })
-        await chrome.tabs.update(supplierTabId, { url: item.url })
-        await waitForTabLoad(supplierTabId, 10_000)
+        await navigateAndReinject(supplierTabId, item.url, 10_000)
         await sleep(1000)
         
-        // Simple heuristic to check if it's a valid product page: look for the add-to-cart button or quantity field
-        // If neither exists, we assume the direct link is broken/changed and fallback to search
-        const healRes = await domAction(supplierTabId, { command: 'GET_TEXT', selector: SEL.add_to_cart || SEL.product_qty || 'body', timeout: 3000 })
-        if (!healRes.success) {
-           console.log(`[sw] Direct link seems invalid, falling back to search for: ${item.product_name}`)
+        // Robust 404 / Invalid URL detection
+        let isValidProductPage = false
+        if (SEL.add_to_cart || SEL.product_qty) {
+          const checkRes = await domAction(supplierTabId, {
+            command:  'CHECK_EXISTS',
+            selector: SEL.add_to_cart || SEL.product_qty,
+            timeout:  4000,
+          })
+          isValidProductPage = checkRes.success
+        } else {
+          const titleRes = await domAction(supplierTabId, {
+            command: 'GET_TEXT', selector: 'title', timeout: 2000,
+          })
+          const title = (titleRes.text ?? '').toLowerCase()
+          isValidProductPage = !title.includes('404') && !title.includes('not found') && !title.includes('fehler')
+        }
+
+        if (!isValidProductPage) {
+           console.log(`[sw] Direktlink ungültig, Fallback auf Suche: ${item.product_name}`)
            usedSearch = true
         }
       } else {
@@ -159,22 +180,13 @@ async function runAutomation(payload) {
             await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
           }
           await waitForTabLoad(supplierTabId, 10_000)
+          await chrome.scripting.executeScript({
+            target: { tabId: supplierTabId },
+            files:  ['content-scripts/automation-worker.js'],
+          }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
         }
         
-        // If we found it via search and we didn't have a URL, update the DB!
-        if (item.product_id) {
-           try {
-              const currentTab = await chrome.tabs.get(supplierTabId)
-              if (currentTab.url && currentTab.url !== item.url) {
-                 await fetch(`${supabaseUrl}/rest/v1/products?id=eq.${item.product_id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userJwt}`, 'apikey': supabaseAnonKey },
-                    body: JSON.stringify({ url: currentTab.url })
-                 })
-                 console.log(`[sw] Updated product URL in DB to: ${currentTab.url}`)
-              }
-           } catch(e) { console.warn('Failed to update product url', e) }
-        }
+        // Removed URL update from here (moved to add-to-cart)
       }
 
       await patch('adding', `${item.product_name} wird hinzugefuegt...`, { items: updatedItems })
@@ -226,6 +238,35 @@ async function runAutomation(payload) {
           ctx: 'add_to_cart', command: 'CLICK', selector: SEL.add_to_cart,
         })
         await sleep(1200)
+
+        // JETZT URL speichern: Tab ist auf der Produktseite
+        if (usedSearch && item.product_id) {
+          try {
+            const productTab = await chrome.tabs.get(supplierTabId)
+            const newUrl = productTab.url
+            // Suchseiten-URLs explizit ausschließen
+            const looksLikeSearchPage =
+              newUrl?.includes('search') ||
+              newUrl?.includes('query') ||
+              newUrl?.includes('?q=')
+
+            if (newUrl && !looksLikeSearchPage && newUrl !== item.url) {
+              await fetch(`${supabaseUrl}/rest/v1/products?id=eq.${item.product_id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization:  `Bearer ${userJwt}`,
+                  apikey:          supabaseAnonKey,
+                  Prefer:          'return=minimal',
+                },
+                body: JSON.stringify({ order_url: newUrl }),
+              })
+              console.log(`[sw] Produkt-URL in DB aktualisiert: ${newUrl}`)
+            }
+          } catch (e) {
+            console.warn('[sw] Produkt-URL-Update fehlgeschlagen:', e)
+          }
+        }
       }
 
       console.log(
@@ -362,18 +403,38 @@ function domAction(tabId, message) {
 
 function waitForTabLoad(tabId, timeout = 20_000) {
   return new Promise((resolve) => {
-    const deadline = setTimeout(resolve, timeout) // non-fatal timeout
+    let settled = false
+
+    function settle() {
+      if (settled) return
+      settled = true
+      chrome.tabs.onUpdated.removeListener(onUpdated)
+      clearTimeout(deadline)
+      resolve()
+    }
 
     function onUpdated(updatedTabId, changeInfo) {
       if (updatedTabId === tabId && changeInfo.status === 'complete') {
-        clearTimeout(deadline)
-        chrome.tabs.onUpdated.removeListener(onUpdated)
-        setTimeout(resolve, 400) // small settle delay for SPA hydration
+        setTimeout(settle, 400) // small settle delay for SPA hydration
       }
     }
 
     chrome.tabs.onUpdated.addListener(onUpdated)
+    const deadline = setTimeout(settle, timeout)
   })
+}
+
+async function navigateAndReinject(tabId, url, timeout = 20_000) {
+  await chrome.tabs.update(tabId, { url })
+  await waitForTabLoad(tabId, timeout)
+
+  // Worker nach jeder Navigation neu injizieren
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files:  ['content-scripts/automation-worker.js'],
+  }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
+
+  await sleep(300) // Listener-Registrierung abwarten
 }
 
 async function patchSession({ supabaseUrl, supabaseAnonKey, userJwt, sessionId, status, message, extra }) {

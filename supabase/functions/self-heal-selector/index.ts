@@ -88,7 +88,7 @@ serve(async (req) => {
         context,
         failed_selector,
         html_snippet: html_snippet ? html_snippet.substring(0, 50_000) : null,
-        ai_model:     'claude-sonnet-4-6',
+        ai_model:     'gemini-1.5-flash',
         healed:       false,
       })
       .select('id')
@@ -137,7 +137,7 @@ Antworte ausschließlich als JSON (kein Markdown, kein erklärender Text):
   "reasoning": "Kurze Begründung auf Deutsch warum dieses Element korrekt ist"
 }`
 
-    const geminiParts: any[] = [{ text: taskPrompt }];
+    const geminiParts: any[] = [];
 
     if (screenshot_base64) {
       geminiParts.push({
@@ -153,6 +153,8 @@ Antworte ausschließlich als JSON (kein Markdown, kein erklärender Text):
         text: `HTML der Seite (Ausschnitt, max. 45 KB):\n\`\`\`html\n${html_snippet.substring(0, 45_000)}\n\`\`\``
       });
     }
+
+    geminiParts.push({ text: taskPrompt });
 
     // ── Call Gemini API ───────────────────────────────────────────────────────
 
