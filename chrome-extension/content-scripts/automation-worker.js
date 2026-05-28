@@ -30,6 +30,7 @@ async function handleDomAction({ command, selector, value, timeout = 8000 }) {
     case 'GET_HTML':   return { success: true, html: document.documentElement.outerHTML }
     case 'KEY_PRESS':  return keyPress(value)
     case 'WAIT_READY': return waitForReady(timeout)
+    case 'CHECK_EXISTS': return checkExists(selector, timeout)
     default:
       return { success: false, error: `Unknown command: ${command}` }
   }
@@ -85,6 +86,15 @@ async function waitForReady(timeout) {
   }
   // Non-fatal: page may still be functional even if not fully "complete"
   return { success: true, warning: 'readyState timeout — page may still be loading' }
+}
+
+async function checkExists(selector, timeout) {
+  try {
+    await waitForElement(selector, timeout)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

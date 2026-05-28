@@ -72,6 +72,21 @@ async function runAutomation(payload) {
 
     if (SEL.login_username && SEL.login_password && username) {
       try {
+        // Check if login field is visible
+        const checkRes = await domAction(supplierTabId, { command: 'CHECK_EXISTS', selector: SEL.login_username, timeout: 2000 })
+        
+        if (!checkRes.success) {
+          console.log('[sw] Login username field not found initially, trying to navigate to login page...')
+          await patch('logging_in', 'Suche Login-Bereich...')
+          await withHeal({
+            supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+            ctx: 'login_navigate', command: 'CLICK', selector: SEL.login_navigate || 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]', timeout: 5000
+          })
+          await waitForTabLoad(supplierTabId, 10_000)
+          await sleep(1000)
+        }
+
+        await patch('logging_in', 'Melde an...')
         await withHeal({
           supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
           ctx: 'login', command: 'FILL', selector: SEL.login_username, value: username,

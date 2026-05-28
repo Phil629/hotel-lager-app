@@ -250,14 +250,16 @@ export function useCheckout({
 
         const dbSelectors = supplierRow?.selectors || {}
         const finalSelectors = Object.keys(dbSelectors).length > 0 ? dbSelectors : {
+          login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
           login_username: 'input[type="email"]',
           login_password: 'input[type="password"]',
           login_submit:   'button[type="submit"]',
           search_box:     'input[type="text"]',
-          search_submit:  'button[type="submit"]',
+          search_submit:  '',
+          add_to_cart:    'button',
           product_qty:    'input[type="number"]',
-          add_to_cart:    'button, .add-to-cart',
-          price:          '.price'
+          cart_url:       '/cart',
+          price_element:  '.price'
         }
 
         window.postMessage(

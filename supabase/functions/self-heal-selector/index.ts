@@ -13,6 +13,7 @@ const CORS = {
 
 // Human-readable action descriptions injected into the AI prompt
 const CONTEXT_DESCRIPTIONS: Record<string, string> = {
+  login_navigate: 'Klick auf den Login-, Anmelden- oder Mein-Konto-Button, um zur Login-Seite zu navigieren',
   login:       'Einloggen in einen B2B-Webshop (Benutzername/Passwort eingeben und absenden)',
   search:      'Produkt im Shop suchen (Suchfeld befüllen und Suche starten)',
   add_to_cart: 'Produkt in den Warenkorb legen oder Bestellmenge in ein Zahlenfeld eingeben',
