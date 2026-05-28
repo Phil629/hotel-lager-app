@@ -164,7 +164,7 @@ Antworte ausschließlich als JSON (kein Markdown, kein erklärender Text):
 
     // ── Call Gemini API ───────────────────────────────────────────────────────
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`
 
     const claudeRes = await fetch(geminiUrl, {
       method: 'POST',

@@ -34,10 +34,7 @@ async function runAutomation(payload) {
     priceThresholdPct: THRESHOLD,
   } = payload
 
-  // FORCE OVERRIDE to bypass any old DB poisoning from the Web App
-  SEL.login_submit = 'button[name*="login"], button[id*="login"], input[name*="login"], input[id*="login"], button[class*="login"]'
-  SEL.login_username = 'input[name="email_address"], input[name="email"], input[autocomplete="username"]'
-  
+  // Debug overrides removed
   // Persist to session storage so popup can read current state
   await chrome.storage.session.set({
     activeSession: { sessionId, supplierId, loginUrl, status: 'starting' },

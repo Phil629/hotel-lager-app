@@ -262,15 +262,13 @@ export function useCheckout({
 
         const loginUrlFinal = creds?.login_url || supplierRow?.login_url || supplierRow?.url || ''
 
-        let dbSelectors = {} // FORCE WIPE
-        console.warn('[checkout] FORCING IGNORE DB SELECTORS TO PROVE A POINT!')
-        supabase.from('suppliers').update({ selectors: null }).eq('id', supplierId).then()
+        const dbSelectors = supplierRow?.selectors || {}
 
         const finalSelectors = Object.keys(dbSelectors).length > 0 ? dbSelectors : {
-          login_navigate: 'a[href="impossible_login_link"]',
-          login_username: 'input[name="impossible_username_field_to_force_ai"]',
+          login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
+          login_username: 'input[type="email"], input[name*="user"], input[name*="email"]',
           login_password: 'input[type="password"]',
-          login_submit:   'button[name="impossible_submit_button_to_force_ai"]',
+          login_submit:   'button[type="submit"], input[type="submit"], button:contains("Anmelden"), button:contains("Login")',
           search_box:     'input[type="search"], input[name*="search"], input[name*="suche"]',
           search_submit:  '',
           add_to_cart:    'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]',
