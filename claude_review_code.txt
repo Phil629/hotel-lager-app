@@ -117,13 +117,21 @@ async function runAutomation(payload) {
         await sleep(500)
         console.log('[sw] Login completed')
       } catch (loginErr) {
-        if (loginErr.message && (loginErr.message.includes('API Error') || loginErr.message.includes('Auth session'))) {
-          throw loginErr
-        }
-        console.warn('[sw] Login step failed, but continuing anyway. User might already be logged in.', loginErr.message)
+        // Fehler wird hier bewusst nicht weitergeworfen.
+        // Der Post-Login-Check direkt danach stellt sicher, dass wir tatsächlich eingeloggt sind.
+        console.warn('[sw] Login step failed, continuing (user might already be logged in).', loginErr.message)
       }
     } else {
       console.log('[sw] No login credentials provided, skipping login step')
+    }
+
+    // ── Post-Login Verification ─────────────────────────────────────────────
+    // Unabhängig davon, ob Login versucht wurde oder nicht: Sicherstellen,
+    // dass wir nicht auf einer Login-Seite festhängen.
+    if (await isAuthWall(supplierTabId)) {
+      throw new Error(
+        'Login fehlgeschlagen! Bitte Zugangsdaten und Selektoren in den Lieferanten-Einstellungen prüfen.'
+      )
     }
 
     // ── Step 4: Add items to cart ───────────────────────────────────────────
