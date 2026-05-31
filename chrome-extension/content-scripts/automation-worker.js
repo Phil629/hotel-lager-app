@@ -92,8 +92,18 @@ async function getText(selector, timeout) {
 }
 
 async function keyPress(key) {
-  document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
-  document.activeElement?.dispatchEvent(new KeyboardEvent('keyup',   { key, bubbles: true }))
+  const active = document.activeElement
+  if (key === 'Enter' && active && active.tagName === 'INPUT') {
+    const form = active.closest('form')
+    if (form) {
+      const btn = form.querySelector('button[type="submit"], input[type="submit"]')
+      if (btn) btn.click()
+      else form.submit()
+      return { success: true }
+    }
+  }
+  active?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  active?.dispatchEvent(new KeyboardEvent('keyup',   { key, bubbles: true }))
   return { success: true }
 }
 

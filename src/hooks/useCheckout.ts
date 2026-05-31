@@ -271,7 +271,7 @@ export function useCheckout({
           login_password: dbSelectors.login_password || 'input[type="password"]',
           login_submit:   dbSelectors.login_submit   || 'button[type="submit"], input[type="submit"], button:contains("Anmelden"), button:contains("Login")',
           search_box:     dbSelectors.search_box     || 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]',
-          search_submit:  dbSelectors.search_submit  || '',
+          search_submit:  dbSelectors.search_submit  || 'button[title*="such" i], button[class*="search" i], form[action*="search"] button[type="submit"], form[action*="such"] button[type="submit"]',
           add_to_cart:    dbSelectors.add_to_cart    || 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]',
           product_qty:    dbSelectors.product_qty    || 'input[type="number"]',
           cart_url:       dbSelectors.cart_url       || '/cart',
