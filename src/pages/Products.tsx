@@ -4,7 +4,7 @@ import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
-import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap } from 'lucide-react';
+import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database } from 'lucide-react';
 import { usePermissions } from '../hooks/usePermissions';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
@@ -112,6 +112,8 @@ export const Products: React.FC = () => {
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+    const [selectedCategory, setSelectedCategory] = useState("all");
+    const [groupBy, setGroupBy] = useState<'supplier' | 'category'>('supplier');
     const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>({});
     const [expandedProductsLimit, setExpandedProductsLimit] = useState<Record<string, boolean>>({});
     // O5: war `prev[id] === false ? true : false` — undefined !== false führte zu falschem Init-Wert
@@ -596,7 +598,8 @@ export const Products: React.FC = () => {
     const filteredProducts = useMemo(() => products.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesLowStock = showLowStockOnly ? (Number(p.minStock) > 0 && Number(p.stock) <= Number(p.minStock)) : true;
-        return matchesSearch && matchesLowStock;
+        const matchesCategory = selectedCategory === 'all' ? true : (p.category || 'Ohne Kategorie') === selectedCategory;
+        return matchesSearch && matchesLowStock && matchesCategory;
     }).sort((a, b) => {
         if (!sortConfig.key) return 0;
 
@@ -703,7 +706,7 @@ export const Products: React.FC = () => {
 
             {/* Search & Filters */}
             <div style={{ display: 'flex', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', flex: '1 1 300px' }}>
+                <div style={{ position: 'relative', flex: '1 1 200px' }}>
                     <Search size={22} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input
                         type="text"
@@ -725,10 +728,28 @@ export const Products: React.FC = () => {
                         onBlur={e => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = '0 1px 2px 0 rgb(0 0 0 / 0.05)'; }}
                     />
                 </div>
+                <select 
+                    value={selectedCategory} 
+                    onChange={e => setSelectedCategory(e.target.value)}
+                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '52px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', outline: 'none' }}
+                >
+                    <option value="all">Alle Kategorien</option>
+                    {Array.from(new Set(products.map(p => p.category || 'Ohne Kategorie'))).sort().map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                </select>
+                <select
+                    value={groupBy}
+                    onChange={e => setGroupBy(e.target.value as 'supplier' | 'category')}
+                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '52px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', outline: 'none' }}
+                >
+                    <option value="supplier">Gruppieren: Lieferant</option>
+                    <option value="category">Gruppieren: Kategorie</option>
+                </select>
                 <button
                     onClick={() => setShowLowStockOnly(!showLowStockOnly)}
                     className={showLowStockOnly ? 'btn btn-danger' : 'btn btn-ghost'}
-                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '100%', minHeight: '46px' }}
+                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '52px', minHeight: '52px' }}
                 >
                     <AlertTriangle size={16} />
                     {showLowStockOnly ? 'Filter aufheben' : 'Kritischer Bestand'}
@@ -756,31 +777,38 @@ export const Products: React.FC = () => {
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        {Array.from(new Set(filteredProducts.map(p => p.supplierId || 'unsorted'))).sort((a, b) => {
-                            const nameA = a === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === a)?.name || 'ZZZ_Unkategorisiert');
-                            const nameB = b === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === b)?.name || 'ZZZ_Unkategorisiert');
-                            return nameA.localeCompare(nameB);
-                        }).map(supplierId => {
-                            const supProds = filteredProducts.filter(p => (p.supplierId || 'unsorted') === supplierId);
-                            const isUnsorted = supplierId === 'unsorted';
-                            const supplier = isUnsorted ? undefined : suppliers.find(s => s.id === supplierId);
-                            const supplierName = supplier?.name || "Ohne Lieferant (Unkategorisiert)";
+                        {Array.from(new Set(filteredProducts.map(p => groupBy === 'supplier' ? (p.supplierId || 'unsorted') : (p.category || 'Ohne Kategorie')))).sort((a, b) => {
+                            if (groupBy === 'supplier') {
+                                const nameA = a === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === a)?.name || 'ZZZ_Unkategorisiert');
+                                const nameB = b === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === b)?.name || 'ZZZ_Unkategorisiert');
+                                return nameA.localeCompare(nameB);
+                            } else {
+                                const nameA = a === 'Ohne Kategorie' ? 'ZZZ_Ohne Kategorie' : a;
+                                const nameB = b === 'Ohne Kategorie' ? 'ZZZ_Ohne Kategorie' : b;
+                                return nameA.localeCompare(nameB);
+                            }
+                        }).map(groupKey => {
+                            const groupProds = filteredProducts.filter(p => groupBy === 'supplier' ? (p.supplierId || 'unsorted') === groupKey : (p.category || 'Ohne Kategorie') === groupKey);
+                            const groupName = groupBy === 'supplier' 
+                                ? (groupKey === 'unsorted' ? 'Ohne Lieferant (Unkategorisiert)' : (suppliers.find(s => s.id === groupKey)?.name || "Ohne Lieferant (Unkategorisiert)"))
+                                : groupKey;
                             
-                            const isExpanded = expandedSuppliers[supplierId] !== false; // default true
-                            const showAll = expandedProductsLimit[supplierId] === true || showLowStockOnly || searchTerm.trim() !== ""; // auto-expand if filtering
-                            const visibleProds = showAll ? supProds : supProds.slice(0, 5);
-                            const hasMore = supProds.length > 5;
+                            const isExpanded = expandedSuppliers[groupKey] !== false; // default true
+                            const showAll = expandedProductsLimit[groupKey] === true || showLowStockOnly || searchTerm.trim() !== "" || selectedCategory !== 'all'; // auto-expand if filtering
+                            const visibleProds = showAll ? groupProds : groupProds.slice(0, 5);
+                            const hasMore = groupProds.length > 5;
+                            const GroupIcon = groupBy === 'supplier' ? Building2 : Database;
 
                             return (
-                                <div key={supplierId} style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border)' }}>
+                                <div key={groupKey} style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border)' }}>
                                     <div 
-                                        onClick={() => toggleSupplier(supplierId)}
+                                        onClick={() => toggleSupplier(groupKey)}
                                         style={{ padding: '16px 24px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTopLeftRadius: 'calc(var(--radius-xl) - 1px)', borderTopRightRadius: 'calc(var(--radius-xl) - 1px)' }}
                                     >
                                         <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700 }}>
-                                            <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><Building2 size={18} /></div>
-                                            {supplierName}
-                                            <span className="badge badge-neutral">{supProds.length} Produkte</span>
+                                            <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><GroupIcon size={18} /></div>
+                                            {groupName}
+                                            <span className="badge badge-neutral">{groupProds.length} Produkte</span>
                                         </h2>
                                         <button style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer' }}>
                                             <ChevronDown style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', color: '#64748b' }} />
@@ -1018,11 +1046,11 @@ export const Products: React.FC = () => {
                                             {hasMore && (
                                                 <div style={{ borderTop: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', padding: '4px 0' }}>
                                                     <button
-                                                        onClick={() => toggleProductLimit(supplierId)}
+                                                        onClick={() => toggleProductLimit(groupKey)}
                                                         className="btn btn-ghost"
                                                         style={{ width: '100%', borderRadius: 0, border: 'none', justifyContent: 'center', color: 'var(--color-primary)' }}
                                                     >
-                                                        {showAll ? <><ChevronDown style={{ transform: 'rotate(180deg)' }} size={15} /> Einklappen</> : <><ChevronDown size={15} /> Alle {supProds.length} Produkte anzeigen</>}
+                                                        {showAll ? <><ChevronDown style={{ transform: 'rotate(180deg)' }} size={15} /> Einklappen</> : <><ChevronDown size={15} /> Alle {groupProds.length} Produkte anzeigen</>}
                                                     </button>
                                                 </div>
                                             )}
