@@ -319,6 +319,7 @@ async function runAutomation(payload) {
     await patch('price_check', 'Preise werden abgeglichen...')
 
     const hasWarning = updatedItems.some((i) => i.price_ok === false)
+    const hasError = updatedItems.some((i) => i.status === 'error')
     const allDeltas  = updatedItems.map((i) => Math.abs(i.price_delta_pct ?? 0)).filter((d) => d > 0)
     const maxDelta   = allDeltas.length > 0 ? Math.max(...allDeltas) : null
 
@@ -331,9 +332,12 @@ async function runAutomation(payload) {
         : new URL(SEL.cart_url, cartUrl).href
     }
 
-    const statusMsg = hasWarning
-      ? '[Warnung] Preisabweichung erkannt - bitte vor dem Bestellen pruefen!'
-      : '[OK] Warenkorb bereit - jetzt bestellen.'
+    let statusMsg = '[OK] Warenkorb bereit - jetzt bestellen.'
+    if (hasError) {
+      statusMsg = '[Fehler] Es konnten nicht alle Artikel hinzugefuegt werden!'
+    } else if (hasWarning) {
+      statusMsg = '[Warnung] Preisabweichung erkannt - bitte vor dem Bestellen pruefen!'
+    }
 
     await patch('ready', statusMsg, {
       cart_url:            cartUrl,
