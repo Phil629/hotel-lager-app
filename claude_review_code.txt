@@ -191,26 +191,34 @@ async function runAutomation(payload) {
           console.warn('[sw] We might be on a login page, but proceeding with search anyway.')
         }
 
-        await patch('searching', `Suche ${item.product_name}...`, { items: updatedItems })
-
+        await patch('searching', `Suche nach ${item.product_name}...`, { items: updatedItems })
         try {
-          if (SEL.search_box) {
+          const badSearch = 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]'
+          let searchSelector = SEL.search_box === badSearch ? null : SEL.search_box
+          searchSelector = searchSelector || 'input[type="search"], input[name*="search" i], input[name*="suche" i], input[name="q"], input[name="query"], input[name="keywords"], #search-query'
+          
+          if (searchSelector) {
             await withHeal({
               supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-              ctx: 'search', command: 'FILL', selector: SEL.search_box, value: item.product_name,
+              ctx: 'search', command: 'FILL', selector: searchSelector,
+              value: item.product_name,
             })
-            if (SEL.search_submit) {
+            const badSearchSubmit = 'button[type="submit"], input[type="submit"], button[aria-label*="search" i], button[aria-label*="suche" i]'
+            let searchSubmitSelector = SEL.search_submit === badSearchSubmit ? null : SEL.search_submit
+            searchSubmitSelector = searchSubmitSelector || 'button[type="submit"], input[type="submit"], .search-submit, #search-submit'
+            
+            if (searchSubmitSelector) {
               try {
                 await withHeal({
                   supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-                  ctx: 'search', command: 'CLICK', selector: SEL.search_submit,
+                  ctx: 'search_submit', command: 'CLICK', selector: searchSubmitSelector,
                 })
-              } catch (btnErr) {
-                console.warn('[sw] Search button failed, falling back to Enter key:', btnErr.message)
-                await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+              } catch (e) {
+                console.warn('[sw] search submit failed, trying Enter key fallback', e.message)
+                await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter', timeout: 2000 })
               }
             } else {
-              await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+              await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter', timeout: 2000 })
             }
             await waitForTabLoad(supplierTabId, 10_000)
             await chrome.scripting.executeScript({
@@ -275,7 +283,10 @@ async function runAutomation(payload) {
       }
 
       // Add to cart
-      const cartSelector = SEL.add_to_cart || 'button[type="submit"], form button, .add-to-cart, [class*="cart" i], [title*="warenkorb" i], [title*="basket" i]'
+      const badCart = 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]'
+      let cartSelector = SEL.add_to_cart === badCart ? null : SEL.add_to_cart
+      cartSelector = cartSelector || 'button[type="submit"], form button, input[type="submit"], input[type="button"], input[type="image"], .add-to-cart, [class*="cart" i], [class*="basket" i], [name*="basket" i], [name*="cart" i], [name="inInBasket"], [title*="warenkorb" i], [title*="basket" i], a[href*="warenkorb" i], a[href*="cart" i]'
+      
       await withHeal({
         supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
         ctx: 'add_to_cart', command: 'CLICK', selector: cartSelector,
@@ -7368,7 +7379,8 @@ ${contextDescription}
 - Bevorzuge \`id\`, \`name\`, \`data-*\`, \`aria-label\`, \`type\`-Attribute (stabil über Layout-Änderungen)
 - Meide rein positionsbasierte Selektoren wie \`:nth-child(3)\` oder \`:first-child\`
 - Meide generierte Hash-Klassen wie \`._3xKj8\` oder \`.css-1a2b3c\`
-- **WICHTIG:** Gib NIEMALS generische Selektoren wie \`input[type="text"]\` oder \`div\` zurück!
+- **WICHTIG:** Verwende IMMER EXAKT den Tag-Namen, den du im HTML-Snippet siehst (z.B. \`input\` oder \`a\`, erfinde niemals ein \`<button>\` wenn es im HTML ein \`<input>\` ist)!
+- **WICHTIG:** Gib NIEMALS rein generische Selektoren wie \`input[type="text"]\` oder \`div\` zurück!
 - Achte darauf, dass das Element im HTML nicht \`type="hidden"\` hat und sichtbar wirkt.
 - Der Selektor muss auf GENAU EIN Element matchen
 
