@@ -466,41 +466,43 @@ export const Suppliers: React.FC = () => {
                                 </div>
 
                                 {/* Section: E-Mail Vorlage */}
-                                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                                        <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>E-Mail Bestellung - Vorlage</p>
-                                        {editingSupplier && (
-                                            <button 
-                                                type="button" 
-                                                onClick={handleApplyEmailToAllProducts}
-                                                className="btn btn-primary btn-sm"
-                                            >
-                                                Für alle Produkte übernehmen
-                                            </button>
-                                        )}
+                                {(!formData.preferredOrderMethod || formData.preferredOrderMethod === 'email') && (
+                                    <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                                            <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>E-Mail Bestellung - Vorlage</p>
+                                            {editingSupplier && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={handleApplyEmailToAllProducts}
+                                                    className="btn btn-primary btn-sm"
+                                                >
+                                                    Für alle Produkte übernehmen
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                            <div className="form-group">
+                                                <label className="form-label">Bestell-E-Mail (falls abweichend von Stammdaten)</label>
+                                                <input type="email" value={formData.orderEmail || ''} onChange={e => setFormData({ ...formData, orderEmail: e.target.value })} className="input-field" placeholder="bestellungen@lieferant.de" />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Betreff (Standard)</label>
+                                                <input type="text" value={formData.emailSubjectTemplate || ''} onChange={e => setFormData({ ...formData, emailSubjectTemplate: e.target.value })} className="input-field" placeholder="Bestellung" />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Nachrichtentext / Grundgerüst</label>
+                                                <textarea 
+                                                    value={formData.emailBodyTemplate || ''} 
+                                                    onChange={e => setFormData({ ...formData, emailBodyTemplate: e.target.value })} 
+                                                    className="input-field" 
+                                                    rows={5} 
+                                                    placeholder="Sehr geehrte Damen und Herren,&#10;&#10;bitte liefern Sie:&#10;{PRODUKTE}&#10;&#10;Mit freundlichen Grüßen" 
+                                                />
+                                                <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>Tipp: Nutze den Platzhalter <strong style={{color: 'var(--color-primary)'}}>&#123;PRODUKTE&#125;</strong> in deinem Text, damit die Artikel aus dem Warenkorb automatisch dort eingefügt werden.</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                        <div className="form-group">
-                                            <label className="form-label">Bestell-E-Mail (falls abweichend von Stammdaten)</label>
-                                            <input type="email" value={formData.orderEmail || ''} onChange={e => setFormData({ ...formData, orderEmail: e.target.value })} className="input-field" placeholder="bestellungen@lieferant.de" />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Betreff (Standard)</label>
-                                            <input type="text" value={formData.emailSubjectTemplate || ''} onChange={e => setFormData({ ...formData, emailSubjectTemplate: e.target.value })} className="input-field" placeholder="Bestellung" />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Nachrichtentext / Grundgerüst</label>
-                                            <textarea 
-                                                value={formData.emailBodyTemplate || ''} 
-                                                onChange={e => setFormData({ ...formData, emailBodyTemplate: e.target.value })} 
-                                                className="input-field" 
-                                                rows={5} 
-                                                placeholder="Sehr geehrte Damen und Herren,&#10;&#10;bitte liefern Sie:&#10;{PRODUKTE}&#10;&#10;Mit freundlichen Grüßen" 
-                                            />
-                                            <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>Tipp: Nutze den Platzhalter <strong style={{color: 'var(--color-primary)'}}>&#123;PRODUKTE&#125;</strong> in deinem Text, damit die Artikel aus dem Warenkorb automatisch dort eingefügt werden.</p>
-                                        </div>
-                                    </div>
-                                </div>
+                                )}
 
                                 {/* Autopilot exclude */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--color-warning-bg)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid #fcd34d' }}>

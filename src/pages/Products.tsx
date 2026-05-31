@@ -411,18 +411,27 @@ export const Products: React.FC = () => {
         const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
         
         let subject = supplier?.emailSubjectTemplate || mainProduct.emailOrderSubject || `Bestellung: {product_name}`;
-        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nEinkauf`;
+        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie:\n{PRODUKTE}\n\nMit freundlichen Grüßen\nEinkauf`;
 
-        if (cart.length === 1) {
-            subject = subject.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
-            body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
+        const listSubjectInfo = cart.length === 1 ? mainProduct.name : `${cart.length} Produkte`;
+        subject = subject.replace(/{product_name}/g, listSubjectInfo);
+        
+        const listBodyInfo = cart.map(c => `- ${c.quantity}x ${c.product.name} ${c.product.unit ? `(${c.product.unit})` : ''}`.trim()).join('\n');
+        
+        if (body.includes('{PRODUKTE}')) {
+            body = body.replace(/{PRODUKTE}/g, listBodyInfo);
+        } else if (body.includes('{product_name}')) {
+            // Fallback for old templates
+            if (cart.length === 1) {
+                body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
+            } else {
+                body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, '\n' + listBodyInfo);
+            }
         } else {
-            const listSubjectInfo = cart.length + " Produkte";
-            const listBodyInfo = '\n' + cart.map(c => `- ${c.quantity}x ${c.product.name} (${c.product.unit || ''})`).join('\n');
-            
-            subject = subject.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listSubjectInfo);
-            body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listBodyInfo);
+            // Append if no placeholder found
+            body = body + `\n\n${listBodyInfo}`;
         }
+        
         return { subject, body };
     };
 
