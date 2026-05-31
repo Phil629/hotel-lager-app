@@ -241,13 +241,12 @@ async function runAutomation(payload) {
       try {
 
       // Set quantity
-      if (SEL.product_qty) {
-        await withHeal({
-          supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-          ctx: 'add_to_cart', command: 'FILL',
-          selector: SEL.product_qty, value: String(item.quantity),
-        }).catch((e) => console.warn('[sw] qty field failed (non-fatal):', e.message))
-      }
+      const qtySelector = SEL.product_qty || 'input[type="number"], input[name*="qty" i], input[name*="menge" i], input[name*="anzahl" i]'
+      await withHeal({
+        supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+        ctx: 'add_to_cart', command: 'FILL',
+        selector: qtySelector, value: String(item.quantity),
+      }).catch((e) => console.warn('[sw] qty field failed (non-fatal):', e.message))
 
       if (SEL.price) {
         try {
@@ -276,14 +275,14 @@ async function runAutomation(payload) {
       }
 
       // Add to cart
-      if (SEL.add_to_cart) {
-        await withHeal({
-          supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-          ctx: 'add_to_cart', command: 'CLICK', selector: SEL.add_to_cart,
-        })
-        await sleep(1200)
+      const cartSelector = SEL.add_to_cart || 'button[type="submit"], form button, .add-to-cart, [class*="cart" i], [title*="warenkorb" i], [title*="basket" i]'
+      await withHeal({
+        supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+        ctx: 'add_to_cart', command: 'CLICK', selector: cartSelector,
+      })
+      await sleep(1200)
 
-        // JETZT URL speichern: Tab ist auf der Produktseite
+      // JETZT URL speichern: Tab ist auf der Produktseite
         if (usedSearch && item.product_id) {
           try {
             const productTab = await chrome.tabs.get(supplierTabId)
@@ -317,7 +316,6 @@ async function runAutomation(payload) {
             }
           } catch (err) {
             console.warn('[sw] Produkt-URL-Update fehlgeschlagen:', err)
-          }
         }
       }
 
@@ -335,8 +333,6 @@ async function runAutomation(payload) {
     }
 
     // ── Step 5: Price check & handover ──────────────────────────────────────
-
-    await patch('price_check', 'Preise werden abgeglichen...')
 
     const hasWarning = updatedItems.some((i) => i.price_ok === false)
     const hasError = updatedItems.some((i) => i.status === 'error')
