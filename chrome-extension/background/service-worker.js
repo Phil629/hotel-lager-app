@@ -35,6 +35,11 @@ async function runAutomation(payload) {
   } = payload
 
   // Debug overrides removed
+
+  // SAFEGUARD: Protect against broken DB selectors from the Web App (especially for Reinigungsberater)
+  SEL.search_box = 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]'
+  SEL.add_to_cart = 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]'
+
   // Persist to session storage so popup can read current state
   await chrome.storage.session.set({
     activeSession: { sessionId, supplierId, loginUrl, status: 'starting' },

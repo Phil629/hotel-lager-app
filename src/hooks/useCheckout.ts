@@ -262,9 +262,8 @@ export function useCheckout({
 
         const loginUrlFinal = creds?.login_url || supplierRow?.login_url || supplierRow?.url || ''
 
-        const dbSelectors = supplierRow?.selectors || {}
-
-        const finalSelectors = Object.keys(dbSelectors).length > 0 ? dbSelectors : {
+        // IGNORE DB SELECTORS FOR NOW to fix broken DB state for Reinigungsberater
+        const finalSelectors = {
           login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
           login_username: 'input[type="email"], input[name*="user"], input[name*="email"]',
           login_password: 'input[type="password"]',
