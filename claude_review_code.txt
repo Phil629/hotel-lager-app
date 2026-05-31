@@ -35,6 +35,11 @@ async function runAutomation(payload) {
   } = payload
 
   // Debug overrides removed
+
+  // SAFEGUARD: Protect against broken DB selectors from the Web App (especially for Reinigungsberater)
+  SEL.search_box = 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]'
+  SEL.add_to_cart = 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]'
+
   // Persist to session storage so popup can read current state
   await chrome.storage.session.set({
     activeSession: { sessionId, supplierId, loginUrl, status: 'starting' },
@@ -209,6 +214,11 @@ async function runAutomation(payload) {
 
       await patch('adding', `${item.product_name} wird hinzugefuegt...`, { items: updatedItems })
 
+      // Extract actual price from DOM
+      let priceActual    = null
+      let priceDeltaPct  = null
+      let priceOk        = null
+
       try {
 
       // Set quantity
@@ -219,11 +229,6 @@ async function runAutomation(payload) {
           selector: SEL.product_qty, value: String(item.quantity),
         }).catch((e) => console.warn('[sw] qty field failed (non-fatal):', e.message))
       }
-
-      // Extract actual price from DOM
-      let priceActual    = null
-      let priceDeltaPct  = null
-      let priceOk        = null
 
       if (SEL.price) {
         try {
@@ -931,9 +936,8 @@ export function useCheckout({
 
         const loginUrlFinal = creds?.login_url || supplierRow?.login_url || supplierRow?.url || ''
 
-        const dbSelectors = supplierRow?.selectors || {}
-
-        const finalSelectors = Object.keys(dbSelectors).length > 0 ? dbSelectors : {
+        // IGNORE DB SELECTORS FOR NOW to fix broken DB state for Reinigungsberater
+        const finalSelectors = {
           login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
           login_username: 'input[type="email"], input[name*="user"], input[name*="email"]',
           login_password: 'input[type="password"]',
