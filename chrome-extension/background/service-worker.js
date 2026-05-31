@@ -37,7 +37,7 @@ async function runAutomation(payload) {
   // Debug overrides removed
 
   // SAFEGUARD: Protect against broken DB selectors from the Web App (especially for Reinigungsberater)
-  SEL.search_box = 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]'
+  SEL.search_box = 'input[name="absichtlich_falsch_um_ki_zu_starten"]'
   SEL.add_to_cart = 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]'
   SEL.cart_url = loginUrl?.includes('reinigungsberater') ? '/warenkorb' : '/cart'
 

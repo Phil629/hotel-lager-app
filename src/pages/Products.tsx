@@ -4,7 +4,7 @@ import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
-import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap } from 'lucide-react';
+import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap } from 'lucide-react';
 import { usePermissions } from '../hooks/usePermissions';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
@@ -110,7 +110,6 @@ export const Products: React.FC = () => {
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
-    const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
     const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>({});
@@ -914,8 +913,7 @@ export const Products: React.FC = () => {
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {visibleProds.map((product, index) => {
-                                                            const isLastRows = index >= visibleProds.length - 2 && visibleProds.length > 3;
+                                                        {visibleProds.map((product) => {
                                                             const openOrder = orders.find(o => o.productName === product.name && o.status === 'open');
                                                             const isLowStock = Number(product.minStock) > 0 && Number(product.stock) <= Number(product.minStock);
                                                             return (
@@ -1757,7 +1755,7 @@ export const Products: React.FC = () => {
                                                     quantity: c.quantity,
                                                     unit: c.product.unit,
                                                     price_expected: c.product.price || undefined,
-                                                    url: c.product.url || undefined
+                                                    url: c.product.orderUrl || undefined
                                                 }))}
                                             />
                                         </div>

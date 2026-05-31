@@ -165,29 +165,45 @@ Antworte ausschließlich als JSON (kein Markdown, kein erklärender Text):
     // ── Call Gemini API ───────────────────────────────────────────────────────
 
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`
+    const geminiBody = {
+      contents: [{ parts: geminiParts }],
+      generationConfig: {
+        temperature: 0.2
+      }
+    }
 
     const claudeRes = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: geminiParts }],
-        generationConfig: {
-            temperature: 0.2
-        }
-      })
+      body: JSON.stringify(geminiBody),
     })
 
     if (!claudeRes.ok) {
-      const errText = await claudeRes.text()
-      console.error('[self-heal] Gemini API HTTP', claudeRes.status, errText.substring(0, 300))
+      const errorText = await claudeRes.text()
+      console.error(`[self-heal] Gemini API HTTP error: ${claudeRes.status} - ${errorText}`)
+
+      // If it's a 404 or 400, let's fetch the list of available models to debug
+      let availableModels = 'Could not fetch models'
+      try {
+        const modelsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`)
+        if (modelsRes.ok) {
+          const modelsJson = await modelsRes.json()
+          availableModels = modelsJson.models?.map((m: any) => m.name).join(', ') || 'No models found'
+        }
+      } catch (e) {}
 
       if (logId) {
         await adminClient
           .from('selector_heal_log')
-          .update({ ai_response: { error: `HTTP ${claudeRes.status}` } })
+          .update({ ai_response: { error: `HTTP ${claudeRes.status}`, available_models: availableModels } })
           .eq('id', logId)
       }
-      return respond({ new_selector: null, healed: false, error: `Google API Error ${claudeRes.status}: ${errText.substring(0, 150)}` })
+
+      return respond({ 
+        new_selector: null, 
+        healed: false, 
+        error: `Google API Error ${claudeRes.status}: ${errorText.substring(0, 150)} | Available Models: ${availableModels}` 
+      }, 200)
     }
 
     const claudeData = await claudeRes.json()
