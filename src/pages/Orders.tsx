@@ -1986,7 +1986,8 @@ export const Orders: React.FC = () => {
                                                             product_name: c.product.name,
                                                             quantity: c.quantity,
                                                             unit: c.product.unit,
-                                                            price_expected: c.product.price || undefined
+                                                            price_expected: c.product.price || undefined,
+                                                            url: c.product.orderUrl || undefined
                                                         }))}
                                                     />
                                                 </div>
