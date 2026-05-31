@@ -214,6 +214,11 @@ async function runAutomation(payload) {
 
       await patch('adding', `${item.product_name} wird hinzugefuegt...`, { items: updatedItems })
 
+      // Extract actual price from DOM
+      let priceActual    = null
+      let priceDeltaPct  = null
+      let priceOk        = null
+
       try {
 
       // Set quantity
@@ -224,11 +229,6 @@ async function runAutomation(payload) {
           selector: SEL.product_qty, value: String(item.quantity),
         }).catch((e) => console.warn('[sw] qty field failed (non-fatal):', e.message))
       }
-
-      // Extract actual price from DOM
-      let priceActual    = null
-      let priceDeltaPct  = null
-      let priceOk        = null
 
       if (SEL.price) {
         try {
