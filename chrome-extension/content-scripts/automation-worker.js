@@ -1,3 +1,4 @@
+(() => {
 // content-scripts/automation-worker.js
 // Injected by the service worker into the supplier shop tab.
 // Executes individual DOM commands and replies via sendResponse.
@@ -148,3 +149,4 @@ function waitForElement(selector, timeout) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+})();
