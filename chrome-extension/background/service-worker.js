@@ -283,9 +283,12 @@ async function runAutomation(payload) {
       }
 
       // Add to cart
-      const badCart = 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]'
-      let cartSelector = SEL.add_to_cart === badCart ? null : SEL.add_to_cart
-      cartSelector = cartSelector || 'button[type="submit"], form button, input[type="submit"], input[type="button"], input[type="image"], .add-to-cart, [class*="cart" i], [class*="basket" i], [name*="basket" i], [name*="cart" i], [name="inInBasket"], [title*="warenkorb" i], [title*="basket" i], a[href*="warenkorb" i], a[href*="cart" i]'
+      const badCarts = [
+        'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]',
+        'button[name="inInBasket"]'
+      ]
+      let cartSelector = badCarts.includes(SEL.add_to_cart) ? null : SEL.add_to_cart
+      cartSelector = cartSelector || '.add-to-cart, [name="inInBasket"], [name*="basket" i], [name*="cart" i], [id*="basket" i], [id*="cart" i], [class*="basket" i], [class*="cart" i], [title*="warenkorb" i], [title*="basket" i], a[href*="warenkorb" i], a[href*="cart" i], button[type="submit"][name*="add"], input[type="submit"][name*="add"]'
       
       await withHeal({
         supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
