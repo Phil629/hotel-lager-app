@@ -52,9 +52,9 @@ function isInteractable(el) {
 }
 
 async function fill(selector, value, timeout) {
-  const el = await waitForElement(selector, timeout)
-  if (!isInteractable(el)) {
-    throw new Error(`Element not interactable (hidden/disabled/zero-size): ${selector}`)
+  const el = await waitForElement(selector, timeout, true)
+  if (!el) {
+    throw new Error(`Element not found or not interactable: ${selector}`)
   }
 
   // Use native value setter so React/Vue synthetic events fire correctly
@@ -77,9 +77,9 @@ async function fill(selector, value, timeout) {
 }
 
 async function click(selector, timeout) {
-  const el = await waitForElement(selector, timeout)
-  if (!isInteractable(el)) {
-    throw new Error(`Element not interactable (hidden/disabled/zero-size): ${selector}`)
+  const el = await waitForElement(selector, timeout, true)
+  if (!el) {
+    throw new Error(`Element not found or not interactable: ${selector}`)
   }
   el.scrollIntoView({ block: 'center', behavior: 'instant' })
   el.click()
@@ -87,8 +87,8 @@ async function click(selector, timeout) {
 }
 
 async function getText(selector, timeout) {
-  const el = await waitForElement(selector, timeout)
-  return { success: true, text: el.textContent?.trim() ?? '' }
+  const el = await waitForElement(selector, timeout, false)
+  return { success: true, text: el ? (el.textContent?.trim() ?? '') : '' }
 }
 
 async function keyPress(key) {
@@ -128,10 +128,19 @@ async function checkExists(selector, timeout) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function waitForElement(selector, timeout) {
+function waitForElement(selector, timeout, requireInteractable = false) {
   return new Promise((resolve, reject) => {
-    const el = document.querySelector(selector)
-    if (el) return resolve(el)
+    
+    function findMatch() {
+      const elements = document.querySelectorAll(selector)
+      for (const el of elements) {
+        if (!requireInteractable || isInteractable(el)) return el
+      }
+      return null
+    }
+
+    const initial = findMatch()
+    if (initial) return resolve(initial)
 
     let settled = false
     function done(result, err) {
@@ -144,7 +153,7 @@ function waitForElement(selector, timeout) {
     }
 
     const observer = new MutationObserver(() => {
-      const found = document.querySelector(selector)
+      const found = findMatch()
       if (found) {
         done(found, null)
       }
@@ -152,7 +161,7 @@ function waitForElement(selector, timeout) {
     
     observer.observe(document.body, { childList: true, subtree: true })
     const timer = setTimeout(
-      () => done(null, new Error(`Timeout: ${selector}`)),
+      () => done(null, new Error(`Timeout: ${selector} (requireInteractable: ${requireInteractable})`)),
       timeout
     )
   })
