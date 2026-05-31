@@ -288,7 +288,7 @@ async function runAutomation(payload) {
         'button[name="inInBasket"]'
       ]
       let cartSelector = badCarts.includes(SEL.add_to_cart) ? null : SEL.add_to_cart
-      cartSelector = cartSelector || 'button.add-to-cart, button[name="inInBasket"], input[name="inInBasket"], button[name*="basket" i], button[name*="cart" i], input[name*="basket" i], input[name*="cart" i], button[id*="basket" i], button[id*="cart" i], button[class*="basket" i], button[class*="cart" i], button[title*="warenkorb" i], button[title*="basket" i], button[type="submit"][name*="add"], input[type="submit"][name*="add"], input[type="submit"][value*="warenkorb" i], input[type="image"][src*="warenkorb" i]'
+      cartSelector = cartSelector || 'button.add-to-cart, button[name="inInBasket"], input[name="inInBasket"], button[name*="warenkorb" i], button[name*="basket" i], button[name*="cart" i], input[name*="basket" i], input[name*="cart" i], button[id*="basket" i], button[id*="cart" i], button[class*="basket" i], button[class*="cart" i], button[title*="warenkorb" i], button[title*="basket" i], button[type="submit"][name*="add"], input[type="submit"][name*="add"], input[type="submit"][value*="warenkorb" i], input[type="image"][src*="warenkorb" i]'
       
       await withHeal({
         supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,

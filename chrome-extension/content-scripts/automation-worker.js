@@ -81,6 +81,9 @@ async function click(selector, timeout) {
   if (!el) {
     throw new Error(`Element not found or not interactable: ${selector}`)
   }
+
+  console.log(`[worker] Clicking element for selector "${selector}":`, el.outerHTML)
+  
   el.scrollIntoView({ block: 'center', behavior: 'instant' })
   el.click()
   return { success: true }
