@@ -757,7 +757,11 @@ export const Products: React.FC = () => {
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        {Array.from(new Set(filteredProducts.map(p => p.supplierId || 'unsorted'))).map(supplierId => {
+                        {Array.from(new Set(filteredProducts.map(p => p.supplierId || 'unsorted'))).sort((a, b) => {
+                            const nameA = a === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === a)?.name || 'ZZZ_Unkategorisiert');
+                            const nameB = b === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === b)?.name || 'ZZZ_Unkategorisiert');
+                            return nameA.localeCompare(nameB);
+                        }).map(supplierId => {
                             const supProds = filteredProducts.filter(p => (p.supplierId || 'unsorted') === supplierId);
                             const isUnsorted = supplierId === 'unsorted';
                             const supplier = isUnsorted ? undefined : suppliers.find(s => s.id === supplierId);
@@ -999,20 +1003,12 @@ export const Products: React.FC = () => {
                                                                             <ShoppingCart size={15} /> Bestellen
                                                                         </button>
                                                                     </td>
-                                                                    <td style={{ textAlign: 'right', position: 'relative' }}>
-                                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                                                                            <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} className="btn btn-ghost btn-icon"><Edit2 size={15} /></button>
-                                                                            <button onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)} className="btn btn-ghost btn-icon"><Settings size={15} /></button>
+                                                                    <td style={{ textAlign: 'right' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                                                                            <button onClick={() => { const links = getIoTLink(product); if (links) { setShowIoTLink(links); } }} className="btn btn-ghost btn-icon" title="IoT Setup / QR"><Wifi size={15} /></button>
+                                                                            <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} className="btn btn-ghost btn-icon" title="Bearbeiten"><Edit2 size={15} /></button>
+                                                                            <button onClick={() => handleDeleteClick(product.id)} className="btn btn-ghost btn-icon" style={{ color: '#ef4444' }} title="Löschen"><Trash2 size={15} /></button>
                                                                         </div>
-                                                                        {openSettingsId === product.id && (
-                                                                            <>
-                                                                                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }} onClick={() => setOpenSettingsId(null)} />
-                                                                                <div style={{ position: 'absolute', right: '16px', ...(isLastRows ? { bottom: '100%', marginBottom: '8px' } : { top: '100%', marginTop: '8px' }), backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--color-border)', zIndex: 20, minWidth: '180px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                                                                                    <button onClick={() => { const links = getIoTLink(product); if (links) { setShowIoTLink(links); setOpenSettingsId(null); } }} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', borderBottom: '1px solid var(--color-border)', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'var(--color-text-main)', fontSize: '14px', fontWeight: 500 }}><Wifi size={16} /> IoT Setup / QR</button>
-                                                                                    <button onClick={() => handleDeleteClick(product.id)} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#ef4444', fontSize: '14px', fontWeight: 500 }}><Trash2 size={16} /> Produkt löschen</button>
-                                                                                </div>
-                                                                            </>
-                                                                        )}
                                                                     </td>
                                                                 </tr>
                                                             );

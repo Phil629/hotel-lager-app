@@ -262,18 +262,20 @@ export function useCheckout({
 
         const loginUrlFinal = creds?.login_url || supplierRow?.login_url || supplierRow?.url || ''
 
-        // IGNORE DB SELECTORS FOR NOW to fix broken DB state for Reinigungsberater
+        const dbSelectors = supplierRow?.selectors || {}
+
+        // Merge DB selectors with robust fallbacks
         const finalSelectors = {
-          login_navigate: 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
-          login_username: 'input[type="email"], input[name*="user"], input[name*="email"]',
-          login_password: 'input[type="password"]',
-          login_submit:   'button[type="submit"], input[type="submit"], button:contains("Anmelden"), button:contains("Login")',
-          search_box:     'input[type="search"], input[name*="search"], input[name*="suche"]',
-          search_submit:  '',
-          add_to_cart:    'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]',
-          product_qty:    'input[type="number"]',
-          cart_url:       '/cart',
-          price:          '.price'
+          login_navigate: dbSelectors.login_navigate || 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]',
+          login_username: dbSelectors.login_username || 'input[type="email"], input[name*="user"], input[name*="email"]',
+          login_password: dbSelectors.login_password || 'input[type="password"]',
+          login_submit:   dbSelectors.login_submit   || 'button[type="submit"], input[type="submit"], button:contains("Anmelden"), button:contains("Login")',
+          search_box:     dbSelectors.search_box     || 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]',
+          search_submit:  dbSelectors.search_submit  || '',
+          add_to_cart:    dbSelectors.add_to_cart    || 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]',
+          product_qty:    dbSelectors.product_qty    || 'input[type="number"]',
+          cart_url:       dbSelectors.cart_url       || '/cart',
+          price:          dbSelectors.price          || '.price'
         }
 
         // Initialize selectors in DB on first run so self-healing can persist improvements
