@@ -152,7 +152,16 @@ async function runAutomation(payload) {
 
       // Try direct product link first
       let usedSearch = false
-      if (item.url && item.url.startsWith('http')) {
+      
+      const isHomepage = (url) => {
+        if (!url) return false
+        try {
+          const u = new URL(url)
+          return u.pathname === '/' || u.pathname === ''
+        } catch { return false }
+      }
+
+      if (item.url && item.url.startsWith('http') && !isHomepage(item.url)) {
         await patch('searching', `Öffne Direktlink für ${item.product_name}...`, { items: updatedItems })
         await navigateAndReinject(supplierTabId, item.url, 10_000)
         await sleep(1000)
@@ -281,8 +290,10 @@ async function runAutomation(payload) {
               newUrl?.includes('anmeldung') || 
               newUrl?.includes('auth') || 
               newUrl?.includes('account')
+              
+            const isHome = isHomepage(newUrl)
 
-            if (newUrl && !looksLikeSearchPage && !looksLikeLoginPage && newUrl !== item.url) {
+            if (newUrl && !looksLikeSearchPage && !looksLikeLoginPage && !isHome && newUrl !== item.url) {
               await fetch(`${supabaseUrl}/rest/v1/products?id=eq.${item.product_id}`, {
                 method: 'PATCH',
                 headers: {
