@@ -319,6 +319,7 @@ async function runAutomation(payload) {
     await patch('price_check', 'Preise werden abgeglichen...')
 
     const hasWarning = updatedItems.some((i) => i.price_ok === false)
+    const hasError = updatedItems.some((i) => i.status === 'error')
     const allDeltas  = updatedItems.map((i) => Math.abs(i.price_delta_pct ?? 0)).filter((d) => d > 0)
     const maxDelta   = allDeltas.length > 0 ? Math.max(...allDeltas) : null
 
@@ -331,9 +332,12 @@ async function runAutomation(payload) {
         : new URL(SEL.cart_url, cartUrl).href
     }
 
-    const statusMsg = hasWarning
-      ? '[Warnung] Preisabweichung erkannt - bitte vor dem Bestellen pruefen!'
-      : '[OK] Warenkorb bereit - jetzt bestellen.'
+    let statusMsg = '[OK] Warenkorb bereit - jetzt bestellen.'
+    if (hasError) {
+      statusMsg = '[Fehler] Es konnten nicht alle Artikel hinzugefuegt werden!'
+    } else if (hasWarning) {
+      statusMsg = '[Warnung] Preisabweichung erkannt - bitte vor dem Bestellen pruefen!'
+    }
 
     await patch('ready', statusMsg, {
       cart_url:            cartUrl,
@@ -523,7 +527,8 @@ async function patchSession({ supabaseUrl, supabaseAnonKey, userJwt, sessionId, 
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-\n\n================================================================\nFILE: chrome-extension/content-scripts/automation-worker.js\n================================================================\n\n// content-scripts/automation-worker.js
+\n\n================================================================\nFILE: chrome-extension/content-scripts/automation-worker.js\n================================================================\n\n(() => {
+// content-scripts/automation-worker.js
 // Injected by the service worker into the supplier shop tab.
 // Executes individual DOM commands and replies via sendResponse.
 
@@ -673,7 +678,7 @@ function waitForElement(selector, timeout) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-\n\n================================================================\nFILE: src/hooks/useCheckout.ts\n================================================================\n\nimport { useState, useEffect, useRef, useCallback } from 'react'
+})();\n\n================================================================\nFILE: src/hooks/useCheckout.ts\n================================================================\n\nimport { useState, useEffect, useRef, useCallback } from 'react'
 import { getSupabaseClient } from '../services/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1200,7 +1205,7 @@ Antworte ausschließlich als JSON (kein Markdown, kein erklärender Text):
 
     // ── Call Gemini API ───────────────────────────────────────────────────────
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`
     const geminiBody = {
       contents: [{ parts: geminiParts }],
       generationConfig: {

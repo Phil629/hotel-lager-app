@@ -161,6 +161,8 @@ export const Suppliers: React.FC = () => {
                 customerNumber: formData.customerNumber,
                 paymentMethod: formData.paymentMethod,
                 defaultCategory: formData.defaultCategory || undefined,
+                emailSubjectTemplate: formData.emailSubjectTemplate,
+                emailBodyTemplate: formData.emailBodyTemplate,
             } as Supplier;
             
             payloadDebug = JSON.stringify(supplierToSave);
@@ -217,6 +219,30 @@ export const Suppliers: React.FC = () => {
         } catch (error) {
             console.error(error);
             setNotification({ message: 'Fehler beim Löschen.', type: 'error' });
+        }
+    };
+
+    const handleApplyEmailToAllProducts = async () => {
+        if (!editingSupplier) return;
+        setIsSubmitting(true);
+        try {
+            const supplierProducts = products.filter(p => p.supplierId === editingSupplier.id);
+            const updates = supplierProducts.map(p => {
+                return DataService.updateProduct({
+                    ...p,
+                    emailOrderAddress: formData.orderEmail || formData.email,
+                    emailOrderSubject: formData.emailSubjectTemplate,
+                    emailOrderBody: formData.emailBodyTemplate,
+                });
+            });
+            await Promise.all(updates);
+            setNotification({ message: 'E-Mail-Vorlage für alle zugewiesenen Produkte übernommen!', type: 'success' });
+            await loadData();
+        } catch (error) {
+            console.error(error);
+            setNotification({ message: 'Fehler beim Übernehmen der E-Mail-Vorlage.', type: 'error' });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -435,6 +461,43 @@ export const Suppliers: React.FC = () => {
                                                     <input type="radio" name="pom_supplier" value="phone" checked={formData.preferredOrderMethod === 'phone'} onChange={() => setFormData({ ...formData, preferredOrderMethod: 'phone' })} /> <Phone size={14}/> Telefon
                                                 </label>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Section: E-Mail Vorlage */}
+                                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                                        <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>E-Mail Bestellung - Vorlage</p>
+                                        {editingSupplier && (
+                                            <button 
+                                                type="button" 
+                                                onClick={handleApplyEmailToAllProducts}
+                                                className="btn btn-primary btn-sm"
+                                            >
+                                                Für alle Produkte übernehmen
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                        <div className="form-group">
+                                            <label className="form-label">Bestell-E-Mail (falls abweichend von Stammdaten)</label>
+                                            <input type="email" value={formData.orderEmail || ''} onChange={e => setFormData({ ...formData, orderEmail: e.target.value })} className="input-field" placeholder="bestellungen@lieferant.de" />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Betreff (Standard)</label>
+                                            <input type="text" value={formData.emailSubjectTemplate || ''} onChange={e => setFormData({ ...formData, emailSubjectTemplate: e.target.value })} className="input-field" placeholder="Bestellung" />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Nachrichtentext / Grundgerüst</label>
+                                            <textarea 
+                                                value={formData.emailBodyTemplate || ''} 
+                                                onChange={e => setFormData({ ...formData, emailBodyTemplate: e.target.value })} 
+                                                className="input-field" 
+                                                rows={5} 
+                                                placeholder="Sehr geehrte Damen und Herren,&#10;&#10;bitte liefern Sie:&#10;{PRODUKTE}&#10;&#10;Mit freundlichen Grüßen" 
+                                            />
+                                            <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>Tipp: Nutze den Platzhalter <strong style={{color: 'var(--color-primary)'}}>&#123;PRODUKTE&#125;</strong> in deinem Text, damit die Artikel aus dem Warenkorb automatisch dort eingefügt werden.</p>
                                         </div>
                                     </div>
                                 </div>
