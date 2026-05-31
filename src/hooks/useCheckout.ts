@@ -16,6 +16,7 @@ export interface CheckoutLineItem {
   price_actual:    number | null
   price_delta_pct: number | null
   price_ok:        boolean | null
+  url:             string | null
 }
 
 export interface CheckoutSession {
@@ -224,6 +225,7 @@ export function useCheckout({
           price_actual:    null,
           price_delta_pct: null,
           price_ok:        null,
+          url:             i.url ?? null,
         })),
         priceWarning:      false,
         priceDeviationPct: null,

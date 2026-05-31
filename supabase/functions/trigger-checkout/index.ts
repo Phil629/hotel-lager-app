@@ -28,6 +28,7 @@ export interface CheckoutItem {
   price_actual:    number | null
   price_delta_pct: number | null
   price_ok:        boolean | null
+  url:             string | null
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ serve(async (req) => {
     // 2. Parse & validate body
     const body: {
       supplier_id:        string
-      items:              Array<{ product_id?: string; product_name: string; quantity: number; unit?: string; price_expected?: number }>
+      items:              Array<{ product_id?: string; product_name: string; quantity: number; unit?: string; price_expected?: number; url?: string }>
       price_threshold_pct?: number
     } = await req.json()
 
@@ -126,6 +127,7 @@ serve(async (req) => {
       price_actual:    null,
       price_delta_pct: null,
       price_ok:        null,
+      url:             item.url ?? null,
     }))
 
     // 7. Create checkout_session row

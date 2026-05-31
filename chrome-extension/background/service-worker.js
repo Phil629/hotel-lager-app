@@ -200,10 +200,15 @@ async function runAutomation(payload) {
               ctx: 'search', command: 'FILL', selector: SEL.search_box, value: item.product_name,
             })
             if (SEL.search_submit) {
-              await withHeal({
-                supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-                ctx: 'search', command: 'CLICK', selector: SEL.search_submit,
-              })
+              try {
+                await withHeal({
+                  supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+                  ctx: 'search', command: 'CLICK', selector: SEL.search_submit,
+                })
+              } catch (btnErr) {
+                console.warn('[sw] Search button failed, falling back to Enter key:', btnErr.message)
+                await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+              }
             } else {
               await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
             }
