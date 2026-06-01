@@ -546,14 +546,28 @@ async function dismissCookieBanner(page: Page, logDojo: LogFn): Promise<Playbook
   ]).catch(() => {})
 
   // Layer 1: Statische CSS-Selektoren
-  for (const sel of allStaticSelectors) {
+  const foundSelector = await page.evaluate((selectors) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        return sel;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, allStaticSelectors);
+
+  if (foundSelector) {
     try {
-      const loc = page.locator(sel).first()
-      if (!(await safeIsVisible(loc, 1200))) continue
+      const loc = page.locator(foundSelector).first()
       await loc.click({ timeout: 3000 })
       await page.waitForTimeout(700)
-      logDojo("info", `🍪 Layer 1 (CSS): ${sel}`)
-      return { step: "click", selector: sel, timeout: 3000, optional: true }
+      logDojo("info", `🍪 Layer 1 (CSS): ${foundSelector}`)
+      return { step: "click", selector: foundSelector, timeout: 3000, optional: true }
     } catch { /* weiter */ }
   }
 
@@ -652,46 +666,59 @@ async function learnLoginFlow(
       ".account-link",
     ]
 
-    for (const sel of LOGIN_NAV_SELECTORS) {
+    const visibleLoginNav = await page.evaluate((selectors) => {
+      for (const sel of selectors) {
+        try {
+          const el = document.querySelector(sel);
+          if (!el) continue;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue;
+          return sel;
+        } catch { /* ungültiger Selektor */ }
+      }
+      return null;
+    }, LOGIN_NAV_SELECTORS)
+
+    if (visibleLoginNav) {
       try {
-        const loc = page.locator(sel).first()
-        if (!(await safeIsVisible(loc, 1500))) continue
+        const loc = page.locator(visibleLoginNav).first()
         const el = await loc.elementHandle()
-        if (!el) continue
+        if (el) {
+          const stableSel = await extractStableSelector(page, el) ?? visibleLoginNav
+          const urlBefore = page.url()
 
-        const stableSel = await extractStableSelector(page, el) ?? sel
-        const urlBefore = page.url()
+          await loc.click({ timeout: 5000 })
 
-        await loc.click({ timeout: 5000 })
+          // URL-Änderungs-Poll (max. 3s) — robuster als waitForNavigation bei SPAs
+          const deadline = Date.now() + 3000
+          let navigated = false
+          while (Date.now() < deadline) {
+            if (page.url() !== urlBefore) { navigated = true; break }
+            await page.waitForTimeout(200)
+          }
 
-        // URL-Änderungs-Poll (max. 3s) — robuster als waitForNavigation bei SPAs
-        const deadline = Date.now() + 3000
-        let navigated = false
-        while (Date.now() < deadline) {
-          if (page.url() !== urlBefore) { navigated = true; break }
-          await page.waitForTimeout(200)
-        }
+          if (navigated) {
+            await page.waitForLoadState("domcontentloaded", { timeout: 8000 }).catch(() => {})
+            await smartWaitForLoad(page)
+          } else {
+            await page.waitForTimeout(800)
+          }
 
-        if (navigated) {
-          await page.waitForLoadState("domcontentloaded", { timeout: 8000 }).catch(() => {})
-          await smartWaitForLoad(page)
-        } else {
-          await page.waitForTimeout(800)
-        }
+          await checkForCloudflare(page)
+          onLoginPage = await isLoginPage(page)
 
-        await checkForCloudflare(page)
-        onLoginPage = await isLoginPage(page)
-
-        if (onLoginPage) {
-          steps.push({ step: "click", selector: stableSel, timeout: CLICK_MS })
-          steps.push({ step: "wait_for_load", timeout: 10_000 })
-          logDojo("info", `🔑 Login-Navigation geklickt: ${stableSel}`)
-          console.log(`[learning] Login-Nav-Button: ${stableSel}`)
-          break
+          if (onLoginPage) {
+            steps.push({ step: "click", selector: stableSel, timeout: CLICK_MS })
+            steps.push({ step: "wait_for_load", timeout: 10_000 })
+            logDojo("info", `🔑 Login-Navigation geklickt: ${stableSel}`)
+            console.log(`[learning] Login-Nav-Button: ${stableSel}`)
+          }
         }
       } catch (err) {
         const msg = (err as Error).message?.substring(0, 80) ?? "unbekannt"
-        console.warn(`[login-nav] Selektor fehlgeschlagen (${sel}): ${msg}`)
+        console.warn(`[login-nav] Login-Nav-Button fehlgeschlagen: ${msg}`)
       }
     }
   }
@@ -735,14 +762,28 @@ async function learnLoginFlow(
   ]
 
   let usernameSelector: string | null = null
-  for (const sel of USERNAME_SELECTORS) {
-    const loc = formLoc.locator(sel).first()
-    if (!(await safeIsVisible(loc, 1500))) continue
+  const formSel = hasLoginForm ? 'form:has(input[type="password"])' : 'body'
+  const visibleUsernameSelector = await page.evaluate(({ selectors, formSelector }) => {
+    const container = document.querySelector(formSelector) || document.body;
+    for (const sel of selectors) {
+      try {
+        const el = container.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        return sel;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, { selectors: USERNAME_SELECTORS, formSelector: formSel })
+
+  if (visibleUsernameSelector) {
+    const loc = formLoc.locator(visibleUsernameSelector).first()
     const el = await loc.elementHandle()
-    if (!el) continue
-    usernameSelector = await extractStableSelector(page, el) ?? sel
-    logDojo("info", `📧 E-Mail/Benutzername-Feld: ${usernameSelector}`)
-    break
+    if (el) {
+      usernameSelector = await extractStableSelector(page, el) ?? visibleUsernameSelector
+      logDojo("info", `📧 E-Mail/Benutzername-Feld: ${usernameSelector}`)
+    }
   }
 
   // ── Submit-Button ─────────────────────────────────────────────────────────
@@ -759,14 +800,27 @@ async function learnLoginFlow(
   ]
 
   let submitSelector: string | null = null
-  for (const sel of SUBMIT_SELECTORS) {
-    const loc = formLoc.locator(sel).first()
-    if (!(await safeIsVisible(loc, 1500))) continue
+  const visibleSubmitSelector = await page.evaluate(({ selectors, formSelector }) => {
+    const container = document.querySelector(formSelector) || document.body;
+    for (const sel of selectors) {
+      try {
+        const el = container.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        return sel;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, { selectors: SUBMIT_SELECTORS, formSelector: formSel })
+
+  if (visibleSubmitSelector) {
+    const loc = formLoc.locator(visibleSubmitSelector).first()
     const el = await loc.elementHandle()
-    if (!el) continue
-    submitSelector = await extractStableSelector(page, el) ?? sel
-    logDojo("info", `🖱️ Submit-Button: ${submitSelector}`)
-    break
+    if (el) {
+      submitSelector = await extractStableSelector(page, el) ?? visibleSubmitSelector
+      logDojo("info", `🖱️ Submit-Button: ${submitSelector}`)
+    }
   }
 
   // ── Steps zusammenstellen ─────────────────────────────────────────────────
@@ -822,13 +876,27 @@ async function learnCartFlow(
   ]
 
   let searchSelector: string | null = null
-  for (const sel of SEARCH_SELECTORS) {
-    const loc = page.locator(sel).first()
-    if (!(await safeIsVisible(loc, 1500))) continue
+  const visibleSearchSelector = await page.evaluate((selectors) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        return sel;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, SEARCH_SELECTORS)
+
+  if (visibleSearchSelector) {
+    const loc = page.locator(visibleSearchSelector).first()
     const el = await loc.elementHandle()
-    if (!el) continue
-    searchSelector = await extractStableSelector(page, el) ?? sel
-    break
+    if (el) {
+      searchSelector = await extractStableSelector(page, el) ?? visibleSearchSelector
+    }
   }
 
   if (!searchSelector) {
@@ -864,13 +932,23 @@ async function learnCartFlow(
   ]
 
   let testProductUrl: string | null = null
-  for (const sel of PRODUCT_LINK_SELECTORS) {
-    const loc = page.locator(sel).first()
-    if (!(await safeIsVisible(loc, 1500))) continue
-    const href = await loc.getAttribute("href").catch(() => null) ?? ""
-    if (!href || href === "/" || href.startsWith("#")) continue
-    testProductUrl = href.startsWith("http") ? href : `https://${domain}${href}`
-    break
+  const visibleProductLink = await page.evaluate(({ selectors, domainStr }) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const href = el.getAttribute("href");
+        if (!href || href === "/" || href.startsWith("#")) continue;
+        return href.startsWith("http") ? href : `https://${domainStr}${href}`;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, { selectors: PRODUCT_LINK_SELECTORS, domainStr: domain })
+
+  if (visibleProductLink) {
+    testProductUrl = visibleProductLink
   }
 
   // Fallback: alle <a> mit produktartigem Pfad (max. 60 Links scannen)
@@ -925,15 +1003,29 @@ async function learnCartFlow(
   ]
 
   let qtySelector: string | null = null
-  for (const sel of QTY_SELECTORS) {
-    const loc = page.locator(sel).first()
-    if (!(await safeIsVisible(loc, 1500))) continue
+  const visibleQtySelector = await page.evaluate((selectors) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        return sel;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, QTY_SELECTORS)
+
+  if (visibleQtySelector) {
+    const loc = page.locator(visibleQtySelector).first()
     const el = await loc.elementHandle()
-    if (!el) continue
-    qtySelector = await extractStableSelector(page, el) ?? sel
-    await loc.fill("2")
-    await page.waitForTimeout(300)
-    break
+    if (el) {
+      qtySelector = await extractStableSelector(page, el) ?? visibleQtySelector
+      await loc.fill("2")
+      await page.waitForTimeout(300)
+    }
   }
 
   if (qtySelector) {
@@ -972,20 +1064,30 @@ async function learnCartFlow(
   ]
 
   let addCartSelector: string | null = null
-  for (const sel of ADD_CART_SELECTORS) {
-    const loc = page.locator(sel).first()
-    if (!(await safeIsVisible(loc, 1500))) continue
-    const el = await loc.elementHandle()
-    if (!el) continue
-    const elType = await el.getAttribute("type")
-    if (elType === "hidden") continue
-    const rect = await el.boundingBox()
-    if (!rect || rect.width === 0 || rect.height === 0) continue
+  const visibleAddCartSelector = await page.evaluate((selectors) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        if (el.getAttribute("type") === "hidden") continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        return sel;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, ADD_CART_SELECTORS)
 
-    addCartSelector = await extractStableSelector(page, el) ?? sel
-    await loc.click({ timeout: CLICK_MS })
-    await page.waitForTimeout(2500)
-    break
+  if (visibleAddCartSelector) {
+    const loc = page.locator(visibleAddCartSelector).first()
+    const el = await loc.elementHandle()
+    if (el) {
+      addCartSelector = await extractStableSelector(page, el) ?? visibleAddCartSelector
+      await loc.click({ timeout: CLICK_MS })
+      await page.waitForTimeout(2500)
+    }
   }
 
   if (!addCartSelector) {
@@ -1034,20 +1136,30 @@ async function learnCartFlow(
       await dismissCookieBanner(page, logDojo)
 
       // Nochmal versuchen, den Add-to-Cart-Button auf der neuen Produktseite zu scannen
-      for (const sel of ADD_CART_SELECTORS) {
-        const loc = page.locator(sel).first()
-        if (!(await safeIsVisible(loc, 1500))) continue
-        const el = await loc.elementHandle()
-        if (!el) continue
-        const elType = await el.getAttribute("type")
-        if (elType === "hidden") continue
-        const rect = await el.boundingBox()
-        if (!rect || rect.width === 0 || rect.height === 0) continue
+      const visibleAddCartSelectorFallback = await page.evaluate((selectors) => {
+        for (const sel of selectors) {
+          try {
+            const el = document.querySelector(sel);
+            if (!el) continue;
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+            if (el.getAttribute("type") === "hidden") continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) continue;
+            return sel;
+          } catch { /* ungültiger Selektor */ }
+        }
+        return null;
+      }, ADD_CART_SELECTORS)
 
-        addCartSelector = await extractStableSelector(page, el) ?? sel
-        await loc.click({ timeout: CLICK_MS })
-        await page.waitForTimeout(2500)
-        break
+      if (visibleAddCartSelectorFallback) {
+        const loc = page.locator(visibleAddCartSelectorFallback).first()
+        const el = await loc.elementHandle()
+        if (el) {
+          addCartSelector = await extractStableSelector(page, el) ?? visibleAddCartSelectorFallback
+          await loc.click({ timeout: CLICK_MS })
+          await page.waitForTimeout(2500)
+        }
       }
     }
   }
@@ -1107,15 +1219,29 @@ async function learnCartFlow(
   ]
 
   let cartIconSelector: string | null = null
-  for (const sel of CART_ICON_SELECTORS) {
-    const loc = page.locator(sel).first()
-    if (!(await safeIsVisible(loc, 1500))) continue
+  const visibleCartIconSelector = await page.evaluate((selectors) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        return sel;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, CART_ICON_SELECTORS)
+
+  if (visibleCartIconSelector) {
+    const loc = page.locator(visibleCartIconSelector).first()
     const el = await loc.elementHandle()
-    if (!el) continue
-    cartIconSelector = await extractStableSelector(page, el) ?? sel
-    await loc.click({ timeout: 5000 })
-    await page.waitForTimeout(1500)
-    break
+    if (el) {
+      cartIconSelector = await extractStableSelector(page, el) ?? visibleCartIconSelector
+      await loc.click({ timeout: 5000 })
+      await page.waitForTimeout(1500)
+    }
   }
 
   // Fallback: direkte URL-Navigation zur Warenkorb-Seite
@@ -1354,7 +1480,35 @@ async function findProceedToCheckoutButton(page: Page): Promise<string | null> {
     "button >> text=/checkout/i",
   ]
 
-  for (const sel of SELECTORS) {
+  const standardSelectors = SELECTORS.filter(s => !s.includes(">>"));
+  const textSelectors = SELECTORS.filter(s => s.includes(">>"));
+
+  const visibleStandard = await page.evaluate((selectors) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        return sel;
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, standardSelectors);
+
+  if (visibleStandard) {
+    try {
+      const loc = page.locator(visibleStandard).first()
+      const el = await loc.elementHandle()
+      return el ? (await extractStableSelector(page, el) ?? visibleStandard) : visibleStandard
+    } catch {
+      return visibleStandard
+    }
+  }
+
+  for (const sel of textSelectors) {
     try {
       const loc = page.locator(sel).first()
       if (!(await safeIsVisible(loc, 1000))) continue
@@ -1405,14 +1559,23 @@ async function getCartCount(page: Page): Promise<number | null> {
     ".header-cart .count",  ".cart-icon .badge",   ".mini-cart-count", ".minicart-qty",
   ]
 
-  for (const sel of SELECTORS) {
-    try {
-      const loc = page.locator(sel).first()
-      if (!(await safeIsVisible(loc, 800))) continue
-      const text = (await loc.textContent({ timeout: 1000 }) ?? "").trim()
-      const num  = parseInt(text, 10)
-      if (!isNaN(num)) return num
-    } catch { /* weiter */ }
+  const visibleCartCountSelector = await page.evaluate((selectors) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const text = (el.textContent || "").trim();
+        const num = parseInt(text, 10);
+        if (!isNaN(num)) return { selector: sel, count: num };
+      } catch { /* ungültiger Selektor */ }
+    }
+    return null;
+  }, SELECTORS)
+
+  if (visibleCartCountSelector) {
+    return visibleCartCountSelector.count;
   }
 
   return null
