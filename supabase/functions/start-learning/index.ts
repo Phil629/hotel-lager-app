@@ -703,6 +703,21 @@ async function learnLoginFlow(
 
   logDojo("info", "Login-Formular erkannt. Scanne Eingabefelder...")
 
+  // 1. Passwort-Feld zuerst finden und das übergeordnete Formular ermitteln
+  const pwdLoc = page.locator('input[type="password"]').first()
+  const passwordSelector = (await safeIsVisible(pwdLoc, 2000)) ? 'input[type="password"]' : null
+  if (passwordSelector) logDojo("info", "🔒 Passwort-Feld gefunden.")
+
+  let formLoc = page.locator('form:has(input[type="password"])').first()
+  let hasLoginForm = await safeIsVisible(formLoc, 1500)
+  
+  if (hasLoginForm) {
+    logDojo("info", "Semantische Gruppierung: Nutze das Passwort-Formular als Such-Scope.")
+  } else {
+    logDojo("info", "Kein übergeordnetes Formular gefunden. Weiche auf globalen Seiten-Scan aus.")
+    formLoc = page.locator('body')
+  }
+
   // ── Username-Feld ──────────────────────────────────────────────────────────
   const USERNAME_SELECTORS = [
     'input[type="email"]',
@@ -720,7 +735,7 @@ async function learnLoginFlow(
 
   let usernameSelector: string | null = null
   for (const sel of USERNAME_SELECTORS) {
-    const loc = page.locator(sel).first()
+    const loc = formLoc.locator(sel).first()
     if (!(await safeIsVisible(loc, 1500))) continue
     const el = await loc.elementHandle()
     if (!el) continue
@@ -728,11 +743,6 @@ async function learnLoginFlow(
     logDojo("info", `📧 E-Mail/Benutzername-Feld: ${usernameSelector}`)
     break
   }
-
-  // ── Passwort-Feld ─────────────────────────────────────────────────────────
-  const pwdLoc = page.locator('input[type="password"]').first()
-  const passwordSelector = (await safeIsVisible(pwdLoc, 1500)) ? 'input[type="password"]' : null
-  if (passwordSelector) logDojo("info", "🔒 Passwort-Feld gefunden.")
 
   // ── Submit-Button ─────────────────────────────────────────────────────────
   const SUBMIT_SELECTORS = [
@@ -749,7 +759,7 @@ async function learnLoginFlow(
 
   let submitSelector: string | null = null
   for (const sel of SUBMIT_SELECTORS) {
-    const loc = page.locator(sel).first()
+    const loc = formLoc.locator(sel).first()
     if (!(await safeIsVisible(loc, 1500))) continue
     const el = await loc.elementHandle()
     if (!el) continue
