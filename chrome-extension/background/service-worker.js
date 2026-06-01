@@ -76,7 +76,7 @@ async function runAutomation(payload) {
 
     await patch('logging_in', 'Browser-Tab wird geöffnet…')
 
-    const tab = await chrome.tabs.create({ url: loginUrl, active: true })
+    const tab = await chrome.tabs.create({ url: loginUrl, active: false })
     supplierTabId = tab.id
 
     await chrome.storage.session.set({
@@ -444,16 +444,8 @@ async function runAutomation(payload) {
       }
     }
 
-    // Immer: Tab in den Vordergrund holen
-    await chrome.tabs.update(supplierTabId, { active: true })
-    try {
-      const finalTab = await chrome.tabs.get(supplierTabId)
-      if (finalTab.windowId) {
-        await chrome.windows.update(finalTab.windowId, { focused: true })
-      }
-    } catch (e) {
-      console.warn('[sw] Could not focus window:', e)
-    }
+    // Der Tab bleibt im Hintergrund. Der User holt ihn erst durch Klick auf "Jetzt bestellen" 
+    // in der Web-App in den Vordergrund (via CHECKOUT_FOCUS Message).
 
     const finalTab = await chrome.tabs.get(supplierTabId)
     const cartUrl  = finalTab.url ?? loginUrl
