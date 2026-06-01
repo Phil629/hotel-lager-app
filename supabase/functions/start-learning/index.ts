@@ -11,6 +11,7 @@ import { serve }        from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
 import { chromium }     from "npm:playwright-core@1.44.0"
 import type { Page, Locator } from "npm:playwright-core@1.44.0"
+import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 
 // ── Env ───────────────────────────────────────────────────────────────────────
 
@@ -990,13 +991,10 @@ async function learnCartFlow(
   if (!addCartSelector) {
     logDojo("info", "Womöglich auf einer Kategorieseite gelandet. Suche nach direkten B2B-Produkt-Links...")
     
-    let fallbackDetailUrl: string | null = null
-    const allLinks = await page.locator("a[href]").all()
-    
-    // Scanne die ersten 100 Links der Seite nach Produkt-Mustern
-    for (const link of allLinks.slice(0, 100)) {
-      try {
-        const href = await link.getAttribute("href") ?? ""
+    const fallbackDetailUrl = await page.evaluate((domainStr: string) => {
+      const allLinks = Array.from(document.querySelectorAll("a[href]"))
+      for (const link of allLinks.slice(0, 100)) {
+        const href = link.getAttribute("href")
         if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue
         
         const path = href.toLowerCase()
@@ -1011,7 +1009,7 @@ async function learnCartFlow(
           /\/a-[a-z0-9]+/i.test(href) ||
           // PrestaShop
           /-\d+\.html$/i.test(href) ||
-          // Shopware 6 (UUID check: matches 32-char hex string)
+          // Shopware 6 (UUID check)
           /[a-f0-9]{32}/i.test(href)
           
         const isNotNavigation =
@@ -1021,11 +1019,11 @@ async function learnCartFlow(
           !path.includes("account") && !path.includes("login")
 
         if (isProductPattern && isNotNavigation) {
-          fallbackDetailUrl = href.startsWith("http") ? href : `https://${domain}${href}`
-          break
+          return href.startsWith("http") ? href : `https://${domainStr}${href}`
         }
-      } catch { /* weiter */ }
-    }
+      }
+      return null
+    }, domain)
     
     if (fallbackDetailUrl) {
       logDojo("info", `🔄 Fallback: Kategorieseite erkannt. Navigiere zu echtem Produkt: ${fallbackDetailUrl}`)
@@ -1507,13 +1505,7 @@ async function aiHealSelector(
     const screenshot = await page.screenshot({ type: "png" }).catch(() => null)
     let screenshotBase64 = ""
     if (screenshot) {
-      // Deno/Web Standard safe Base64 encoding
-      const uint8 = new Uint8Array(screenshot)
-      let bin = ""
-      for (let i = 0; i < uint8.length; i++) {
-        bin += String.fromCharCode(uint8[i])
-      }
-      screenshotBase64 = btoa(bin)
+      screenshotBase64 = encodeBase64(screenshot)
     }
     
     const htmlSnippet = await page.content().catch(() => "")
