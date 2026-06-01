@@ -940,9 +940,9 @@ async function dismissCookieBanner(page: Page): Promise<PlaybookStep | null> {
   // 1. Statische CSS-Selektoren prüfen
   for (const sel of [...COOKIE_SELECTORS_DECLINE, ...COOKIE_SELECTORS_ACCEPT]) {
     try {
-      const el = await page.$(sel)
-      if (!el || !(await el.isVisible())) continue
-      await el.click({ timeout: 3000 })
+      const loc = page.locator(sel)
+      if (!(await loc.isVisible())) continue
+      await loc.click({ timeout: 3000 })
       await page.waitForTimeout(700)
       console.log(`[learning] Cookie-Banner: ${sel}`)
       return { step: "click", selector: sel, timeout: 3000 }
