@@ -992,15 +992,18 @@ async function dismissCookieBanner(page: Page): Promise<PlaybookStep | null> {
     })
 
     if (clickedSelector) {
-      await page.waitForTimeout(1000)
-      console.log(`[learning] Cookie-Banner per dynamischer In-Browser-Textsuche gelöst: ${clickedSelector}`)
-      
-      // Für das Playbook übersetzen wir text="..." in einen Playwright-kompatiblen Text-Selector
+      // Für das Playbook und den Klick übersetzen wir text="..." in einen Playwright-kompatiblen Text-Selector
       let playbookSelector = clickedSelector
       if (clickedSelector.startsWith('text=')) {
         const textVal = clickedSelector.substring(5).replace(/"/g, '')
         playbookSelector = `button >> text="${textVal}"`
       }
+
+      // Vertrauenswürdigen Playwright-Klick ausführen!
+      await page.click(playbookSelector, { timeout: 4000 })
+      await page.waitForTimeout(1200) // Warten, bis das Overlay ausblendet
+
+      console.log(`[learning] Cookie-Banner per dynamischer In-Browser-Textsuche erfolgreich gelöst: ${playbookSelector}`)
       return { step: "click", selector: playbookSelector, timeout: 3000 }
     }
   } catch (err) {
