@@ -1100,7 +1100,7 @@ async function createBrowserbaseSession(
     body.proxies = true
   }
 
-  const res = await fetch("https://api.browserbase.com/v1/sessions", {
+  let res = await fetch("https://api.browserbase.com/v1/sessions", {
     method:  "POST",
     headers: {
       "Content-Type": "application/json",
@@ -1108,6 +1108,20 @@ async function createBrowserbaseSession(
     },
     body: JSON.stringify(body),
   })
+
+  // Wenn Residential Proxies nicht im Plan enthalten sind (HTTP 402), fallback auf Standard-Verbindung (ohne proxies: true)
+  if (res.status === 402 && body.proxies) {
+    console.warn("[browserbase] Residential Proxies nicht im Plan enthalten (402). Fallback auf Standard-Verbindung...");
+    delete body.proxies;
+    res = await fetch("https://api.browserbase.com/v1/sessions", {
+      method:  "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-bb-api-key": BROWSERBASE_API_KEY,
+      },
+      body: JSON.stringify(body),
+    })
+  }
 
   if (!res.ok) {
     const text = await res.text()
