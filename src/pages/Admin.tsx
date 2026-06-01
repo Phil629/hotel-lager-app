@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import {
     Users, Ticket, CheckCircle, ShieldAlert, Ban, TrendingUp, UserCheck,
-    AlertTriangle, Activity, RefreshCw, Edit2, Info, AlertCircle, Zap,
+    AlertTriangle, Activity, RefreshCw, Edit2, Info, AlertCircle, Zap, Terminal,
 } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 
@@ -36,6 +36,7 @@ interface ShopPlaybook {
     playbook_version: number;
     last_learning_run: string | null;
     learning_error: string | null;
+    learning_logs: LogEntry[];
     updated_at: string;
     // Aggregiert aus suppliers
     total_complaints: number;
@@ -56,6 +57,17 @@ interface EditModalState {
 interface ErrorModalState {
     domain: string;
     error: string;
+}
+
+interface LogEntry {
+    timestamp: string;
+    level: string;
+    message: string;
+}
+
+interface LiveTerminalData {
+    status: string;
+    logs: LogEntry[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -88,10 +100,44 @@ export const Admin = () => {
     const [confirm, setConfirm]     = useState<ConfirmState | null>(null);
     const [editModal, setEditModal] = useState<EditModalState | null>(null);
     const [errorModal, setErrorModal] = useState<ErrorModalState | null>(null);
+    const [terminalDomain, setTerminalDomain] = useState<string | null>(null);
+    const [liveTerminalData, setLiveTerminalData] = useState<LiveTerminalData | null>(null);
+    const terminalScrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         fetchAdminData();
     }, [activeTab]);
+
+    // ── Live-Terminal: Realtime-Subscription auf shop_playbooks ──────────────
+    useEffect(() => {
+        if (!terminalDomain || !supabase) {
+            setLiveTerminalData(null);
+            return;
+        }
+        const client = supabase;
+        const channel = client
+            .channel(`dojo-terminal-${terminalDomain}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'shop_playbooks',
+                filter: `domain=eq.${terminalDomain}`,
+            }, (payload: any) => {
+                setLiveTerminalData({
+                    status: payload.new.automation_status,
+                    logs: (payload.new.learning_logs || []) as LogEntry[],
+                });
+            })
+            .subscribe();
+        return () => { void client.removeChannel(channel); };
+    }, [terminalDomain]);
+
+    // ── Auto-Scroll: immer zur neuesten Log-Zeile scrollen ──────────────────
+    useEffect(() => {
+        if (terminalScrollRef.current) {
+            terminalScrollRef.current.scrollTop = terminalScrollRef.current.scrollHeight;
+        }
+    }, [liveTerminalData?.logs.length]);
 
     const fetchAdminData = async () => {
         if (!supabase) return;
@@ -325,6 +371,46 @@ export const Admin = () => {
         });
     };
 
+    const openTerminal = (shop: ShopPlaybook) => {
+        setLiveTerminalData({
+            status: shop.automation_status,
+            logs: shop.learning_logs || [],
+        });
+        setTerminalDomain(shop.domain);
+    };
+
+    // ── Terminal-Helpers ──────────────────────────────────────────────────────
+
+    const getTerminalPhase = (status: string, logs: LogEntry[]): number => {
+        if (status === 'verified') return 4;
+        if (logs.some(l => l.level === 'dry_run')) return 3;
+        if (status === 'learning_cart') return 2;
+        if (status === 'learning_auth') return 1;
+        return 0;
+    };
+
+    const getLogColor = (level: string): string => {
+        switch (level) {
+            case 'success': return '#4ade80';
+            case 'error':   return '#f87171';
+            case 'warning': return '#fbbf24';
+            case 'dry_run': return '#c084fc';
+            case 'info':    return '#60a5fa';
+            default:        return '#94a3b8';
+        }
+    };
+
+    const getLogLevelLabel = (level: string): string => {
+        switch (level) {
+            case 'success': return 'OK';
+            case 'error':   return 'ERR';
+            case 'warning': return 'WARN';
+            case 'dry_run': return 'DRY';
+            case 'info':    return 'INFO';
+            default:        return level.toUpperCase().substring(0, 4);
+        }
+    };
+
     // ── Shops metrics ─────────────────────────────────────────────────────────
 
     const learningShops  = shops.filter(s => s.automation_status === 'learning_auth' || s.automation_status === 'learning_cart');
@@ -335,6 +421,12 @@ export const Admin = () => {
 
     return (
         <div style={{ paddingBottom: '40px' }}>
+            <style>{`
+                @keyframes dojo-pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+                @keyframes dojo-blink { 0%,49%{opacity:1;} 50%,100%{opacity:0;} }
+                @keyframes dojo-spin  { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+            `}</style>
+
             {notification && (
                 <Notification
                     message={notification.message}
@@ -437,6 +529,202 @@ export const Admin = () => {
                             <button className="btn btn-ghost" onClick={() => setErrorModal(null)}>Schließen</button>
                             <button className="btn btn-primary" onClick={() => { setErrorModal(null); triggerLearning(errorModal.domain); }}>
                                 <RefreshCw size={16} /> Neu lernen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Live-Terminal Modal ──────────────────────────────────────── */}
+            {terminalDomain && (
+                <div
+                    onClick={() => setTerminalDomain(null)}
+                    style={{
+                        position: 'fixed', inset: 0,
+                        background: 'rgba(0,0,0,0.88)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        zIndex: 1000,
+                    }}
+                >
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            width: 'min(780px, 95vw)',
+                            maxHeight: '85vh',
+                            display: 'flex', flexDirection: 'column',
+                            background: '#0f172a',
+                            border: '1px solid rgba(148,163,184,0.12)',
+                            borderRadius: '12px',
+                            boxShadow: '0 25px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(148,163,184,0.05)',
+                            overflow: 'hidden',
+                        }}
+                    >
+                        {/* Terminal Header */}
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 18px',
+                            background: '#1e293b',
+                            borderBottom: '1px solid rgba(148,163,184,0.1)',
+                            flexShrink: 0,
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {/* macOS-style window dots */}
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ef4444' }} />
+                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#f59e0b' }} />
+                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#22c55e' }} />
+                                </div>
+                                <span style={{ color: '#94a3b8', fontSize: '11px', fontFamily: 'monospace', marginLeft: '6px' }}>
+                                    DOJO TERMINAL
+                                </span>
+                                <span style={{
+                                    color: '#e2e8f0', fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                                    background: 'rgba(148,163,184,0.1)', padding: '2px 8px', borderRadius: '4px',
+                                }}>
+                                    {terminalDomain}
+                                </span>
+                                {liveTerminalData && ['learning_auth','learning_cart'].includes(liveTerminalData.status) && (
+                                    <span style={{
+                                        width: 7, height: 7, borderRadius: '50%',
+                                        background: '#f59e0b', display: 'inline-block',
+                                        animation: 'dojo-pulse 1.2s ease-in-out infinite',
+                                    }} />
+                                )}
+                            </div>
+                            <button
+                                onClick={() => setTerminalDomain(null)}
+                                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px', lineHeight: 1, fontSize: '16px' }}
+                            >✕</button>
+                        </div>
+
+                        {/* Progress Stepper */}
+                        {(() => {
+                            const currentPhase = getTerminalPhase(
+                                liveTerminalData?.status ?? '',
+                                liveTerminalData?.logs ?? [],
+                            );
+                            const isFailed = liveTerminalData?.status === 'failed';
+                            const steps = [
+                                { label: 'Phase 1', sub: 'Login' },
+                                { label: 'Phase 2', sub: 'Warenkorb' },
+                                { label: 'Dry-Run', sub: 'Testen' },
+                                { label: 'Verifiziert', sub: 'Fertig' },
+                            ];
+                            return (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    padding: '14px 24px', gap: 0,
+                                    background: 'rgba(15,23,42,0.9)',
+                                    borderBottom: '1px solid rgba(148,163,184,0.08)',
+                                    flexShrink: 0,
+                                }}>
+                                    {steps.map((s, i) => {
+                                        const stepNum = i + 1;
+                                        const isDone   = currentPhase > stepNum || (!isFailed && currentPhase === 4 && stepNum <= 4);
+                                        const isActive = currentPhase === stepNum && liveTerminalData?.status !== 'verified';
+                                        const hasFailed = isFailed && currentPhase === stepNum;
+                                        const dotColor = hasFailed ? '#f87171' : isDone ? '#4ade80' : isActive ? '#f59e0b' : '#334155';
+                                        const textColor = isDone || isActive ? '#e2e8f0' : '#475569';
+                                        return (
+                                            <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', minWidth: '72px' }}>
+                                                    <div style={{
+                                                        width: 28, height: 28, borderRadius: '50%',
+                                                        background: dotColor,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        fontSize: '11px', fontWeight: 700, color: '#0f172a',
+                                                        animation: isActive ? 'dojo-pulse 1.5s ease-in-out infinite' : 'none',
+                                                        transition: 'background 0.4s',
+                                                    }}>
+                                                        {hasFailed ? '✕' : isDone ? '✓' : stepNum}
+                                                    </div>
+                                                    <div style={{ fontSize: '10px', fontWeight: 600, color: textColor, whiteSpace: 'nowrap' }}>{s.label}</div>
+                                                    <div style={{ fontSize: '9px', color: '#334155', whiteSpace: 'nowrap' }}>{s.sub}</div>
+                                                </div>
+                                                {i < steps.length - 1 && (
+                                                    <div style={{
+                                                        height: 2, width: 32, marginBottom: 18,
+                                                        background: currentPhase > stepNum ? '#4ade80' : 'rgba(148,163,184,0.15)',
+                                                        transition: 'background 0.4s',
+                                                    }} />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+
+                        {/* Log Area */}
+                        <div
+                            ref={terminalScrollRef}
+                            style={{
+                                flex: 1,
+                                overflowY: 'auto',
+                                padding: '12px 18px 16px',
+                                fontFamily: "'Courier New', Courier, monospace",
+                                fontSize: '12px',
+                                lineHeight: 1.7,
+                                minHeight: '260px',
+                            }}
+                        >
+                            {(!liveTerminalData || liveTerminalData.logs.length === 0) ? (
+                                <div style={{ color: '#475569', fontSize: '12px', padding: '20px 0' }}>
+                                    {liveTerminalData ? 'Noch keine Log-Einträge für diesen Lernlauf.' : 'Lade Logs...'}
+                                </div>
+                            ) : liveTerminalData.logs.map((log, i) => {
+                                const color = getLogColor(log.level);
+                                const t = new Date(log.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                return (
+                                    <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '1px' }}>
+                                        <span style={{ color: '#334155', flexShrink: 0, userSelect: 'none' }}>{t}</span>
+                                        <span style={{
+                                            color, fontWeight: 700, flexShrink: 0, minWidth: '36px',
+                                            fontSize: '10px', letterSpacing: '0.05em', marginTop: '1px',
+                                        }}>
+                                            {getLogLevelLabel(log.level)}
+                                        </span>
+                                        <span style={{ color: log.level === 'error' ? '#fca5a5' : log.level === 'success' ? '#86efac' : '#cbd5e1', wordBreak: 'break-word' }}>
+                                            {log.message}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                            {/* Blinking cursor when active */}
+                            {liveTerminalData && ['learning_auth','learning_cart'].includes(liveTerminalData.status) && (
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '2px' }}>
+                                    <span style={{ color: '#334155', userSelect: 'none', visibility: 'hidden' }}>00:00:00</span>
+                                    <span style={{ color: '#4ade80', animation: 'dojo-blink 1s step-end infinite', fontWeight: 700 }}>▌</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{
+                            display: 'flex', justifyContent: 'flex-end', gap: '8px',
+                            padding: '10px 18px',
+                            background: 'rgba(30,41,59,0.6)',
+                            borderTop: '1px solid rgba(148,163,184,0.08)',
+                            flexShrink: 0,
+                        }}>
+                            {liveTerminalData?.status === 'failed' && (
+                                <button
+                                    className="btn btn-primary"
+                                    style={{ padding: '7px 14px', fontSize: '12px' }}
+                                    onClick={() => { setTerminalDomain(null); triggerLearning(terminalDomain); }}
+                                >
+                                    <RefreshCw size={13} /> Neu lernen
+                                </button>
+                            )}
+                            <button
+                                style={{
+                                    background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.15)',
+                                    color: '#94a3b8', borderRadius: '6px', padding: '7px 14px',
+                                    cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                                }}
+                                onClick={() => setTerminalDomain(null)}
+                            >
+                                Schließen
                             </button>
                         </div>
                     </div>
@@ -674,6 +962,13 @@ export const Admin = () => {
                                                             style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}
                                                         >
                                                             <RefreshCw size={14} />
+                                                        </button>
+                                                        <button
+                                                            title="Live-Terminal öffnen"
+                                                            onClick={() => openTerminal(shop)}
+                                                            style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}
+                                                        >
+                                                            <Terminal size={14} />
                                                         </button>
                                                         <button
                                                             title="Playbook bearbeiten"

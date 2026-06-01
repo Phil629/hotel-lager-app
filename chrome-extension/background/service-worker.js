@@ -607,7 +607,16 @@ function domAction(tabId, message) {
   })
 }
 
-function waitForTabLoad(tabId, timeout = 20_000) {
+async function waitForTabLoad(tabId, timeout = 20_000) {
+  // Fast-path: Wenn der Tab bereits geladen ist, können wir die Event-Listener überspringen
+  try {
+    const current = await chrome.tabs.get(tabId)
+    if (current && current.status === 'complete') {
+      await new Promise(r => setTimeout(r, 400))
+      return
+    }
+  } catch {}
+
   return new Promise((resolve) => {
     let settled = false
 
@@ -632,13 +641,14 @@ function waitForTabLoad(tabId, timeout = 20_000) {
 
 async function isAuthWall(tabId) {
   const currentTab = await chrome.tabs.get(tabId)
-  const currentUrl = currentTab.url ?? ''
+  let pathname = ''
+  try { pathname = new URL(currentTab.url ?? '').pathname } catch {}
   
   const titleRes = await domAction(tabId, { command: 'GET_TEXT', selector: 'title', timeout: 2000 })
   const currentTitle = (titleRes.text ?? '').toLowerCase()
   
-  const loginKeywords = /(login|signin|anmelden|anmeldung|auth|konto|account|kundenbereich|customer)/i
-  const looksLikeLogin = loginKeywords.test(currentUrl) || loginKeywords.test(currentTitle)
+  const loginKeywords = /(login|signin|anmelden|anmeldung|auth|kundenbereich)/i
+  const looksLikeLogin = loginKeywords.test(pathname) || loginKeywords.test(currentTitle)
 
   if (!looksLikeLogin) return false
 

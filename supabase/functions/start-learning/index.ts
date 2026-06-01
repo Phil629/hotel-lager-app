@@ -163,14 +163,22 @@ serve(async (req) => {
       return respond({ error: "DB-Fehler: " + upsertErr.message }, 500)
     }
 
-    // ── 4. Lernprozess asynchron im Hintergrund starten ──────────────────────
+    // ── 4. Lernprozess asynchron im Hintergrund starten mit globalem 140s Timeout ──────────────────────
     // Die HTTP-Antwort wird sofort gesendet. EdgeRuntime.waitUntil hält den
     // Prozess am Leben bis der Lernlauf abgeschlossen (oder timeout) ist.
     EdgeRuntime.waitUntil(
-      runLearningPipeline(domain, test_product, adminClient)
-        .catch((err) => {
-          console.error("[start-learning] Unhandled pipeline error:", err)
-        })
+      Promise.race([
+        runLearningPipeline(domain, test_product, adminClient),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("Pipeline global timeout (140s)")), 140_000)
+        ),
+      ]).catch(async (err) => {
+        console.error("[start-learning] Pipeline abgebrochen:", err.message)
+        await adminClient.from("shop_playbooks").update({
+          automation_status: "failed",
+          learning_error:    err.message,
+        }).eq("domain", domain)
+      })
     )
 
     return respond({
@@ -206,18 +214,29 @@ async function runLearningPipeline(
   }
 
   // ── Logging-Infrastruktur ─────────────────────────────────────────────────
-  // Jeder logDojo-Aufruf schreibt fire-and-forget alle akkumulierten Logs in die DB.
+  // Jeder logDojo-Aufruf schreibt über eine serialisierte Queue alle Logs in die DB.
   // Das Admin-Terminal abonniert diese Updates via Supabase Realtime.
   const runLogs: Array<{ timestamp: string; level: string; message: string }> = []
+  let logWritePending = false
+  let logWriteQueued  = false
+
+  const flushLogs = async () => {
+    if (logWritePending) { logWriteQueued = true; return }
+    logWritePending = true
+    const snap = [...runLogs]
+    await adminClient
+      .from("shop_playbooks")
+      .update({ learning_logs: snap })
+      .eq("domain", domain)
+      .then(({ error }) => { if (error) console.warn("[logDojo] DB-Fehler:", error.message) })
+    logWritePending = false
+    if (logWriteQueued) { logWriteQueued = false; void flushLogs() }
+  }
 
   const logDojo: LogFn = (level, message) => {
     runLogs.push({ timestamp: new Date().toISOString(), level, message })
     console.log(`[dojo:${level}] ${message}`)
-    void adminClient
-      .from("shop_playbooks")
-      .update({ learning_logs: [...runLogs] })
-      .eq("domain", domain)
-      .then(({ error }) => { if (error) console.warn("[logDojo] DB-Fehler:", error.message) })
+    void flushLogs()
   }
 
   let currentSessionId: string | null = null
@@ -516,19 +535,28 @@ async function learnLoginFlow(
 
   let usernameSelector: string | null = null
   for (const sel of USERNAME_SELECTORS) {
-    const el = await page.$(sel)
-    if (el && await el.isVisible()) {
-      usernameSelector = await extractStableSelector(page, el) ?? sel
-      logDojo("info", `E-Mail/Benutzername-Feld gefunden: ${usernameSelector}`)
-      break
+    const loc = page.locator(sel).first()
+    if (await loc.isVisible().catch(() => false)) {
+      const el = await loc.elementHandle()
+      if (el) {
+        usernameSelector = await extractStableSelector(page, el) ?? sel
+        logDojo("info", `E-Mail/Benutzername-Feld gefunden: ${usernameSelector}`)
+        break
+      }
     }
   }
 
   // ── Passwort-Feld ─────────────────────────────────────────────────────────
   // type="password" ist kanonisch — kein Fallback nötig
-  const pwdEl = await page.$('input[type="password"]')
-  const passwordSelector = (pwdEl && await pwdEl.isVisible()) ? 'input[type="password"]' : null
-  if (passwordSelector) logDojo("info", "Passwort-Feld gefunden.")
+  const pwdLoc = page.locator('input[type="password"]').first()
+  let passwordSelector: string | null = null
+  if (await pwdLoc.isVisible().catch(() => false)) {
+    const pwdEl = await pwdLoc.elementHandle()
+    if (pwdEl) {
+      passwordSelector = 'input[type="password"]'
+      logDojo("info", "Passwort-Feld gefunden.")
+    }
+  }
 
   // ── Submit-Button ─────────────────────────────────────────────────────────
   const SUBMIT_SELECTORS = [
@@ -545,11 +573,14 @@ async function learnLoginFlow(
 
   let submitSelector: string | null = null
   for (const sel of SUBMIT_SELECTORS) {
-    const el = await page.$(sel)
-    if (el && await el.isVisible()) {
-      submitSelector = await extractStableSelector(page, el) ?? sel
-      logDojo("info", `Login-Button gefunden: ${submitSelector}`)
-      break
+    const loc = page.locator(sel).first()
+    if (await loc.isVisible().catch(() => false)) {
+      const el = await loc.elementHandle()
+      if (el) {
+        submitSelector = await extractStableSelector(page, el) ?? sel
+        logDojo("info", `Login-Button gefunden: ${submitSelector}`)
+        break
+      }
     }
   }
 
@@ -1034,7 +1065,11 @@ async function executeStep(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function dismissCookieBanner(page: Page): Promise<PlaybookStep | null> {
-  await page.waitForTimeout(600)
+  // Warten bis entweder ein bekannter Selektor erscheint ODER 2.5s vergehen:
+  await Promise.race([
+    page.waitForSelector([...COOKIE_SELECTORS_DECLINE, ...COOKIE_SELECTORS_ACCEPT].join(','), { timeout: 2500 }),
+    page.waitForTimeout(2500),
+  ]).catch(() => {})
 
   // 1. Statische CSS-Selektoren prüfen
   for (const sel of [...COOKIE_SELECTORS_DECLINE, ...COOKIE_SELECTORS_ACCEPT]) {
@@ -1045,6 +1080,25 @@ async function dismissCookieBanner(page: Page): Promise<PlaybookStep | null> {
       await page.waitForTimeout(700)
       console.log(`[learning] Cookie-Banner: ${sel}`)
       return { step: "click", selector: sel, timeout: 3000 }
+    } catch { /* weiter */ }
+  }
+
+  // 1b. Shadow DOM Deep-Piercing Scanner (durchdringt Shadow Roots bei Shopware/Usercentrics etc.)
+  const COOKIE_TEXT_PATTERNS = /alle akzeptieren|alle zulassen|nur notwendige cookies akzeptieren|nur notwendige akzeptieren|cookies akzeptieren|notwendige cookies|zustimmen|accept all|allow all/i
+  const deepCandidates = [
+    page.locator('pierce/button').filter({ hasText: COOKIE_TEXT_PATTERNS }),
+    page.locator('pierce/a').filter({ hasText: COOKIE_TEXT_PATTERNS }),
+  ]
+  for (const loc of deepCandidates) {
+    try {
+      if (await loc.first().isVisible({ timeout: 1500 })) {
+        const el = await loc.first().elementHandle()
+        const sel = el ? (await extractStableSelector(page, el) ?? 'pierce/button') : 'pierce/button'
+        await loc.first().click({ timeout: 3000 })
+        await page.waitForTimeout(700)
+        console.log(`[learning] Shadow DOM Cookie-Banner gelöst: ${sel}`)
+        return { step: "click", selector: sel, timeout: 3000 }
+      }
     } catch { /* weiter */ }
   }
 
@@ -1216,8 +1270,10 @@ async function extractStableSelector(page: Page, el: unknown): Promise<string | 
 
       // 6. input type (canonical für Formfelder)
       if (tag === "input") {
-        const t = (element as HTMLInputElement).type
-        if (t && t !== "text") return `input[type="${t}"]`
+        const t = (element as HTMLInputElement).type || "text"
+        if (t === "search" || t === "email" || t === "password" || t === "number") {
+          return `input[type="${t}"]`
+        }
       }
 
       // 7. Gefilterte Klassen (ohne Hash- und Framework-Klassen)
