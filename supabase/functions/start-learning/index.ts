@@ -831,6 +831,10 @@ async function learnCartFlow(
   }
 
   if (!searchSelector) {
+    searchSelector = await aiHealSelector(page, "search", SEARCH_SELECTORS.join(", "), logDojo)
+  }
+
+  if (!searchSelector) {
     throw new Error(`Kein Suchfeld auf ${domain} gefunden — Cart-Flow kann nicht gelernt werden.`)
   }
 
@@ -1051,6 +1055,14 @@ async function learnCartFlow(
   }
 
   if (!addCartSelector) {
+    addCartSelector = await aiHealSelector(page, "add_to_cart", ADD_CART_SELECTORS.join(", "), logDojo)
+    if (addCartSelector) {
+      await page.click(addCartSelector, { timeout: CLICK_MS })
+      await page.waitForTimeout(2500)
+    }
+  }
+
+  if (!addCartSelector) {
     throw new Error(
       `Kein "In den Warenkorb"-Button auf ${testProductUrl} gefunden. ` +
       "Möglicherweise Login-Schutz oder unbekanntes Shop-Layout."
@@ -1122,6 +1134,14 @@ async function learnCartFlow(
           break
         }
       } catch { /* weiter */ }
+    }
+  }
+
+  if (!cartIconSelector) {
+    cartIconSelector = await aiHealSelector(page, "go_to_checkout", CART_ICON_SELECTORS.join(", "), logDojo)
+    if (cartIconSelector) {
+      await page.click(cartIconSelector, { timeout: 5000 })
+      await page.waitForTimeout(1500)
     }
   }
 
@@ -1469,6 +1489,111 @@ async function extractStableSelector(page: Page, el: unknown): Promise<string | 
     return null
   }
 }
+
+async function aiHealSelector(
+  page: Page,
+  context: string,
+  failedSelector: string,
+  logDojo: LogFn
+): Promise<string | null> {
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")
+  if (!GEMINI_API_KEY) {
+    logDojo("warning", "🤖 Dojo AI-Healing übersprungen: GEMINI_API_KEY nicht in Supabase hinterlegt.")
+    return null
+  }
+
+  logDojo("info", `🤖 Dojo AI-Healing wird gestartet für Kontext: "${context}"...`)
+  try {
+    const screenshot = await page.screenshot({ type: "png" }).catch(() => null)
+    let screenshotBase64 = ""
+    if (screenshot) {
+      // Deno/Web Standard safe Base64 encoding
+      const uint8 = new Uint8Array(screenshot)
+      let bin = ""
+      for (let i = 0; i < uint8.length; i++) {
+        bin += String.fromCharCode(uint8[i])
+      }
+      screenshotBase64 = btoa(bin)
+    }
+    
+    const htmlSnippet = await page.content().catch(() => "")
+
+    const CONTEXT_DESCRIPTIONS: Record<string, string> = {
+      search:              'Produkt im Shop suchen (Suchfeld befüllen)',
+      add_to_cart:         'Produkt in den Warenkorb legen oder Bestellmenge in ein Zahlenfeld eingeben',
+      go_to_checkout:      'Warenkorb-Icon oder Warenkorb-Link anklicken, um den Warenkorb zu öffnen',
+    }
+
+    const taskPrompt = `Du bist ein Experte für Web-Scraping und CSS-Selektoren. \
+Du hilfst dabei, kaputte Selektoren in unserem asynchronen B2B-Dojo-Compiler zu reparieren.
+
+**Situation:** Wir finden das Element für den Kontext "${context}" nicht.
+**Aktion, die durchgeführt werden soll:**
+${CONTEXT_DESCRIPTIONS[context] || 'Element finden und anklicken'}
+
+**Fehlgeschlagener Selektor/Muster:** \`${failedSelector}\`
+
+**Deine Aufgabe:**
+1. Analysiere den HTML-Code und den Screenshot.
+2. Finde das Element, das der gewünschten Aktion entspricht.
+3. Erstelle einen stabilen, spezifischen CSS-Selektor.
+
+**Regeln:**
+- Bevorzuge id, name, data-*, aria-label, type-Attribute.
+- Vermeide positionsbasierte Selektoren (:nth-child) und generierte Hash-Klassen.
+- Element darf NICHT vom Typ hidden sein.
+- Selektor muss auf GENAU EIN Element matchen.
+- Wenn das Element im Shadow-DOM lebt, deklariere es zwingend mit dem Präfix "pierce/" (z.B. "pierce/button[name='accept']").
+
+Antworte ausschließlich als JSON:
+{"selector":"...","confidence":0.0,"reasoning":"..."}`
+
+    const geminiParts: unknown[] = []
+    if (screenshotBase64) {
+      geminiParts.push({ inlineData: { mimeType: 'image/png', data: screenshotBase64 } })
+    }
+    if (htmlSnippet) {
+      geminiParts.push({ text: `HTML (max. 45 KB):\n\`\`\`html\n${htmlSnippet.substring(0, 45_000)}\n\`\`\`` })
+    }
+    geminiParts.push({ text: taskPrompt })
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: geminiParts }],
+          generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+        }),
+      }
+    )
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text()
+      logDojo("warning", `🤖 Dojo AI-Healing fehlgeschlagen: API Fehler ${geminiRes.status} — ${errText.substring(0, 100)}`)
+      return null
+    }
+
+    const geminiData = await geminiRes.json()
+    const rawText    = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    const aiParsed   = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim())
+
+    const selector = aiParsed.selector?.trim() ?? null
+    const confidence = aiParsed.confidence ?? 0
+
+    if (selector && confidence >= 0.6) {
+      logDojo("success", `🤖 Dojo AI-Healing erfolgreich! Neuer Selektor: "${selector}" (Grund: ${aiParsed.reasoning})`)
+      return selector
+    } else {
+      logDojo("warning", `🤖 Dojo AI-Healing unzureichend: Konfidenz ${confidence.toFixed(2)} für Selektor "${selector}"`)
+    }
+  } catch (err) {
+    logDojo("warning", `🤖 Dojo AI-Healing unerwarteter Fehler: ${(err as Error).message}`)
+  }
+  return null
+}
+
 
 // ── Browserbase API ───────────────────────────────────────────────────────────
 
