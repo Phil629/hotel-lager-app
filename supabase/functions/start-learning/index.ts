@@ -950,32 +950,58 @@ async function dismissCookieBanner(page: Page): Promise<PlaybookStep | null> {
   }
 
   // 2. Dynamische Textsuche als mächtiger Fallback für ungeplante Banner (z.B. Kruse / Reinigungsberater)
+  // Ausgeführt direkt im Browser-Kontext für maximale Performance (0 CDP-Roundtrips!)
   try {
-    const elements = [...(await page.$$("button")), ...(await page.$$("a"))]
-    for (const el of elements) {
-      if (!(await el.isVisible())) continue
-      const text = (await el.textContent() ?? "").trim().toLowerCase()
-      
-      const isCookieButton = 
-        text === "alle akzeptieren" || 
-        text === "alle zulassen" ||
-        text === "nur notwendige cookies akzeptieren" || 
-        text === "nur notwendige akzeptieren" || 
-        text === "cookies akzeptieren" || 
-        text.includes("alle akzeptieren") || 
-        text.includes("notwendige cookies") || 
-        text.includes("nur notwendige") ||
-        text.includes("zustimmen") || 
-        text.includes("allow all") || 
-        text.includes("accept all")
-      
-      if (isCookieButton) {
-        const stableSel = await extractStableSelector(page, el) ?? `button >> text="${text}"`
-        await el.click({ timeout: 3000 })
-        await page.waitForTimeout(1000)
-        console.log(`[learning] Cookie-Banner per dynamischer Textsuche gelöst: "${text}" (${stableSel})`)
-        return { step: "click", selector: stableSel, timeout: 3000 }
+    const clickedSelector = await page.evaluate(() => {
+      const elements = [...document.querySelectorAll("button"), ...document.querySelectorAll("a")]
+      for (const el of elements) {
+        // Sichtbarkeit prüfen
+        const style = window.getComputedStyle(el)
+        if (style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0) continue
+        const rect = el.getBoundingClientRect()
+        if (rect.width === 0 && rect.height === 0) continue
+
+        const text = (el.textContent ?? "").trim().toLowerCase()
+        const isCookieButton = 
+          text === "alle akzeptieren" || 
+          text === "alle zulassen" ||
+          text === "nur notwendige cookies akzeptieren" || 
+          text === "nur notwendige akzeptieren" || 
+          text === "cookies akzeptieren" || 
+          text.includes("alle akzeptieren") || 
+          text.includes("notwendige cookies") || 
+          text.includes("nur notwendige") ||
+          text.includes("zustimmen") || 
+          text.includes("allow all") || 
+          text.includes("accept all")
+
+        if (isCookieButton) {
+          (el as HTMLElement).click()
+          // Versuchen einen CSS-Selektor zu ermitteln
+          if (el.id && !/^[0-9]/.test(el.id)) return `#${el.id}`
+          const name = el.getAttribute("name")
+          if (name) return `${el.tagName.toLowerCase()}[name="${name}"]`
+          const aria = el.getAttribute("aria-label")
+          if (aria) return `[aria-label="${aria}"]`
+          const cls = Array.from(el.classList).find(c => c.length > 2 && !/^[0-9a-f]{4,}$/.test(c))
+          if (cls) return `${el.tagName.toLowerCase()}.${cls}`
+          return `text="${el.textContent?.trim()}"`
+        }
       }
+      return null
+    })
+
+    if (clickedSelector) {
+      await page.waitForTimeout(1000)
+      console.log(`[learning] Cookie-Banner per dynamischer In-Browser-Textsuche gelöst: ${clickedSelector}`)
+      
+      // Für das Playbook übersetzen wir text="..." in einen Playwright-kompatiblen Text-Selector
+      let playbookSelector = clickedSelector
+      if (clickedSelector.startsWith('text=')) {
+        const textVal = clickedSelector.substring(5).replace(/"/g, '')
+        playbookSelector = `button >> text="${textVal}"`
+      }
+      return { step: "click", selector: playbookSelector, timeout: 3000 }
     }
   } catch (err) {
     console.warn("[learning] Dynamische Cookie-Banner-Textsuche fehlgeschlagen:", err)
