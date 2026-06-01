@@ -1,8 +1,7 @@
 // supabase/functions/start-learning/index.ts
 //
-// Cloud Learning Pipeline — "Das Dojo"
-// Startet anonym einen Browserbase-Browser, erkundet den Shop in zwei Phasen,
-// validiert das gelernte Playbook per Dry-Run und committed das Ergebnis in DB.
+// Cloud Learning Pipeline — "Das Dojo" v2
+// Serverless Playwright + Browserbase Compiler für B2B-Webshop-Playbooks.
 //
 // Umgebungsvariablen:
 //   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
@@ -10,9 +9,8 @@
 
 import { serve }        from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
-// playwright-core liefert den CDP-Client; Deno unterstützt npm:-Importe ab v1.37+
 import { chromium }     from "npm:playwright-core@1.44.0"
-import type { Page }    from "npm:playwright-core@1.44.0"
+import type { Page, Locator } from "npm:playwright-core@1.44.0"
 
 // ── Env ───────────────────────────────────────────────────────────────────────
 
@@ -22,8 +20,6 @@ const SUPABASE_SERVICE_KEY   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const BROWSERBASE_API_KEY    = Deno.env.get("BROWSERBASE_API_KEY")!
 const BROWSERBASE_PROJECT_ID = Deno.env.get("BROWSERBASE_PROJECT_ID")!
 
-// EdgeRuntime.waitUntil: Hält die Edge Function am Leben auch nachdem die
-// HTTP-Antwort bereits gesendet wurde, damit der Lernprozess im Hintergrund läuft.
 declare const EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void }
 
 const CORS = {
@@ -33,10 +29,13 @@ const CORS = {
 
 // ── Timeouts ──────────────────────────────────────────────────────────────────
 
-const DRY_RUN_TIMEOUT_MS = 30_000  // Dry-Run: max 30 Sekunden laut Spec
-const PAGE_LOAD_MS       = 20_000
-const CLICK_MS           = 8_000
-const FILL_MS            = 6_000
+const GLOBAL_PIPELINE_TIMEOUT_MS = 140_000
+const CDP_CONNECT_TIMEOUT_MS     =  30_000
+const PAGE_LOAD_MS               =  20_000
+const NETWORK_SETTLE_MS          =   3_500  // Extra SPA-Hydrations-Zeit nach DOMContentLoaded
+const CLICK_MS                   =   8_000
+const FILL_MS                    =   6_000
+const DRY_RUN_TIMEOUT_MS         =  30_000
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
 
@@ -62,10 +61,9 @@ interface BrowserbaseSession {
   connectUrl: string
 }
 
-// Logging-Funktion, die fire-and-forget in die DB schreibt und im Admin-Terminal sichtbar ist
 type LogFn = (level: string, message: string) => void
 
-// ── Cookie-Banner-Selektoren (erst ablehnen, dann akzeptieren als Fallback) ───
+// ── Cookie-Banner-Selektoren (statische Layer) ────────────────────────────────
 
 const COOKIE_SELECTORS_DECLINE = [
   "#onetrust-reject-all-handler",
@@ -91,13 +89,15 @@ const COOKIE_SELECTORS_ACCEPT = [
   'button[class*="cookie-accept" i]',
 ]
 
+// Regex für In-Browser-Textscan (Layer 3) und Shadow-DOM-Filter (Layer 2)
+const COOKIE_TEXT_RE = /alle akzeptieren|alle zulassen|nur notwendige|cookies akzeptieren|zustimmen|einverstanden|accept all|allow all|i agree/i
+
 // ── Entry Point ───────────────────────────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS })
 
   try {
-    // ── 1. Auth: nur SaaS-Admins oder service_role dürfen triggern ───────────
     const authHeader = req.headers.get("Authorization") ?? ""
     if (!authHeader.startsWith("Bearer ")) {
       return respond({ error: "Missing Authorization header" }, 401)
@@ -125,12 +125,7 @@ serve(async (req) => {
       }
     }
 
-    // ── 2. Body parsen ────────────────────────────────────────────────────────
-    const body: {
-      domain?:       string
-      test_product?: string
-    } = await req.json().catch(() => ({}))
-
+    const body: { domain?: string; test_product?: string } = await req.json().catch(() => ({}))
     const { domain, test_product = "Reinigungsmittel" } = body
 
     if (!domain) return respond({ error: "domain required" }, 400)
@@ -144,7 +139,6 @@ serve(async (req) => {
 
     console.log(`[start-learning] Domain: ${domain}, test_product: ${test_product}`)
 
-    // ── 3. Status sofort auf 'learning_auth' setzen (sichtbar im Admin-UI) ───
     const { error: upsertErr } = await adminClient
       .from("shop_playbooks")
       .upsert(
@@ -163,21 +157,27 @@ serve(async (req) => {
       return respond({ error: "DB-Fehler: " + upsertErr.message }, 500)
     }
 
-    // ── 4. Lernprozess asynchron im Hintergrund starten mit globalem 140s Timeout ──────────────────────
-    // Die HTTP-Antwort wird sofort gesendet. EdgeRuntime.waitUntil hält den
-    // Prozess am Leben bis der Lernlauf abgeschlossen (oder timeout) ist.
+    // Globaler 140s-Timeout-Guard: verhindert, dass automation_status auf "learning_auth"
+    // hängen bleibt wenn die Pipeline bei einem CDP-Hang das 150s-Limit erreicht.
     EdgeRuntime.waitUntil(
       Promise.race([
         runLearningPipeline(domain, test_product, adminClient),
         new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error("Pipeline global timeout (140s)")), 140_000)
+          setTimeout(
+            () => reject(new Error(
+              `Pipeline globaler Timeout: ${GLOBAL_PIPELINE_TIMEOUT_MS / 1000}s überschritten.`
+            )),
+            GLOBAL_PIPELINE_TIMEOUT_MS
+          )
         ),
       ]).catch(async (err) => {
-        console.error("[start-learning] Pipeline abgebrochen:", err.message)
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error("[start-learning] Pipeline abgebrochen:", msg)
         await adminClient.from("shop_playbooks").update({
           automation_status: "failed",
-          learning_error:    err.message,
-        }).eq("domain", domain)
+          learning_error:    msg,
+          last_learning_run: new Date().toISOString(),
+        }).eq("domain", domain).catch(() => {})
       })
     )
 
@@ -201,11 +201,7 @@ async function runLearningPipeline(
   testProduct: string,
   adminClient: ReturnType<typeof createClient>,
 ): Promise<void> {
-  // Statushelfer: schreibt live in DB — sichtbar im Admin-UI
-  const setStatus = async (
-    status: string,
-    extra:  Record<string, unknown> = {},
-  ) => {
+  const setStatus = async (status: string, extra: Record<string, unknown> = {}) => {
     const { error } = await adminClient
       .from("shop_playbooks")
       .update({ automation_status: status, ...extra })
@@ -213,24 +209,24 @@ async function runLearningPipeline(
     if (error) console.error("[learning] setStatus DB-Fehler:", error)
   }
 
-  // ── Logging-Infrastruktur ─────────────────────────────────────────────────
-  // Jeder logDojo-Aufruf schreibt über eine serialisierte Queue alle Logs in die DB.
-  // Das Admin-Terminal abonniert diese Updates via Supabase Realtime.
+  // ── Log-Infrastruktur mit serialisiertem Write-Queue ─────────────────────
+  // Verhindert Race Conditions: rapid aufeinanderfolgende logDojo-Aufrufe können
+  // bei einfachem fire-and-forget die DB in falscher Reihenfolge überschreiben.
   const runLogs: Array<{ timestamp: string; level: string; message: string }> = []
-  let logWritePending = false
-  let logWriteQueued  = false
+  let _logFlushPending = false
+  let _logFlushQueued  = false
 
-  const flushLogs = async () => {
-    if (logWritePending) { logWriteQueued = true; return }
-    logWritePending = true
+  const flushLogs = async (): Promise<void> => {
+    if (_logFlushPending) { _logFlushQueued = true; return }
+    _logFlushPending = true
     const snap = [...runLogs]
     await adminClient
       .from("shop_playbooks")
       .update({ learning_logs: snap })
       .eq("domain", domain)
       .then(({ error }) => { if (error) console.warn("[logDojo] DB-Fehler:", error.message) })
-    logWritePending = false
-    if (logWriteQueued) { logWriteQueued = false; void flushLogs() }
+    _logFlushPending = false
+    if (_logFlushQueued) { _logFlushQueued = false; void flushLogs() }
   }
 
   const logDojo: LogFn = (level, message) => {
@@ -244,39 +240,41 @@ async function runLearningPipeline(
   try {
     // ════════════════════════════════════════════════════════════════════
     // PHASE 1 — Login-Formular-Selektoren lernen (anonymer Besuch)
-    // Ziel: Login-Selektoren finden → login_steps erzeugen
+    // Ziel: login_steps erzeugen
     // Kosten: Residential Proxy (erster Eindruck, Fingerprint wichtig)
     // ════════════════════════════════════════════════════════════════════
-    logDojo("info", `Starte Lernprozess für ${domain}...`)
-    console.log(`[learning] ═══ Phase 1 Start: ${domain} ═══`)
+    logDojo("info", `🚀 Starte Dojo v2 für ${domain}...`)
 
     logDojo("info", "Erstelle Browserbase-Session (Residential Proxy)...")
-    const loginSession = await createBrowserbaseSession(/* residentialProxy = */ true)
+    const loginSession = await createBrowserbaseSession(true)
     currentSessionId   = loginSession.id
-    logDojo("info", `Browserbase-Session gestartet (ID: ${loginSession.id})`)
-    const loginBrowser = await chromium.connectOverCDP(loginSession.connectUrl)
 
+    // VNC-Link im Admin-Terminal (Admin.tsx parst "ID: ..." und zeigt Live-Video-Button)
+    logDojo("info", `📡 Session aktiv — ID: ${loginSession.id}`)
+    logDojo("info", `🔴 Live-Browser: https://www.browserbase.com/sessions/${loginSession.id}`)
+
+    const loginBrowser = await connectWithTimeout(loginSession.connectUrl)
     let loginSteps: PlaybookStep[] = []
 
     try {
       const loginCtx  = loginBrowser.contexts()[0]
       const loginPage = loginCtx.pages()[0] ?? await loginCtx.newPage()
 
-      logDojo("info", `Lade Homepage: https://${domain}`)
+      logDojo("info", `🌐 Lade Homepage: https://${domain}`)
       await loginPage.goto(`https://${domain}`, {
         waitUntil: "domcontentloaded",
         timeout:   PAGE_LOAD_MS,
       })
-      await loginPage.waitForTimeout(1800)
+      await smartWaitForLoad(loginPage)
 
-      // Cookie-Banner wegklicken
-      const cookieStep = await dismissCookieBanner(loginPage)
-      if (cookieStep) logDojo("info", "Cookie-Banner erkannt und geschlossen.")
-      else logDojo("info", "Kein Cookie-Banner erkannt.")
+      await checkForCloudflare(loginPage)
 
-      // Login-Flow-Selektoren lernen
+      const cookieStep = await dismissCookieBanner(loginPage, logDojo)
+      if (cookieStep) logDojo("info", "🍪 Cookie-Banner erfolgreich geschlossen.")
+      else            logDojo("info", "Kein Cookie-Banner erkannt.")
+
       loginSteps = await learnLoginFlow(loginPage, domain, cookieStep, logDojo)
-      logDojo("success", `Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps gelernt.`)
+      logDojo("success", `✅ Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps gelernt.`)
       console.log(`[learning] Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps`)
     } finally {
       await loginBrowser.close().catch(() => {})
@@ -285,20 +283,22 @@ async function runLearningPipeline(
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 2 — Warenkorb & Checkout lernen (anonymer Gast-Flow)
+    // PHASE 2 — Warenkorb & Checkout-Flow lernen (anonymer Gast)
     // Ziel: item_steps + checkout_steps erzeugen
     // Kosten: Residential Proxy (fresh session, andere IP)
     // ════════════════════════════════════════════════════════════════════
     await setStatus("learning_cart")
-    logDojo("info", "Phase 2 gestartet — lerne Warenkorb-Flow...")
+    logDojo("info", "🛒 Phase 2 gestartet — lerne Warenkorb-Flow...")
     console.log(`[learning] ═══ Phase 2 Start: ${domain} ═══`)
 
     logDojo("info", "Erstelle neue Browserbase-Session (Residential Proxy)...")
-    const cartSession = await createBrowserbaseSession(/* residentialProxy = */ true)
+    const cartSession = await createBrowserbaseSession(true)
     currentSessionId  = cartSession.id
-    logDojo("info", `Neue Session gestartet (ID: ${cartSession.id})`)
-    const cartBrowser = await chromium.connectOverCDP(cartSession.connectUrl)
 
+    logDojo("info", `📡 Neue Session aktiv — ID: ${cartSession.id}`)
+    logDojo("info", `🔴 Live-Browser: https://www.browserbase.com/sessions/${cartSession.id}`)
+
+    const cartBrowser = await connectWithTimeout(cartSession.connectUrl)
     let itemSteps:     PlaybookStep[] = []
     let checkoutSteps: PlaybookStep[] = []
 
@@ -306,20 +306,22 @@ async function runLearningPipeline(
       const cartCtx  = cartBrowser.contexts()[0]
       const cartPage = cartCtx.pages()[0] ?? await cartCtx.newPage()
 
-      logDojo("info", `Lade Homepage für Warenkorb-Session: https://${domain}`)
+      logDojo("info", `🌐 Lade Homepage für Phase 2: https://${domain}`)
       await cartPage.goto(`https://${domain}`, {
         waitUntil: "domcontentloaded",
         timeout:   PAGE_LOAD_MS,
       })
-      await cartPage.waitForTimeout(1800)
+      await smartWaitForLoad(cartPage)
 
-      const cookieStep2 = await dismissCookieBanner(cartPage)
-      if (cookieStep2) logDojo("info", "Cookie-Banner geschlossen (Phase 2).")
+      await checkForCloudflare(cartPage)
 
-      const result = await learnCartFlow(cartPage, domain, testProduct, logDojo)
+      const cookieStep2 = await dismissCookieBanner(cartPage, logDojo)
+      if (cookieStep2) logDojo("info", "🍪 Cookie-Banner geschlossen (Phase 2).")
+
+      const result  = await learnCartFlow(cartPage, domain, testProduct, logDojo)
       itemSteps     = result.item
       checkoutSteps = result.checkout
-      logDojo("success", `Phase 2 abgeschlossen: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps.`)
+      logDojo("success", `✅ Phase 2 abgeschlossen: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps.`)
       console.log(`[learning] Phase 2: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps`)
     } finally {
       await cartBrowser.close().catch(() => {})
@@ -327,7 +329,6 @@ async function runLearningPipeline(
       currentSessionId = null
     }
 
-    // Validierung: mindestens Add-to-Cart-Step muss gelernt worden sein
     if (itemSteps.length === 0) {
       throw new Error(
         "Keine item_steps gelernt. Add-to-Cart-Button konnte nicht gefunden werden. " +
@@ -336,18 +337,20 @@ async function runLearningPipeline(
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 3 — Dry-Run (Die Garantie-Schranke)
+    // PHASE 3 — Dry-Run (Garantieschranke, max. 30s, Datacenter-Proxy)
     // Spielt das Playbook BLIND ab — kein AI, rein mechanisch.
-    // Muss in unter 30 Sekunden an der Kasse landen.
     // Kosten: Datacenter-Proxy (günstig, nur Selector-Validierung)
     // ════════════════════════════════════════════════════════════════════
-    logDojo("dry_run", "Dry-Run gestartet (Datacenter-Proxy, max. 30 Sek.)...")
+    logDojo("dry_run", "🧪 Dry-Run gestartet (Datacenter-Proxy, max. 30 Sek.)...")
     console.log(`[learning] ═══ Dry-Run Start: ${domain} ═══`)
 
-    const drySession = await createBrowserbaseSession(/* residentialProxy = */ false)
+    const drySession = await createBrowserbaseSession(false)
     currentSessionId = drySession.id
-    logDojo("info", `Dry-Run Session gestartet (ID: ${drySession.id})`)
-    const dryBrowser = await chromium.connectOverCDP(drySession.connectUrl)
+
+    logDojo("dry_run", `📡 Dry-Run Session — ID: ${drySession.id}`)
+    logDojo("info", `🔴 Live-Browser: https://www.browserbase.com/sessions/${drySession.id}`)
+
+    const dryBrowser = await connectWithTimeout(drySession.connectUrl)
 
     const candidatePlaybook: Playbook = {
       login_steps:    loginSteps,
@@ -355,20 +358,19 @@ async function runLearningPipeline(
       checkout_steps: checkoutSteps,
     }
 
-    let dryRunPassed  = false
+    let dryRunPassed = false
     let dryRunError:  string | null = null
 
     try {
       const dryCtx  = dryBrowser.contexts()[0]
       const dryPage = dryCtx.pages()[0] ?? await dryCtx.newPage()
 
-      // Race gegen 30-Sekunden-Limit
       await Promise.race([
         executeDryRun(dryPage, domain, candidatePlaybook, testProduct, logDojo),
         new Promise<never>((_, reject) =>
           setTimeout(
             () => reject(new Error(
-              `Dry-Run Timeout: Kassenseite nicht in ${DRY_RUN_TIMEOUT_MS / 1000}s erreicht.`
+              `Dry-Run Timeout: ${DRY_RUN_TIMEOUT_MS / 1000}s überschritten.`
             )),
             DRY_RUN_TIMEOUT_MS
           )
@@ -388,9 +390,8 @@ async function runLearningPipeline(
       currentSessionId = null
     }
 
-    // ── Ergebnis in DB committen ───────────────────────────────────────────────
+    // ── Ergebnis in DB committen ──────────────────────────────────────────────
     if (dryRunPassed) {
-      // Aktuelles Playbook als Rollback-Puffer sichern
       const { data: current } = await adminClient
         .from("shop_playbooks")
         .select("playbook, playbook_version")
@@ -422,11 +423,12 @@ async function runLearningPipeline(
     console.error(`[learning] Fataler Fehler für ${domain}:`, msg)
 
     if (currentSessionId) {
-      await stopBrowserbaseSession(currentSessionId).catch(() => {})
+      await stopBrowserbaseSession(currentSessionId).catch((e) =>
+        console.warn("[learning] Session-Freigabe fehlgeschlagen:", e)
+      )
     }
 
-    // Finalen Fehler noch in die Logs schreiben
-    runLogs.push({ timestamp: new Date().toISOString(), level: "error", message: `Fataler Fehler: ${msg}` })
+    runLogs.push({ timestamp: new Date().toISOString(), level: "error", message: `💀 Fataler Fehler: ${msg}` })
 
     await adminClient.from("shop_playbooks").update({
       automation_status: "failed",
@@ -437,7 +439,180 @@ async function runLearningPipeline(
   }
 }
 
-// ── Phase 1: Login-Flow lernen ────────────────────────────────────────────────
+// ── Playwright-Helfer ─────────────────────────────────────────────────────────
+
+/** Sicheres isVisible: gibt false zurück statt zu werfen. Niemals hängend. */
+async function safeIsVisible(locator: Locator, timeoutMs = 2000): Promise<boolean> {
+  return locator.isVisible({ timeout: timeoutMs }).catch(() => false)
+}
+
+/**
+ * page.title() mit hartem Timeout. Ohne diesen Guard hängt der Aufruf in
+ * Proxy-Umgebungen bei langsamen DNS-Lookups oder Cloudflare-Challenges.
+ */
+async function safeTitle(page: Page, timeoutMs = 3000): Promise<string> {
+  return Promise.race([
+    page.title(),
+    new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error("title timeout")), timeoutMs)
+    ),
+  ]).catch(() => "")
+}
+
+/**
+ * CDP-Verbindung mit Timeout. Verhindert ewiges Hängen wenn Browserbase
+ * den WebSocket-Endpoint nicht rechtzeitig bereitstellt.
+ */
+async function connectWithTimeout(connectUrl: string) {
+  return Promise.race([
+    chromium.connectOverCDP(connectUrl),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(
+          `CDP-Verbindungs-Timeout (${CDP_CONNECT_TIMEOUT_MS / 1000}s). Browserbase-Endpoint nicht erreichbar.`
+        )),
+        CDP_CONNECT_TIMEOUT_MS
+      )
+    ),
+  ])
+}
+
+/**
+ * Intelligente Seitenladewartezeit nach goto().
+ * Wartet auf body-Inhalt > 500 Zeichen (schließt Blank-Pages und Cloudflare-Spinners aus)
+ * ODER läuft nach NETWORK_SETTLE_MS ab — was zuerst eintritt.
+ * Plus kurzer Settle-Delay für React/Vue Event-Handler-Registrierung.
+ */
+async function smartWaitForLoad(page: Page): Promise<void> {
+  await Promise.race([
+    page.waitForFunction(
+      () => document.body && document.body.innerHTML.length > 500,
+      { timeout: NETWORK_SETTLE_MS }
+    ),
+    page.waitForTimeout(NETWORK_SETTLE_MS),
+  ]).catch(() => {})
+  await page.waitForTimeout(600)
+}
+
+/**
+ * Cloudflare-Challenge-Erkennung. Wirft, falls blockiert.
+ * Nach jedem page.goto() aufrufen.
+ */
+async function checkForCloudflare(page: Page): Promise<void> {
+  const title = await safeTitle(page, 2000)
+  if (/(cloudflare|attention required|checking your browser|just a moment)/i.test(title)) {
+    throw new Error(
+      `🛡️ Cloudflare Bot-Detection ausgelöst (Titel: "${title}"). ` +
+      "Bitte Proxy wechseln oder Shop-Domain prüfen."
+    )
+  }
+
+  const cfLocator = page.locator(
+    'h1:has-text("Cloudflare"), h2:has-text("Checking your browser"), ' +
+    '#cf-error-details, .cf-error-overview, [data-translate="block_headline"]'
+  )
+  if (await safeIsVisible(cfLocator.first(), 1200)) {
+    throw new Error("🛡️ Cloudflare Challenge-Seite erkannt. Residential Proxy wurde geblockt.")
+  }
+}
+
+// ── Cookie-Banner-Engine (v2, 3 Layer) ───────────────────────────────────────
+
+/**
+ * Layer 1: Statische CSS-Selektoren (schnell, präzise für bekannte CMPs).
+ * Layer 2: Shadow DOM piercing via Playwright pierce/ engine (Shopware 6, Usercentrics, Cookiebot v2).
+ * Layer 3: In-Browser Textscan via page.evaluate() — 0 CDP-Roundtrips, maximale Reichweite.
+ *
+ * Alle Layer führen einen vertrauenswürdigen Playwright-CDP-Klick aus,
+ * damit Overlay-Animationen korrekt abgespielt werden und keine Blocking-Layer bleiben.
+ */
+async function dismissCookieBanner(page: Page, logDojo: LogFn): Promise<PlaybookStep | null> {
+  const allStaticSelectors = [...COOKIE_SELECTORS_DECLINE, ...COOKIE_SELECTORS_ACCEPT]
+
+  // Warte auf Banner-Erscheinen: Race zwischen bekannten Selektoren und 2.5s Timeout.
+  // Lazy-geladene CMPs (z.B. Cookiebot) erscheinen oft erst nach 1-2s.
+  await Promise.race([
+    page.waitForSelector(allStaticSelectors.join(","), { timeout: 2500 }),
+    page.waitForTimeout(2500),
+  ]).catch(() => {})
+
+  // Layer 1: Statische CSS-Selektoren
+  for (const sel of allStaticSelectors) {
+    try {
+      const loc = page.locator(sel).first()
+      if (!(await safeIsVisible(loc, 1200))) continue
+      await loc.click({ timeout: 3000 })
+      await page.waitForTimeout(700)
+      logDojo("info", `🍪 Layer 1 (CSS): ${sel}`)
+      return { step: "click", selector: sel, timeout: 3000 }
+    } catch { /* weiter */ }
+  }
+
+  // Layer 2: Shadow DOM piercing — Shopware 6, Usercentrics, Cookiebot v2
+  // pierce/ engine durchdringt Shadow Roots, die document.querySelectorAll nicht sieht.
+  for (const tag of ["button", "a"] as const) {
+    try {
+      const loc = page.locator(`pierce/${tag}`).filter({ hasText: COOKIE_TEXT_RE })
+      if (!(await safeIsVisible(loc.first(), 1500))) continue
+      const el  = await loc.first().elementHandle()
+      const sel = el ? (await extractStableSelector(page, el) ?? `pierce/${tag}`) : `pierce/${tag}`
+      await loc.first().click({ timeout: 3000 })
+      await page.waitForTimeout(800)
+      logDojo("info", `🍪 Layer 2 (Shadow DOM): ${sel}`)
+      return { step: "click", selector: sel, timeout: 3000 }
+    } catch { /* weiter */ }
+  }
+
+  // Layer 3: In-Browser Textsuche (0 CDP-Roundtrips, maximale Performance)
+  try {
+    const result = await page.evaluate((textReSource: string) => {
+      const re = new RegExp(textReSource, "i")
+      const elements = [
+        ...Array.from(document.querySelectorAll("button")),
+        ...Array.from(document.querySelectorAll("a")),
+      ]
+      for (const el of elements) {
+        const style = window.getComputedStyle(el)
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          parseFloat(style.opacity) === 0
+        ) continue
+        const rect = el.getBoundingClientRect()
+        if (rect.width === 0 && rect.height === 0) continue
+        if (!re.test((el.textContent ?? "").trim())) continue
+        ;(el as HTMLElement).click()
+        if (el.id && !/^[0-9]/.test(el.id)) return `#${el.id}`
+        const name = el.getAttribute("name")
+        if (name) return `${el.tagName.toLowerCase()}[name="${name}"]`
+        const aria = el.getAttribute("aria-label")
+        if (aria) return `[aria-label="${aria}"]`
+        const cls = Array.from(el.classList).find(c => c.length > 2 && !/^[a-f0-9]{4,}$/.test(c))
+        if (cls) return `${el.tagName.toLowerCase()}.${cls}`
+        const txt = (el.textContent ?? "").trim().substring(0, 60)
+        return txt ? `text=${txt}` : null
+      }
+      return null
+    }, COOKIE_TEXT_RE.source)
+
+    if (result) {
+      // Playwright-Klick für korrekte Overlay-Animation (Layer-3 hat nur JS-click gemacht)
+      const playbookSel = result.startsWith("text=")
+        ? `button >> text="${result.substring(5).replace(/"/g, "")}"`
+        : result
+      await page.click(playbookSel, { timeout: 4000 }).catch(() => {})
+      await page.waitForTimeout(1000)
+      logDojo("info", `🍪 Layer 3 (In-Browser): ${playbookSel}`)
+      return { step: "click", selector: playbookSel, timeout: 3000 }
+    }
+  } catch (err) {
+    console.warn("[cookie] Layer-3-Scan fehlgeschlagen:", (err as Error).message?.substring(0, 100))
+  }
+
+  return null
+}
+
+// ── Phase 1: Login-Flow lernen ─────────────────────────────────────────────────
 
 async function learnLoginFlow(
   page:       Page,
@@ -446,16 +621,13 @@ async function learnLoginFlow(
   logDojo:    LogFn,
 ): Promise<PlaybookStep[]> {
   const steps: PlaybookStep[] = []
-
-  // Der erste Step ist immer die Navigation zur Login-URL (Template-Variable)
   steps.push({ step: "navigate", url: "{loginUrl}", timeout: PAGE_LOAD_MS })
   if (cookieStep) steps.push(cookieStep)
 
-  // Prüfen ob wir direkt auf der Login-Seite sind
   let onLoginPage = await isLoginPage(page)
 
   if (!onLoginPage) {
-    // Login-Link im Header/Nav finden und klicken
+    logDojo("info", "Suche Login-Navigations-Button im Header/Nav...")
     const LOGIN_NAV_SELECTORS = [
       'a[href*="/login" i]',
       'a[href*="/anmeld" i]',
@@ -473,50 +645,55 @@ async function learnLoginFlow(
 
     for (const sel of LOGIN_NAV_SELECTORS) {
       try {
-        const loc = page.locator(sel)
-        if (!(await loc.isVisible())) continue
+        const loc = page.locator(sel).first()
+        if (!(await safeIsVisible(loc, 1500))) continue
         const el = await loc.elementHandle()
         if (!el) continue
 
         const stableSel = await extractStableSelector(page, el) ?? sel
         const urlBefore = page.url()
-        await el.click({ timeout: 4000 })
-        
-        // Warten, ob sich die URL ändert (echte Navigation)
+
+        await loc.click({ timeout: 5000 })
+
+        // URL-Änderungs-Poll (max. 3s) — robuster als waitForNavigation bei SPAs
         const deadline = Date.now() + 3000
         let navigated = false
         while (Date.now() < deadline) {
-          if (page.url() !== urlBefore) {
-            navigated = true
-            break
-          }
+          if (page.url() !== urlBefore) { navigated = true; break }
           await page.waitForTimeout(200)
         }
 
         if (navigated) {
-          await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {})
+          await page.waitForLoadState("domcontentloaded", { timeout: 8000 }).catch(() => {})
+          await smartWaitForLoad(page)
         } else {
-          await page.waitForTimeout(600)
+          await page.waitForTimeout(800)
         }
 
+        await checkForCloudflare(page)
         onLoginPage = await isLoginPage(page)
+
         if (onLoginPage) {
-          // Login-Navigate-Step ins Playbook schreiben
           steps.push({ step: "click", selector: stableSel, timeout: CLICK_MS })
           steps.push({ step: "wait_for_load", timeout: 10_000 })
-          logDojo("info", `Login-Navigation-Button geklickt: ${stableSel}`)
+          logDojo("info", `🔑 Login-Navigation geklickt: ${stableSel}`)
           console.log(`[learning] Login-Nav-Button: ${stableSel}`)
           break
         }
-      } catch { /* weiter probieren */ }
+      } catch (err) {
+        const msg = (err as Error).message?.substring(0, 80) ?? "unbekannt"
+        console.warn(`[login-nav] Selektor fehlgeschlagen (${sel}): ${msg}`)
+      }
     }
   }
 
   if (!onLoginPage) {
-    logDojo("warning", `Kein Login-Formular auf ${domain} gefunden — Login-Steps werden trotzdem generiert.`)
-    console.warn(`[learning] Kein Login-Formular auf ${domain} gefunden — login_steps bleiben leer`)
+    logDojo("warning", `Kein Login-Formular auf ${domain} gefunden — Login-Steps werden minimal generiert.`)
+    console.warn(`[learning] Kein Login-Formular auf ${domain} gefunden`)
     return steps
   }
+
+  logDojo("info", "Login-Formular erkannt. Scanne Eingabefelder...")
 
   // ── Username-Feld ──────────────────────────────────────────────────────────
   const USERNAME_SELECTORS = [
@@ -536,27 +713,18 @@ async function learnLoginFlow(
   let usernameSelector: string | null = null
   for (const sel of USERNAME_SELECTORS) {
     const loc = page.locator(sel).first()
-    if (await loc.isVisible().catch(() => false)) {
-      const el = await loc.elementHandle()
-      if (el) {
-        usernameSelector = await extractStableSelector(page, el) ?? sel
-        logDojo("info", `E-Mail/Benutzername-Feld gefunden: ${usernameSelector}`)
-        break
-      }
-    }
+    if (!(await safeIsVisible(loc, 1500))) continue
+    const el = await loc.elementHandle()
+    if (!el) continue
+    usernameSelector = await extractStableSelector(page, el) ?? sel
+    logDojo("info", `📧 E-Mail/Benutzername-Feld: ${usernameSelector}`)
+    break
   }
 
   // ── Passwort-Feld ─────────────────────────────────────────────────────────
-  // type="password" ist kanonisch — kein Fallback nötig
   const pwdLoc = page.locator('input[type="password"]').first()
-  let passwordSelector: string | null = null
-  if (await pwdLoc.isVisible().catch(() => false)) {
-    const pwdEl = await pwdLoc.elementHandle()
-    if (pwdEl) {
-      passwordSelector = 'input[type="password"]'
-      logDojo("info", "Passwort-Feld gefunden.")
-    }
-  }
+  const passwordSelector = (await safeIsVisible(pwdLoc, 1500)) ? 'input[type="password"]' : null
+  if (passwordSelector) logDojo("info", "🔒 Passwort-Feld gefunden.")
 
   // ── Submit-Button ─────────────────────────────────────────────────────────
   const SUBMIT_SELECTORS = [
@@ -574,14 +742,12 @@ async function learnLoginFlow(
   let submitSelector: string | null = null
   for (const sel of SUBMIT_SELECTORS) {
     const loc = page.locator(sel).first()
-    if (await loc.isVisible().catch(() => false)) {
-      const el = await loc.elementHandle()
-      if (el) {
-        submitSelector = await extractStableSelector(page, el) ?? sel
-        logDojo("info", `Login-Button gefunden: ${submitSelector}`)
-        break
-      }
-    }
+    if (!(await safeIsVisible(loc, 1500))) continue
+    const el = await loc.elementHandle()
+    if (!el) continue
+    submitSelector = await extractStableSelector(page, el) ?? sel
+    logDojo("info", `🖱️ Submit-Button: ${submitSelector}`)
+    break
   }
 
   // ── Steps zusammenstellen ─────────────────────────────────────────────────
@@ -595,17 +761,15 @@ async function learnLoginFlow(
     steps.push({ step: "click", selector: submitSelector, timeout: CLICK_MS })
     steps.push({ step: "wait_for_load", timeout: 12_000 })
   } else if (usernameSelector) {
-    // Fallback: Enter-Taste
     steps.push({ step: "key_press", key: "Enter" })
     steps.push({ step: "wait_for_load", timeout: 12_000 })
   }
 
-  logDojo("success", `Login-Steps generiert: ${steps.length} Steps (user=${!!usernameSelector}, pass=${!!passwordSelector}, submit=${!!submitSelector}).`)
+  logDojo("success", `Login-Steps: ${steps.length} (user=${!!usernameSelector}, pass=${!!passwordSelector}, submit=${!!submitSelector}).`)
   console.log(
     `[learning] Login-Selektoren: username=${usernameSelector} ` +
     `password=${passwordSelector} submit=${submitSelector}`
   )
-
   return steps
 }
 
@@ -640,32 +804,30 @@ async function learnCartFlow(
 
   let searchSelector: string | null = null
   for (const sel of SEARCH_SELECTORS) {
-    const loc = page.locator(sel)
-    if (await loc.isVisible()) {
-      const el = await loc.elementHandle()
-      if (el) {
-        searchSelector = await extractStableSelector(page, el) ?? sel
-        break
-      }
-    }
+    const loc = page.locator(sel).first()
+    if (!(await safeIsVisible(loc, 1500))) continue
+    const el = await loc.elementHandle()
+    if (!el) continue
+    searchSelector = await extractStableSelector(page, el) ?? sel
+    break
   }
 
   if (!searchSelector) {
     throw new Error(`Kein Suchfeld auf ${domain} gefunden — Cart-Flow kann nicht gelernt werden.`)
   }
 
-  logDojo("info", `Suchfeld gefunden: ${searchSelector}`)
+  logDojo("info", `🔍 Suchfeld gefunden: ${searchSelector}`)
   console.log(`[learning] Suchfeld: ${searchSelector}`)
 
   // ── 2b: Testprodukt suchen ────────────────────────────────────────────────
   logDojo("info", `Suche nach "${testProduct}"...`)
   await page.fill(searchSelector, testProduct)
   await page.keyboard.press("Enter")
-  await page.waitForLoadState("domcontentloaded", { timeout: 15_000 })
-  await page.waitForTimeout(1200)
+  await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => {})
+  await smartWaitForLoad(page)
+  await checkForCloudflare(page)
 
-  // ── 2c: Ersten Produkt-Link in Suchergebnissen finden ─────────────────────
-  // Direktlink → wird als {item.url} Template gespeichert (Stufe-1-Discovery)
+  // ── 2c: Produkt-Link in Suchergebnissen ───────────────────────────────────
   const PRODUCT_LINK_SELECTORS = [
     '.product-item a[href*="/"]',
     '.product-card a[href*="/"]',
@@ -680,19 +842,19 @@ async function learnCartFlow(
 
   let testProductUrl: string | null = null
   for (const sel of PRODUCT_LINK_SELECTORS) {
-    const el = await page.$(sel)
-    if (!el) continue
-    const href = await el.getAttribute("href") ?? ""
+    const loc = page.locator(sel).first()
+    if (!(await safeIsVisible(loc, 1500))) continue
+    const href = await loc.getAttribute("href").catch(() => null) ?? ""
     if (!href || href === "/" || href.startsWith("#")) continue
     testProductUrl = href.startsWith("http") ? href : `https://${domain}${href}`
     break
   }
 
-  // Fallback: alle <a> mit produktartigem Pfad scannen
+  // Fallback: alle <a> mit produktartigem Pfad (max. 60 Links scannen)
   if (!testProductUrl) {
-    const allLinks = await page.$$("a[href]")
-    for (const link of allLinks) {
-      const href = await link.getAttribute("href") ?? ""
+    const allLinks = await page.locator("a[href]").all()
+    for (const link of allLinks.slice(0, 60)) {
+      const href = await link.getAttribute("href").catch(() => null) ?? ""
       if (
         (href.includes("/product") || href.includes("/artikel") ||
          href.includes("/p/") || href.includes("/item") || href.includes("/produkt")) &&
@@ -706,22 +868,27 @@ async function learnCartFlow(
 
   if (!testProductUrl) {
     throw new Error(
-      `Keine Produkt-URL in den Suchergebnissen für "${testProduct}" auf ${domain} gefunden.`
+      `Keine Produkt-URL in Suchergebnissen für "${testProduct}" auf ${domain} gefunden.`
     )
   }
 
-  logDojo("info", `Test-Produkt-URL gefunden: ${testProductUrl}`)
+  logDojo("info", `📦 Produkt-URL gefunden: ${testProductUrl}`)
   console.log(`[learning] Test-Produkt-URL: ${testProductUrl}`)
-
-  // ── 2d: Zur Produktseite navigieren ───────────────────────────────────────
-  // Im Playbook: {item.url} — Template-Variable für echte Bestellungen
   itemSteps.push({ step: "navigate", url: "{item.url}", timeout: PAGE_LOAD_MS })
 
   await page.goto(testProductUrl, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
-  await page.waitForTimeout(1200)
-  await dismissCookieBanner(page)
+  await smartWaitForLoad(page)
+  await dismissCookieBanner(page, logDojo)
 
-  // ── 2e: Mengenfeld finden und auf 2 setzen ────────────────────────────────
+  // Login-Wall frühzeitig erkennen — kein sinnloser Selektor-Scan danach
+  if (await isLoginPage(page)) {
+    throw new Error(
+      `Produktseite ${testProductUrl} erfordert Login. ` +
+      "Der Shop benötigt Gast-Checkout für das Dojo-Lernen."
+    )
+  }
+
+  // ── 2d: Mengenfeld ────────────────────────────────────────────────────────
   const QTY_SELECTORS = [
     'input[type="number"][name*="qty" i]',
     'input[type="number"][name*="quantity" i]',
@@ -736,28 +903,27 @@ async function learnCartFlow(
 
   let qtySelector: string | null = null
   for (const sel of QTY_SELECTORS) {
-    const loc = page.locator(sel)
-    if (!(await loc.isVisible())) continue
+    const loc = page.locator(sel).first()
+    if (!(await safeIsVisible(loc, 1500))) continue
     const el = await loc.elementHandle()
     if (!el) continue
     qtySelector = await extractStableSelector(page, el) ?? sel
-    // Auf 2 setzen für Warenkorb-Counter-Verifikation
-    await el.fill("2")
+    await loc.fill("2")
     await page.waitForTimeout(300)
     break
   }
 
   if (qtySelector) {
     itemSteps.push({ step: "fill", selector: qtySelector, value: "{item.quantity}", timeout: FILL_MS })
-    logDojo("info", `Mengenfeld gefunden: ${qtySelector}`)
+    logDojo("info", `🔢 Mengenfeld: ${qtySelector}`)
     console.log(`[learning] Mengenfeld: ${qtySelector}`)
   }
 
-  // ── 2f: Warenkorb-Counter VOR Add-to-Cart lesen ───────────────────────────
+  // ── 2e: Warenkorb-Counter VOR Add-to-Cart ────────────────────────────────
   const cartCountBefore = await getCartCount(page)
-  logDojo("info", `Warenkorb-Zähler vor Add-to-Cart: ${cartCountBefore ?? "nicht erkennbar"}`)
+  logDojo("info", `🛒 Warenkorb-Zähler vorher: ${cartCountBefore ?? "nicht erkennbar"}`)
 
-  // ── 2g: "In den Warenkorb"-Button finden und klicken ─────────────────────
+  // ── 2f: "In den Warenkorb"-Button ────────────────────────────────────────
   const ADD_CART_SELECTORS = [
     'button[name="inInBasket"]',
     'input[name="inInBasket"]',
@@ -784,18 +950,17 @@ async function learnCartFlow(
 
   let addCartSelector: string | null = null
   for (const sel of ADD_CART_SELECTORS) {
-    const loc = page.locator(sel)
-    if (!(await loc.isVisible())) continue
+    const loc = page.locator(sel).first()
+    if (!(await safeIsVisible(loc, 1500))) continue
     const el = await loc.elementHandle()
     if (!el) continue
-    // type="hidden" ausschließen (isInteractable-Äquivalent)
     const elType = await el.getAttribute("type")
     if (elType === "hidden") continue
     const rect = await el.boundingBox()
     if (!rect || rect.width === 0 || rect.height === 0) continue
 
     addCartSelector = await extractStableSelector(page, el) ?? sel
-    await el.click({ timeout: CLICK_MS })
+    await loc.click({ timeout: CLICK_MS })
     await page.waitForTimeout(2500)
     break
   }
@@ -803,18 +968,18 @@ async function learnCartFlow(
   if (!addCartSelector) {
     throw new Error(
       `Kein "In den Warenkorb"-Button auf ${testProductUrl} gefunden. ` +
-      "Möglicherweise ist der Shop login-geschützt oder die Produktseite erfordert Login."
+      "Möglicherweise Login-Schutz oder unbekanntes Shop-Layout."
     )
   }
 
-  // ── 2h: Warenkorb-Counter-Verifikation ───────────────────────────────────
+  // ── 2g: Warenkorb-Counter-Verifikation ───────────────────────────────────
   const cartCountAfter = await getCartCount(page)
   if (cartCountBefore !== null && cartCountAfter !== null) {
     if (cartCountAfter > cartCountBefore) {
-      logDojo("success", `Warenkorb-Zähler bestätigt: ${cartCountBefore} → ${cartCountAfter} ✅`)
+      logDojo("success", `🛒 Counter bestätigt: ${cartCountBefore} → ${cartCountAfter} ✅`)
       console.log(`[learning] ✅ Warenkorb-Counter: ${cartCountBefore} → ${cartCountAfter}`)
     } else {
-      logDojo("warning", `Warenkorb-Zähler hat sich nicht erhöht (${cartCountBefore} → ${cartCountAfter}). Möglicherweise ist Login erforderlich.`)
+      logDojo("warning", `⚠️ Counter unverändert (${cartCountBefore} → ${cartCountAfter}). Login evtl. erforderlich.`)
       console.warn(
         `[learning] Warenkorb-Counter hat sich nicht erhöht (${cartCountBefore} → ${cartCountAfter}). ` +
         "Möglicherweise ist ein Login erforderlich."
@@ -822,13 +987,13 @@ async function learnCartFlow(
     }
   }
 
-  logDojo("info", `Add-to-Cart-Button gefunden und geklickt: ${addCartSelector}`)
+  logDojo("info", `✅ Add-to-Cart geklickt: ${addCartSelector}`)
   itemSteps.push({ step: "click", selector: addCartSelector, timeout: CLICK_MS })
   itemSteps.push({ step: "sleep", ms: 2000 })
 
   console.log(`[learning] Add-to-Cart: ${addCartSelector}`)
 
-  // ── 2i: Checkout-Navigation lernen ───────────────────────────────────────
+  // ── 2h: Checkout-Navigation lernen ───────────────────────────────────────
   const urlBeforeCart = page.url()
 
   const CART_ICON_SELECTORS = [
@@ -848,15 +1013,17 @@ async function learnCartFlow(
 
   let cartIconSelector: string | null = null
   for (const sel of CART_ICON_SELECTORS) {
-    const el = await page.$(sel)
-    if (!el || !(await el.isVisible())) continue
+    const loc = page.locator(sel).first()
+    if (!(await safeIsVisible(loc, 1500))) continue
+    const el = await loc.elementHandle()
+    if (!el) continue
     cartIconSelector = await extractStableSelector(page, el) ?? sel
-    await el.click({ timeout: 5000 })
+    await loc.click({ timeout: 5000 })
     await page.waitForTimeout(1500)
     break
   }
 
-  // Fallback: direkte URL-Navigation
+  // Fallback: direkte URL-Navigation zur Warenkorb-Seite
   if (!cartIconSelector) {
     for (const path of ["/cart", "/warenkorb", "/basket", "/shopping-cart"]) {
       try {
@@ -864,9 +1031,8 @@ async function learnCartFlow(
         await page.goto(testUrl, { waitUntil: "domcontentloaded", timeout: 8000 })
         const currentUrl = page.url()
         if (!currentUrl.includes("404") && !currentUrl.includes("not-found")) {
-          // Synthetischen Selector für URL-Fallback erzeugen
           cartIconSelector = `a[href="${path}"]`
-          logDojo("info", `Warenkorb-URL-Fallback verwendet: ${path}`)
+          logDojo("info", `↩️ Warenkorb-URL-Fallback: ${path}`)
           console.log(`[learning] Warenkorb-URL-Fallback: ${path}`)
           break
         }
@@ -875,7 +1041,7 @@ async function learnCartFlow(
   }
 
   if (cartIconSelector) {
-    logDojo("info", `Warenkorb-Icon geklickt: ${cartIconSelector}`)
+    logDojo("info", `🛒 Warenkorb-Icon geklickt: ${cartIconSelector}`)
     checkoutSteps.push({ step: "click", selector: cartIconSelector, timeout: CLICK_MS })
     checkoutSteps.push({ step: "sleep", ms: 1500 })
   }
@@ -884,29 +1050,29 @@ async function learnCartFlow(
   const didNavigate  = urlAfterCart !== urlBeforeCart
 
   if (didNavigate) {
-    // Echte Seitennavigation (kein Offcanvas)
     checkoutSteps.push({ step: "wait_for_load", timeout: 10_000 })
   } else {
-    // Offcanvas-Muster: Ein kurzer Sleep, damit das Offcanvas vollständig gerendert wird
     logDojo("info", "Offcanvas-Warenkorb erkannt (keine Seitennavigation).")
     checkoutSteps.push({ step: "sleep", ms: 1500 })
   }
 
-  // Erfolgsprüfung Phase 2
   const finalUrl = page.url()
   const isCheckoutPage =
     /\/(checkout|kasse|bestellung|order|bezahlen)(\/|$|\?)/i.test(finalUrl) ||
-    (await page.$('input[name*="firstname" i], input[name*="vorname" i], input[id*="billing" i]')) !== null
+    await safeIsVisible(
+      page.locator('input[name*="firstname" i], input[name*="vorname" i], input[id*="billing" i]').first(),
+      1500
+    )
   const isCartPage =
     /\/(cart|warenkorb|basket|shopping-cart|shoppingcart)(\/|$|\?)/i.test(finalUrl) ||
     (await findProceedToCheckoutButton(page)) !== null
 
   if (isCheckoutPage || isCartPage) {
-    logDojo("success", `Warenkorb oder Kassenseite erfolgreich erreicht: ${finalUrl}`)
-    console.log(`[learning] ✅ Warenkorb oder Kassenseite erfolgreich erreicht: ${finalUrl}`)
+    logDojo("success", `✅ Warenkorb/Kasse erfolgreich erreicht: ${finalUrl}`)
+    console.log(`[learning] ✅ Warenkorb oder Kassenseite: ${finalUrl}`)
   } else {
-    logDojo("warning", `Weder Warenkorb noch Kassenseite eindeutig erkannt: ${finalUrl}`)
-    console.warn(`[learning] Weder Warenkorb noch Kassenseite eindeutig erkannt: ${finalUrl}`)
+    logDojo("warning", `⚠️ Weder Warenkorb noch Kasse erkannt: ${finalUrl}`)
+    console.warn(`[learning] Weder Warenkorb noch Kassenseite erkannt: ${finalUrl}`)
   }
 
   return { item: itemSteps, checkout: checkoutSteps }
@@ -921,16 +1087,12 @@ async function executeDryRun(
   testProduct: string,
   logDojo:     LogFn,
 ): Promise<void> {
-  // 1. Frische Session → Homepage
-  logDojo("dry_run", "Homepage wird geladen...")
-  await page.goto(`https://${domain}`, {
-    waitUntil: "domcontentloaded",
-    timeout:   PAGE_LOAD_MS,
-  })
-  await page.waitForTimeout(1000)
-  await dismissCookieBanner(page)
+  logDojo("dry_run", "🌐 Lade Homepage für Dry-Run...")
+  await page.goto(`https://${domain}`, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
+  await smartWaitForLoad(page)
+  await checkForCloudflare(page)
+  await dismissCookieBanner(page, logDojo)
 
-  // 2. Test-Produkt-URL für {item.url} ermitteln (kurze Suche)
   logDojo("dry_run", `Suche Test-Produkt-URL für "${testProduct}"...`)
   let testProductUrl: string | null = null
   const SEARCH_SELECTORS = [
@@ -938,16 +1100,16 @@ async function executeDryRun(
     'input[name="suche"]', 'input[name="search"]', 'input[name="keywords"]',
   ]
   for (const sel of SEARCH_SELECTORS) {
-    const el = await page.$(sel)
-    if (!el || !(await el.isVisible())) continue
-    await el.fill(testProduct)
+    const loc = page.locator(sel).first()
+    if (!(await safeIsVisible(loc, 1500))) continue
+    await loc.fill(testProduct)
     await page.keyboard.press("Enter")
-    await page.waitForLoadState("domcontentloaded", { timeout: 12_000 })
-    await page.waitForTimeout(800)
+    await page.waitForLoadState("domcontentloaded", { timeout: 12_000 }).catch(() => {})
+    await smartWaitForLoad(page)
 
-    const links = await page.$$("a[href]")
-    for (const link of links) {
-      const href = await link.getAttribute("href") ?? ""
+    const links = await page.locator("a[href]").all()
+    for (const link of links.slice(0, 80)) {
+      const href = await link.getAttribute("href").catch(() => null) ?? ""
       if (
         href.includes("/product") || href.includes("/artikel") ||
         href.includes("/p/") || href.includes("/item") || href.includes("/produkt")
@@ -966,49 +1128,40 @@ async function executeDryRun(
     )
   }
 
-  logDojo("dry_run", `Produkt-URL gefunden: ${testProductUrl}`)
+  logDojo("dry_run", `📦 Produkt-URL: ${testProductUrl}`)
 
-  // 3. Template-Kontext für Interpolation
   const ctx = {
-    loginUrl:  `https://${domain}`,
-    username:  "",
-    password:  "",
-    item: {
-      url:          testProductUrl,
-      quantity:     "2",
-      product_name: testProduct,
-    },
+    loginUrl: `https://${domain}`,
+    username: "",
+    password: "",
+    item:     { url: testProductUrl, quantity: "2", product_name: testProduct },
   }
 
-  // 4. item_steps blind ausführen
-  logDojo("dry_run", `Führe ${playbook.item_steps.length} item_steps aus...`)
+  logDojo("dry_run", `▶️ Führe ${playbook.item_steps.length} item_steps aus...`)
   for (const step of playbook.item_steps) {
     await executeStep(page, step, ctx)
   }
 
-  // 5. checkout_steps blind ausführen
-  logDojo("dry_run", `Führe ${playbook.checkout_steps.length} checkout_steps aus...`)
+  logDojo("dry_run", `▶️ Führe ${playbook.checkout_steps.length} checkout_steps aus...`)
   for (const step of playbook.checkout_steps) {
     await executeStep(page, step, ctx)
   }
 
-  // 6. Erfolg validieren: Entweder Kassenseite erreicht ODER Warenkorb-Seite/Offcanvas-Warenkorb offen
-  const finalUrl = page.url()
-  logDojo("dry_run", `Finale URL geprüft: ${finalUrl}`)
-  const isCheckout =
-    /\/(checkout|kasse|bestellung|order|bezahlen)(\/|$|\?)/i.test(finalUrl)
-  const hasAddrFields =
-    await page.$('input[name*="firstname" i], input[name*="vorname" i], input[id*="billing" i]') !== null
-  
-  // Warenkorb-Validierung: Befinden wir uns auf einer Warenkorb-Seite oder sehen wir den "Zur Kasse"-Button (was beweist, dass der Warenkorb offen ist)?
-  const isCart = 
-    /\/(cart|warenkorb|basket|shopping-cart|shoppingcart)(\/|$|\?)/i.test(finalUrl) ||
+  const finalUrl    = page.url()
+  const isCheckout  = /\/(checkout|kasse|bestellung|order|bezahlen)(\/|$|\?)/i.test(finalUrl)
+  const hasAddrFields = await safeIsVisible(
+    page.locator('input[name*="firstname" i], input[name*="vorname" i], input[id*="billing" i]').first(),
+    1500
+  )
+  const isCart = /\/(cart|warenkorb|basket|shopping-cart|shoppingcart)(\/|$|\?)/i.test(finalUrl) ||
     (await findProceedToCheckoutButton(page)) !== null
+
+  logDojo("dry_run", `🔍 Finale URL: ${finalUrl}`)
 
   if (!isCheckout && !hasAddrFields && !isCart) {
     throw new Error(
       `Dry-Run: Weder Warenkorb noch Kassenseite erreicht. Finale URL: ${finalUrl}. ` +
-      "Erwartet: /cart, /warenkorb, /checkout, /kasse o.ä. oder Vorhandensein eines 'Zur Kasse'-Buttons."
+      "Erwartet: /cart, /warenkorb, /checkout, /kasse o.ä. oder 'Zur Kasse'-Button."
     )
   }
 }
@@ -1034,6 +1187,7 @@ async function executeStep(
   switch (step.step) {
     case "navigate":
       await page.goto(ip(step.url), { waitUntil: "domcontentloaded", timeout: t })
+      await smartWaitForLoad(page)
       break
     case "fill":
       await page.fill(ip(step.selector)!, ip(step.value), { timeout: t })
@@ -1049,7 +1203,7 @@ async function executeStep(
       break
     case "wait_for_load":
       await page.waitForLoadState("domcontentloaded", { timeout: t })
-      await page.waitForTimeout(400)
+      await smartWaitForLoad(page)
       break
     case "key_press":
       await page.keyboard.press(step.key ?? "Enter")
@@ -1064,108 +1218,6 @@ async function executeStep(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function dismissCookieBanner(page: Page): Promise<PlaybookStep | null> {
-  // Warten bis entweder ein bekannter Selektor erscheint ODER 2.5s vergehen:
-  await Promise.race([
-    page.waitForSelector([...COOKIE_SELECTORS_DECLINE, ...COOKIE_SELECTORS_ACCEPT].join(','), { timeout: 2500 }),
-    page.waitForTimeout(2500),
-  ]).catch(() => {})
-
-  // 1. Statische CSS-Selektoren prüfen
-  for (const sel of [...COOKIE_SELECTORS_DECLINE, ...COOKIE_SELECTORS_ACCEPT]) {
-    try {
-      const loc = page.locator(sel)
-      if (!(await loc.isVisible())) continue
-      await loc.click({ timeout: 3000 })
-      await page.waitForTimeout(700)
-      console.log(`[learning] Cookie-Banner: ${sel}`)
-      return { step: "click", selector: sel, timeout: 3000 }
-    } catch { /* weiter */ }
-  }
-
-  // 1b. Shadow DOM Deep-Piercing Scanner (durchdringt Shadow Roots bei Shopware/Usercentrics etc.)
-  const COOKIE_TEXT_PATTERNS = /alle akzeptieren|alle zulassen|nur notwendige cookies akzeptieren|nur notwendige akzeptieren|cookies akzeptieren|notwendige cookies|zustimmen|accept all|allow all/i
-  const deepCandidates = [
-    page.locator('pierce/button').filter({ hasText: COOKIE_TEXT_PATTERNS }),
-    page.locator('pierce/a').filter({ hasText: COOKIE_TEXT_PATTERNS }),
-  ]
-  for (const loc of deepCandidates) {
-    try {
-      if (await loc.first().isVisible({ timeout: 1500 })) {
-        const el = await loc.first().elementHandle()
-        const sel = el ? (await extractStableSelector(page, el) ?? 'pierce/button') : 'pierce/button'
-        await loc.first().click({ timeout: 3000 })
-        await page.waitForTimeout(700)
-        console.log(`[learning] Shadow DOM Cookie-Banner gelöst: ${sel}`)
-        return { step: "click", selector: sel, timeout: 3000 }
-      }
-    } catch { /* weiter */ }
-  }
-
-  // 2. Dynamische Textsuche als mächtiger Fallback für ungeplante Banner (z.B. Kruse / Reinigungsberater)
-  // Ausgeführt direkt im Browser-Kontext für maximale Performance (0 CDP-Roundtrips!)
-  try {
-    const clickedSelector = await page.evaluate(() => {
-      const elements = [...document.querySelectorAll("button"), ...document.querySelectorAll("a")]
-      for (const el of elements) {
-        // Sichtbarkeit prüfen
-        const style = window.getComputedStyle(el)
-        if (style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0) continue
-        const rect = el.getBoundingClientRect()
-        if (rect.width === 0 && rect.height === 0) continue
-
-        const text = (el.textContent ?? "").trim().toLowerCase()
-        const isCookieButton = 
-          text === "alle akzeptieren" || 
-          text === "alle zulassen" ||
-          text === "nur notwendige cookies akzeptieren" || 
-          text === "nur notwendige akzeptieren" || 
-          text === "cookies akzeptieren" || 
-          text.includes("alle akzeptieren") || 
-          text.includes("notwendige cookies") || 
-          text.includes("nur notwendige") ||
-          text.includes("zustimmen") || 
-          text.includes("allow all") || 
-          text.includes("accept all")
-
-        if (isCookieButton) {
-          (el as HTMLElement).click()
-          // Versuchen einen CSS-Selektor zu ermitteln
-          if (el.id && !/^[0-9]/.test(el.id)) return `#${el.id}`
-          const name = el.getAttribute("name")
-          if (name) return `${el.tagName.toLowerCase()}[name="${name}"]`
-          const aria = el.getAttribute("aria-label")
-          if (aria) return `[aria-label="${aria}"]`
-          const cls = Array.from(el.classList).find(c => c.length > 2 && !/^[0-9a-f]{4,}$/.test(c))
-          if (cls) return `${el.tagName.toLowerCase()}.${cls}`
-          return `text="${el.textContent?.trim()}"`
-        }
-      }
-      return null
-    })
-
-    if (clickedSelector) {
-      // Für das Playbook und den Klick übersetzen wir text="..." in einen Playwright-kompatiblen Text-Selector
-      let playbookSelector = clickedSelector
-      if (clickedSelector.startsWith('text=')) {
-        const textVal = clickedSelector.substring(5).replace(/"/g, '')
-        playbookSelector = `button >> text="${textVal}"`
-      }
-
-      // Vertrauenswürdigen Playwright-Klick ausführen!
-      await page.click(playbookSelector, { timeout: 4000 })
-      await page.waitForTimeout(1200) // Warten, bis das Overlay ausblendet
-
-      console.log(`[learning] Cookie-Banner per dynamischer In-Browser-Textsuche erfolgreich gelöst: ${playbookSelector}`)
-      return { step: "click", selector: playbookSelector, timeout: 3000 }
-    }
-  } catch (err) {
-    console.warn("[learning] Dynamische Cookie-Banner-Textsuche fehlgeschlagen:", err)
-  }
-
-  return null
-}
-
 async function findProceedToCheckoutButton(page: Page): Promise<string | null> {
   const SELECTORS = [
     'a[href*="checkout" i]',
@@ -1178,7 +1230,6 @@ async function findProceedToCheckoutButton(page: Page): Promise<string | null> {
     'button[name*="checkout" i]',
     'input[type="submit"][value*="kasse" i]',
     'input[type="submit"][value*="checkout" i]',
-    // Textbasierte Suche als letzter Fallback
     "button >> text=/zur kasse/i",
     "a >> text=/zur kasse/i",
     "button >> text=/checkout/i",
@@ -1186,9 +1237,10 @@ async function findProceedToCheckoutButton(page: Page): Promise<string | null> {
 
   for (const sel of SELECTORS) {
     try {
-      const el = await page.$(sel)
-      if (!el || !(await el.isVisible())) continue
-      return await extractStableSelector(page, el) ?? sel
+      const loc = page.locator(sel).first()
+      if (!(await safeIsVisible(loc, 1000))) continue
+      const el = await loc.elementHandle()
+      return el ? (await extractStableSelector(page, el) ?? sel) : sel
     } catch { /* weiter */ }
   }
 
@@ -1197,22 +1249,12 @@ async function findProceedToCheckoutButton(page: Page): Promise<string | null> {
 
 async function isLoginPage(page: Page): Promise<boolean> {
   try {
-    const url = page.url().toLowerCase()
-    
-    // 1. Wenn ein Passwort-Feld sichtbar ist, ist es eine Login-Seite (schnellster und sicherster Check!)
-    const pwdLoc = page.locator('input[type="password"]').first()
-    if (await pwdLoc.isVisible().catch(() => false)) {
-      return true
-    }
-
-    // 2. Fallback auf URL-Schlüsselwörter
+    const url   = page.url().toLowerCase()
+    // safeTitle verhindert ewiges Hängen in headless/proxy Umgebungen
+    const title = await safeTitle(page, 2000)
     const keywords = /(login|signin|anmeld|anmeldung|auth|konto|kundenbereich)/i
-    if (keywords.test(url)) {
-      const textInputLoc = page.locator('input[type="text"], input[type="email"]').first()
-      return await textInputLoc.isVisible().catch(() => false)
-    }
-    
-    return false
+    if (!keywords.test(url) && !keywords.test(title)) return false
+    return await safeIsVisible(page.locator('input[type="password"]').first(), 2000)
   } catch {
     return false
   }
@@ -1220,26 +1262,17 @@ async function isLoginPage(page: Page): Promise<boolean> {
 
 async function getCartCount(page: Page): Promise<number | null> {
   const SELECTORS = [
-    '[class*="cart-count"]',
-    '[class*="cart-qty"]',
-    '[class*="cart-quantity"]',
-    '[id*="cart-count"]',
-    '[id*="cart-qty"]',
-    '[class*="basket-count"]',
-    '[id*="basket-count"]',
-    "[data-cart-count]",
-    "[data-cart-qty]",
-    ".header-cart .count",
-    ".cart-icon .badge",
-    ".mini-cart-count",
-    ".minicart-qty",
+    '[class*="cart-count"]', '[class*="cart-qty"]', '[class*="cart-quantity"]',
+    '[id*="cart-count"]',   '[id*="cart-qty"]',    '[class*="basket-count"]',
+    '[id*="basket-count"]', "[data-cart-count]",   "[data-cart-qty]",
+    ".header-cart .count",  ".cart-icon .badge",   ".mini-cart-count", ".minicart-qty",
   ]
 
   for (const sel of SELECTORS) {
     try {
-      const el = await page.$(sel)
-      if (!el) continue
-      const text = (await el.textContent() ?? "").trim()
+      const loc = page.locator(sel).first()
+      if (!(await safeIsVisible(loc, 800))) continue
+      const text = (await loc.textContent({ timeout: 1000 }) ?? "").trim()
       const num  = parseInt(text, 10)
       if (!isNaN(num)) return num
     } catch { /* weiter */ }
@@ -1248,56 +1281,57 @@ async function getCartCount(page: Page): Promise<number | null> {
   return null
 }
 
-// Extrahiert den stabilsten CSS-Selektor für ein DOM-Element.
-// Priorisierung: id > name > data-testid > data-action > aria-label > type > gefilterte Klassen
+/**
+ * Extrahiert den stabilsten CSS-Selektor für ein DOM-Element.
+ * Priorisierung: id > name > data-testid > data-action > aria-label > input[type] > gefilterte Klassen
+ * Fix: input[type="text"] wird nur als absoluter Fallback genutzt (nicht vor Klassen-Check).
+ */
 async function extractStableSelector(page: Page, el: unknown): Promise<string | null> {
   try {
     return await page.evaluate((element: Element) => {
       const tag = element.tagName.toLowerCase()
 
-      // 1. id (ohne generierte Hashes oder Zahlen am Anfang)
       if (element.id && !/^[0-9]/.test(element.id) && !/^[a-f0-9]{6,}$/.test(element.id)) {
         return `#${CSS.escape(element.id)}`
       }
 
-      // 2. name-Attribut (formgebundene Elemente)
       const name = element.getAttribute("name")
       if (name) return `${tag}[name="${name}"]`
 
-      // 3. data-testid (semantisches Test-Attribut)
       const testId = element.getAttribute("data-testid")
       if (testId) return `[data-testid="${testId}"]`
 
-      // 4. data-action (semantisch stabil)
       const action = element.getAttribute("data-action")
       if (action && action.length < 50) return `[data-action="${action}"]`
 
-      // 5. aria-label (barrierefrei & stabil)
       const ariaLabel = element.getAttribute("aria-label")
-      if (ariaLabel && ariaLabel.length < 40) {
-        return `[aria-label="${ariaLabel}"]`
-      }
+      if (ariaLabel && ariaLabel.length < 40) return `[aria-label="${ariaLabel}"]`
 
-      // 6. input type (canonical für Formfelder)
       if (tag === "input") {
         const t = (element as HTMLInputElement).type || "text"
+        // Semantisch stabile Typen zuerst (search/email/password/number)
         if (t === "search" || t === "email" || t === "password" || t === "number") {
           return `input[type="${t}"]`
         }
+        // type="text": erst nach Klassen-Check (weiter unten)
       }
 
-      // 7. Gefilterte Klassen (ohne Hash- und Framework-Klassen)
       const classes = Array.from(element.classList).filter(
         (c) =>
           c.length > 2 &&
-          !/^[a-f0-9]{5,}$/.test(c) &&   // Hash-Klassen
-          !/^css-/.test(c) &&              // styled-components
-          !/^sc-/.test(c) &&               // styled-components
-          !/^[A-Z][a-z]+[A-Z]/.test(c) && // camelCase React-interne Klassen
-          !/^_/.test(c)                    // private Klassen (Next.js etc.)
+          !/^[a-f0-9]{5,}$/.test(c) &&    // Hash-Klassen
+          !/^css-/.test(c) &&               // styled-components
+          !/^sc-/.test(c) &&                // styled-components
+          !/^[A-Z][a-z]+[A-Z]/.test(c) &&  // camelCase React-Internals
+          !/^_/.test(c)                     // private Klassen (Next.js)
       ).slice(0, 2)
 
       if (classes.length > 0) return `${tag}.${classes.join(".")}`
+
+      // type="text" als absoluter letzter Fallback
+      if (tag === "input" && (element as HTMLInputElement).type === "text") {
+        return `input[type="text"]`
+      }
 
       return null
     }, el)
@@ -1311,19 +1345,21 @@ async function extractStableSelector(page: Page, el: unknown): Promise<string | 
 async function createBrowserbaseSession(
   useResidentialProxy: boolean,
 ): Promise<BrowserbaseSession> {
-  // Residential Proxy: für Erst-Besuche (Fingerprint wichtig, Bot-Detection hoch)
-  // Datacenter Proxy:  für Dry-Runs (nur Selektor-Validierung, kein erstes Impression)
   const body: Record<string, unknown> = {
     projectId: BROWSERBASE_PROJECT_ID,
     browserSettings: {
-      viewport: { width: 1280, height: 800 },
-      // Stealth-Modus aktivieren (vermeidet einfache Bot-Erkennungen)
-      fingerprint: { devices: ["desktop"], locales: ["de-DE"], operatingSystems: ["windows"] },
+      // 1440×900: einige Shops verstecken kritische Buttons bei kleinen Viewports
+      viewport: { width: 1440, height: 900 },
+      fingerprint: {
+        devices:          ["desktop"],
+        locales:          ["de-DE", "de"],
+        operatingSystems: ["windows"],
+        browsers:         ["chrome"],
+      },
     },
   }
 
   if (useResidentialProxy) {
-    // Browserbase-integriertes Residential-Proxy-Netzwerk
     body.proxies = true
   }
 
@@ -1336,10 +1372,10 @@ async function createBrowserbaseSession(
     body: JSON.stringify(body),
   })
 
-  // Wenn Residential Proxies nicht im Plan enthalten sind (HTTP 402), fallback auf Standard-Verbindung (ohne proxies: true)
+  // HTTP 402: Residential Proxies nicht im Plan → Fallback auf Standard-Verbindung
   if (res.status === 402 && body.proxies) {
-    console.warn("[browserbase] Residential Proxies nicht im Plan enthalten (402). Fallback auf Standard-Verbindung...");
-    delete body.proxies;
+    console.warn("[browserbase] Residential Proxies nicht verfügbar (402). Fallback auf Standard...")
+    delete body.proxies
     res = await fetch("https://api.browserbase.com/v1/sessions", {
       method:  "POST",
       headers: {
@@ -1357,7 +1393,7 @@ async function createBrowserbaseSession(
     )
   }
 
-  const session = await res.json()
+  const session   = await res.json()
   const sessionId = session.id as string
 
   if (!sessionId) {
@@ -1366,8 +1402,6 @@ async function createBrowserbaseSession(
     )
   }
 
-  // connectUrl: Browserbase gibt dies direkt zurück (CDP WebSocket)
-  // Fallback: Standardformat falls ältere API-Version
   const connectUrl: string =
     session.connectUrl ??
     `wss://connect.browserbase.com?apiKey=${BROWSERBASE_API_KEY}&sessionId=${sessionId}`
@@ -1392,7 +1426,7 @@ async function stopBrowserbaseSession(sessionId: string): Promise<void> {
   }
 }
 
-// ── Response Helper ────────────────────────────────────────────────────────────
+// ── Response Helper ───────────────────────────────────────────────────────────
 
 function respond(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
