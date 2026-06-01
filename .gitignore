@@ -32,3 +32,6 @@ yarn-error.log*
 
 # Local Netlify folder
 .netlify
+
+# Secrets and environment variables
+.env

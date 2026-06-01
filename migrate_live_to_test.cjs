@@ -1,13 +1,16 @@
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
 // LIVE Environment
-const LIVE_URL = 'https://owofhbbrywryehlnqmfj.supabase.co';
-const LIVE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93b2ZoYmJyeXdyeWVobG5xbWZqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzU4NDg4NSwiZXhwIjoyMDc5MTYwODg1fQ.lF76DW7yPuneDBSOu0ZXzuG0ifpRh0fTceRcDbwySFA';
+const LIVE_URL = process.env.LIVE_SUPABASE_URL;
+const LIVE_KEY = process.env.LIVE_SUPABASE_SERVICE_ROLE_KEY;
+if (!LIVE_URL || !LIVE_KEY) throw new Error("Missing LIVE_SUPABASE_URL or LIVE_SUPABASE_SERVICE_ROLE_KEY in .env");
 const liveClient = createClient(LIVE_URL, LIVE_KEY);
 
 // TEST Environment
-const TEST_URL = 'https://tfsqkzjvonuzmspgqaby.supabase.co';
-const TEST_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmc3Fremp2b251em1zcGdxYWJ5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODEyODAwNSwiZXhwIjoyMDkzNzA0MDA1fQ.Dd4OKLG8bdotI7UODZ3vkDAuN2yPKczpVU7Vy4-MttA';
+const TEST_URL = process.env.TEST_SUPABASE_URL;
+const TEST_KEY = process.env.TEST_SUPABASE_SERVICE_ROLE_KEY;
+if (!TEST_URL || !TEST_KEY) throw new Error("Missing TEST_SUPABASE_URL or TEST_SUPABASE_SERVICE_ROLE_KEY in .env");
 const testClient = createClient(TEST_URL, TEST_KEY);
 
 const supplierKeys = ['id', 'user_id', 'name', 'contact_name', 'email', 'phone', 'url', 'notes', 'email_subject_template', 'email_body_template', 'login_url', 'login_username', 'login_password', 'documents', 'preferred_order_method', 'order_email', 'order_phone', 'order_url', 'ignore_order_proposals', 'company_id', 'customer_number', 'strategy', 'has_persistent_cart', 'selectors', 'mfa_type', 'is_mfa_incompatible', 'payment_method', 'default_category', 'iban', 'is_auto_generated'];
