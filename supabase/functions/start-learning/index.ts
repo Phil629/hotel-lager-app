@@ -767,24 +767,9 @@ async function learnCartFlow(
   if (didNavigate) {
     // Echte Seitennavigation (kein Offcanvas)
     checkoutSteps.push({ step: "wait_for_load", timeout: 10_000 })
-
-    const alreadyOnCheckout = /\/(checkout|kasse|bestellung|order|bezahlen)(\/|$|\?)/i.test(urlAfterCart)
-    if (!alreadyOnCheckout) {
-      const proceedSel = await findProceedToCheckoutButton(page)
-      if (proceedSel) {
-        checkoutSteps.push({ step: "click", selector: proceedSel, timeout: CLICK_MS })
-        checkoutSteps.push({ step: "wait_for_load", timeout: 12_000 })
-        console.log(`[learning] Proceed-to-Checkout: ${proceedSel}`)
-      }
-    }
   } else {
-    // Offcanvas-Muster: "Zur Kasse"-Button im Panel suchen
-    const proceedSel = await findProceedToCheckoutButton(page)
-    if (proceedSel) {
-      checkoutSteps.push({ step: "click", selector: proceedSel, timeout: CLICK_MS })
-      checkoutSteps.push({ step: "wait_for_load", timeout: 12_000 })
-      console.log(`[learning] Proceed-to-Checkout (Offcanvas): ${proceedSel}`)
-    }
+    // Offcanvas-Muster: Ein kurzer Sleep, damit das Offcanvas vollständig gerendert wird
+    checkoutSteps.push({ step: "sleep", ms: 1500 })
   }
 
   // Erfolgsprüfung Phase 2
@@ -792,11 +777,14 @@ async function learnCartFlow(
   const isCheckoutPage =
     /\/(checkout|kasse|bestellung|order|bezahlen)(\/|$|\?)/i.test(finalUrl) ||
     (await page.$('input[name*="firstname" i], input[name*="vorname" i], input[id*="billing" i]')) !== null
+  const isCartPage =
+    /\/(cart|warenkorb|basket|shopping-cart|shoppingcart)(\/|$|\?)/i.test(finalUrl) ||
+    (await findProceedToCheckoutButton(page)) !== null
 
-  if (isCheckoutPage) {
-    console.log(`[learning] ✅ Kassenseite erreicht: ${finalUrl}`)
+  if (isCheckoutPage || isCartPage) {
+    console.log(`[learning] ✅ Warenkorb oder Kassenseite erfolgreich erreicht: ${finalUrl}`)
   } else {
-    console.warn(`[learning] Kassenseite nicht eindeutig erkannt: ${finalUrl}`)
+    console.warn(`[learning] Weder Warenkorb noch Kassenseite eindeutig erkannt: ${finalUrl}`)
   }
 
   return { item: itemSteps, checkout: checkoutSteps }
@@ -875,17 +863,22 @@ async function executeDryRun(
     await executeStep(page, step, ctx)
   }
 
-  // 6. Erfolg validieren
+  // 6. Erfolg validieren: Entweder Kassenseite erreicht ODER Warenkorb-Seite/Offcanvas-Warenkorb offen
   const finalUrl = page.url()
   const isCheckout =
     /\/(checkout|kasse|bestellung|order|bezahlen)(\/|$|\?)/i.test(finalUrl)
   const hasAddrFields =
     await page.$('input[name*="firstname" i], input[name*="vorname" i], input[id*="billing" i]') !== null
+  
+  // Warenkorb-Validierung: Befinden wir uns auf einer Warenkorb-Seite oder sehen wir den "Zur Kasse"-Button (was beweist, dass der Warenkorb offen ist)?
+  const isCart = 
+    /\/(cart|warenkorb|basket|shopping-cart|shoppingcart)(\/|$|\?)/i.test(finalUrl) ||
+    (await findProceedToCheckoutButton(page)) !== null
 
-  if (!isCheckout && !hasAddrFields) {
+  if (!isCheckout && !hasAddrFields && !isCart) {
     throw new Error(
-      `Dry-Run: Kassenseite nicht erreicht. Finale URL: ${finalUrl}. ` +
-      "Erwartet: /checkout, /kasse, /bestellung o.ä. oder Lieferadress-Felder."
+      `Dry-Run: Weder Warenkorb noch Kassenseite erreicht. Finale URL: ${finalUrl}. ` +
+      "Erwartet: /cart, /warenkorb, /checkout, /kasse o.ä. oder Vorhandensein eines 'Zur Kasse'-Buttons."
     )
   }
 }

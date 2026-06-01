@@ -430,7 +430,9 @@ async function runAutomation(payload) {
         const isOnCheckout = /\/(checkout|kasse|bestellung|order)(\/|$|\?)/i.test(urlAfterFirst)
         console.log('[sw] 5b Check. isOnCheckout:', isOnCheckout, 'urlAfterFirst:', urlAfterFirst, 'SEL.proceed_to_checkout:', !!SEL.proceed_to_checkout)
 
-        if (!isOnCheckout && SEL.proceed_to_checkout) {
+        // UX Refinement: Standardmäßig auf dem Warenkorb anstatt der Kasse stoppen.
+        // Der Klick auf 'proceed_to_checkout' wird absichtlich übersprungen!
+        if (false && !isOnCheckout && SEL.proceed_to_checkout) {
           await patch('searching', 'Navigiere zur Kasse...')
           await sleep(1500) // Offcanvas vollständig gerendert abwarten (Erhöht auf 1500ms)
 
