@@ -966,6 +966,41 @@ async function learnCartFlow(
   }
 
   if (!addCartSelector) {
+    logDojo("info", "Womöglich auf einer Kategorieseite gelandet. Suche nach direkten B2B-Produkt-Links...")
+    // Suche nach typischen B2B-Produkt-Links wie "-p-[ID]" (z.B. Kruse / Reinigungsberater) oder "/p/"
+    const productDetailLink = page.locator('a[href*="-p-"], a[href*="/p-"], a[href*="-p/"]').first()
+    if (await safeIsVisible(productDetailLink, 2500)) {
+      const href = await productDetailLink.getAttribute("href").catch(() => null)
+      if (href) {
+        const fullUrl = href.startsWith("http") ? href : `https://${domain}${href}`
+        logDojo("info", `🔄 Fallback: Kategorieseite erkannt. Navigiere zu echtem Produkt: ${fullUrl}`)
+        testProductUrl = fullUrl
+        await page.goto(fullUrl, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
+        await smartWaitForLoad(page)
+        await checkForCloudflare(page)
+        await dismissCookieBanner(page, logDojo)
+
+        // Nochmal versuchen, den Add-to-Cart-Button auf der neuen Produktseite zu scannen
+        for (const sel of ADD_CART_SELECTORS) {
+          const loc = page.locator(sel).first()
+          if (!(await safeIsVisible(loc, 1500))) continue
+          const el = await loc.elementHandle()
+          if (!el) continue
+          const elType = await el.getAttribute("type")
+          if (elType === "hidden") continue
+          const rect = await el.boundingBox()
+          if (!rect || rect.width === 0 || rect.height === 0) continue
+
+          addCartSelector = await extractStableSelector(page, el) ?? sel
+          await loc.click({ timeout: CLICK_MS })
+          await page.waitForTimeout(2500)
+          break
+        }
+      }
+    }
+  }
+
+  if (!addCartSelector) {
     throw new Error(
       `Kein "In den Warenkorb"-Button auf ${testProductUrl} gefunden. ` +
       "Möglicherweise Login-Schutz oder unbekanntes Shop-Layout."
