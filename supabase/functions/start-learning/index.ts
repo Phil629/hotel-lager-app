@@ -408,8 +408,10 @@ async function learnLoginFlow(
 
     for (const sel of LOGIN_NAV_SELECTORS) {
       try {
-        const el = await page.$(sel)
-        if (!el || !(await el.isVisible())) continue
+        const loc = page.locator(sel)
+        if (!(await loc.isVisible())) continue
+        const el = await loc.elementHandle()
+        if (!el) continue
 
         const stableSel = await extractStableSelector(page, el) ?? sel
         await el.click({ timeout: 5000 })
@@ -538,10 +540,13 @@ async function learnCartFlow(
 
   let searchSelector: string | null = null
   for (const sel of SEARCH_SELECTORS) {
-    const el = await page.$(sel)
-    if (el && await el.isVisible()) {
-      searchSelector = await extractStableSelector(page, el) ?? sel
-      break
+    const loc = page.locator(sel)
+    if (await loc.isVisible()) {
+      const el = await loc.elementHandle()
+      if (el) {
+        searchSelector = await extractStableSelector(page, el) ?? sel
+        break
+      }
     }
   }
 
@@ -628,8 +633,10 @@ async function learnCartFlow(
 
   let qtySelector: string | null = null
   for (const sel of QTY_SELECTORS) {
-    const el = await page.$(sel)
-    if (!el || !(await el.isVisible())) continue
+    const loc = page.locator(sel)
+    if (!(await loc.isVisible())) continue
+    const el = await loc.elementHandle()
+    if (!el) continue
     qtySelector = await extractStableSelector(page, el) ?? sel
     // Auf 2 setzen für Warenkorb-Counter-Verifikation
     await el.fill("2")
@@ -672,8 +679,10 @@ async function learnCartFlow(
 
   let addCartSelector: string | null = null
   for (const sel of ADD_CART_SELECTORS) {
-    const el = await page.$(sel)
-    if (!el || !(await el.isVisible())) continue
+    const loc = page.locator(sel)
+    if (!(await loc.isVisible())) continue
+    const el = await loc.elementHandle()
+    if (!el) continue
     // type="hidden" ausschließen (isInteractable-Äquivalent)
     const elType = await el.getAttribute("type")
     if (elType === "hidden") continue
