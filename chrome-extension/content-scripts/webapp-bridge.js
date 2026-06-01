@@ -14,6 +14,14 @@ window.addEventListener('message', (event) => {
     return
   }
 
+  // NEW: focus the automation tab
+  if (event.data?.type === 'HOTEL_CHECKOUT_FOCUS') {
+    if (chrome?.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'CHECKOUT_FOCUS' })
+    }
+    return
+  }
+
   if (event.data?.type !== EXPECTED_MESSAGE_TYPE)  return
 
   const payload = event.data.payload

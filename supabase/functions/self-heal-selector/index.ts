@@ -17,8 +17,10 @@ const CONTEXT_DESCRIPTIONS: Record<string, string> = {
   login:       'Einloggen in einen B2B-Webshop (Benutzername/Passwort eingeben und absenden)',
   search:      'Produkt im Shop suchen (Suchfeld befüllen und Suche starten)',
   add_to_cart: 'Produkt in den Warenkorb legen oder Bestellmenge in ein Zahlenfeld eingeben',
-  price_check: 'Aktuellen Produktpreis aus der Produktseite auslesen',
-  other:       'Allgemeine Interaktion mit einem B2B-Webshop-Element',
+  price_check:         'Aktuellen Produktpreis aus der Produktseite auslesen',
+  go_to_checkout:      'Klick auf das Warenkorb-Icon oder den Warenkorb-Link, um den Warenkorb zu öffnen. Ergebnis ist entweder eine Navigation zu /cart oder das Öffnen eines Offcanvas-Panels (seitliches Einblendfenster). Typische Elemente: Warenkorb-Icon oben rechts, "Warenkorb anzeigen", "View Cart".',
+  proceed_to_checkout: 'Klick auf den finalen "Zur Kasse"- oder "Checkout"-Button, der zur Bestellseite (/checkout, /kasse) navigiert. Dieser Button befindet sich entweder im geöffneten Offcanvas-Warenkorb oder auf der /cart-Seite. Typische Beschriftungen: "Zur Kasse", "Checkout", "Weiter zur Kasse", "Proceed to Checkout". WICHTIG: Wähle nur einen Button, der nachweislich zur Checkout-URL führt – kein "Weiter einkaufen"-Button.',
+  other:               'Allgemeine Interaktion mit einem B2B-Webshop-Element',
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────

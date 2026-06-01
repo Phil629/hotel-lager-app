@@ -6,6 +6,7 @@ import {
   type CheckoutSession,
   type CheckoutStatus,
 } from '../hooks/useCheckout'
+import { getSupabaseClient } from '../services/supabase'
 
 // ── CSS keyframes injected once at module load ────────────────────────────────
 
@@ -75,7 +76,11 @@ export const CheckoutButton: React.FC<CheckoutButtonProps> = ({
 
   const handleOpenCart = () => {
     if (session?.cartUrl) {
-      window.open(session.cartUrl, '_blank', 'noopener,noreferrer')
+      if (extensionAvailable) {
+        window.postMessage({ type: 'HOTEL_CHECKOUT_FOCUS' }, window.location.origin)
+      } else {
+        window.open(session.cartUrl, '_blank', 'noopener,noreferrer')
+      }
       onCartReady?.(session.cartUrl)
     }
   }
@@ -175,6 +180,7 @@ export const CheckoutButton: React.FC<CheckoutButtonProps> = ({
           }}>
             <StatusPanel
               session={session}
+              supplierId={supplierId}
               supplierName={supplierName}
               priceThresholdPct={priceThresholdPct}
               isActive={isActive}
@@ -193,14 +199,36 @@ export const CheckoutButton: React.FC<CheckoutButtonProps> = ({
 
 const StatusPanel: React.FC<{
   session:           CheckoutSession
+  supplierId:        string
   supplierName:      string
   priceThresholdPct: number
   isActive:          boolean
   onOpenCart:        () => void
   onCancel:          () => void
   onClose:           () => void
-}> = ({ session, supplierName, priceThresholdPct, isActive, onOpenCart, onCancel, onClose }) => {
+}> = ({ session, supplierId, supplierName, priceThresholdPct, isActive, onOpenCart, onCancel, onClose }) => {
   const cfg      = STATUS[session.status] ?? STATUS.idle
+  const [isReporting, setIsReporting] = React.useState(false);
+  const [reportSuccess, setReportSuccess] = React.useState(false);
+
+  const handleReportError = async () => {
+    setIsReporting(true);
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        // Reset learned selectors for this supplier
+        await supabase.from('suppliers').update({ selectors: {} }).eq('id', supplierId);
+      }
+      setReportSuccess(true);
+      setTimeout(() => {
+        onClose();
+      }, 3000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsReporting(false);
+    }
+  };
   const isReady  = session.status === 'ready'
   const isError  = session.status === 'error'
   const isDone   = isReady || isError || session.status === 'expired'
@@ -364,6 +392,36 @@ const StatusPanel: React.FC<{
             <ExternalLink size={16} />
             {session.priceWarning ? 'Trotzdem bestellen →' : 'Jetzt bestellen →'}
           </button>
+        )}
+
+        {isReady && !reportSuccess && (
+          <button
+            onClick={handleReportError}
+            disabled={isReporting}
+            style={{
+              padding:         '12px 16px',
+              backgroundColor: 'var(--color-surface-elevated, #f1f5f9)',
+              color:           '#64748b',
+              border:          '1px solid var(--color-border, #e2e8f0)',
+              borderRadius:    '9px',
+              fontSize:        '13px',
+              fontWeight:      600,
+              cursor:          isReporting ? 'wait' : 'pointer',
+              display:         'flex',
+              alignItems:      'center',
+              justifyContent:  'center',
+              gap:             '6px',
+              opacity:         isReporting ? 0.7 : 1,
+            }}
+          >
+            {isReporting ? 'Melde...' : 'Fehler melden'}
+          </button>
+        )}
+
+        {reportSuccess && (
+          <div style={{ padding: '10px', fontSize: '13px', color: '#16a34a', fontWeight: 600, flex: 1, textAlign: 'center', border: '1px solid #bbf7d0', borderRadius: '9px', backgroundColor: '#f0fdf4' }}>
+            Erfolgreich gemeldet! KI-Gedächtnis gelöscht.
+          </div>
         )}
 
         {isActive && (

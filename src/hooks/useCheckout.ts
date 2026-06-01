@@ -254,7 +254,7 @@ export function useCheckout({
         // Load selectors and loginUrl for this supplier
         const { data: supplierRow } = await supabase
           .from('suppliers')
-          .select('login_url, url, selectors')
+          .select('login_url, url, selectors, order_url')
           .eq('id', supplierId)
           .single()
 
@@ -275,9 +275,11 @@ export function useCheckout({
           search_box:     dbSelectors.search_box     || 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]',
           search_submit:  dbSelectors.search_submit  || 'button[title*="such" i], button[class*="search" i], form[action*="search"] button[type="submit"], form[action*="such"] button[type="submit"]',
           add_to_cart:    dbSelectors.add_to_cart    || 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]',
-          product_qty:    dbSelectors.product_qty    || 'input[type="number"]',
-          cart_url:       dbSelectors.cart_url       || '/cart',
-          price:          dbSelectors.price          || '.price'
+          product_qty:         dbSelectors.product_qty         || 'input[type="number"]',
+          go_to_checkout:      dbSelectors.go_to_checkout      || 'a[href*="/cart"], a[href*="/warenkorb"], a[href*="/checkout"], a[href*="/kasse"], a[href*="/basket"]',
+          proceed_to_checkout: dbSelectors.proceed_to_checkout || 'a[href*="checkout"], a[href*="kasse"], button[class*="checkout"], button[id*="checkout"]',
+          cart_url:            supplierRow?.order_url || dbSelectors.cart_url || '/cart',
+          price:               dbSelectors.price               || '.price'
         }
 
         // Initialize selectors in DB on first run so self-healing can persist improvements

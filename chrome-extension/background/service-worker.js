@@ -4,15 +4,31 @@
 // ── Entry: receive CHECKOUT_START from webapp-bridge ─────────────────────────
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type !== 'CHECKOUT_START') return false
+  if (message.type === 'CHECKOUT_START') {
+    sendResponse({ received: true }) // ACK immediately so bridge doesn't time out
 
-  sendResponse({ received: true }) // ACK immediately so bridge doesn't time out
+    runAutomation(message.payload).catch((err) => {
+      console.error('[sw] Unhandled automation error:', err)
+    })
 
-  runAutomation(message.payload).catch((err) => {
-    console.error('[sw] Unhandled automation error:', err)
-  })
+    return true
+  }
 
-  return true
+  if (message.type === 'CHECKOUT_FOCUS') {
+    chrome.storage.session.get('activeSession').then(res => {
+      const s = res.activeSession
+      if (s?.tabId) {
+        chrome.tabs.update(s.tabId, { active: true }).catch(() => {})
+        chrome.tabs.get(s.tabId).then(t => {
+          if (t.windowId) chrome.windows.update(t.windowId, { focused: true }).catch(() => {})
+        }).catch(() => {})
+      }
+    })
+    sendResponse({ ok: true })
+    return true
+  }
+
+  return false
 })
 
 // ── Main automation orchestrator ──────────────────────────────────────────────
@@ -36,10 +52,10 @@ async function runAutomation(payload) {
 
   // Debug overrides removed
 
-  // SAFEGUARD: Protect against broken DB selectors from the Web App (especially for Reinigungsberater)
-  SEL.search_box = 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]'
-  SEL.add_to_cart = 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]'
-  SEL.cart_url = loginUrl?.includes('reinigungsberater') ? '/warenkorb' : '/cart'
+  // SAFEGUARD: Protect against broken DB selectors from the Web App
+  SEL.search_box = SEL.search_box || 'input[type="search"], input[name*="search"], input[name*="suche"], input[name="keywords"], input[name="q"]'
+  SEL.add_to_cart = SEL.add_to_cart || 'button[name*="cart"], button[id*="cart"], button[name*="warenkorb"], button[id*="warenkorb"], button[class*="cart"], button[class*="warenkorb"], button[class*="add"]'
+  SEL.cart_url = SEL.cart_url || (loginUrl?.includes('reinigungsberater') ? '/warenkorb' : '/cart')
   
   if (loginUrl?.includes('reinigungsberater')) {
     SEL.product_qty = 'input[type="number"]'
@@ -249,7 +265,7 @@ async function runAutomation(payload) {
       try {
 
       // Set quantity
-      const qtySelector = SEL.product_qty || 'input[type="number"], input[name*="qty" i], input[name*="menge" i], input[name*="anzahl" i]'
+      const qtySelector = SEL.product_qty || 'input[type="number"], input[name*="qty" i], input[name*="quantity" i], input[name*="menge" i], input[name*="anzahl" i]'
       await withHeal({
         supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
         ctx: 'add_to_cart', command: 'FILL',
@@ -294,7 +310,7 @@ async function runAutomation(payload) {
         supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
         ctx: 'add_to_cart', command: 'CLICK', selector: cartSelector,
       })
-      await sleep(1200)
+      await sleep(2500) // Erhöht auf 2.5s, damit AJAX-Warenkörbe Zeit zum Speichern haben
 
       // JETZT URL speichern: Tab ist auf der Produktseite
         if (usedSearch && item.product_id) {
@@ -346,21 +362,101 @@ async function runAutomation(payload) {
       )
     }
 
-    // ── Step 5: Price check & handover ──────────────────────────────────────
+    // ── Step 5: Warenkorb öffnen & zur Kasse navigieren ───────────────────
+
+    await patch('price_check', 'Preise werden abgeglichen...')
 
     const hasWarning = updatedItems.some((i) => i.price_ok === false)
     const hasError = updatedItems.some((i) => i.status === 'error')
     const allDeltas  = updatedItems.map((i) => Math.abs(i.price_delta_pct ?? 0)).filter((d) => d > 0)
     const maxDelta   = allDeltas.length > 0 ? Math.max(...allDeltas) : null
 
-    // Resolve cart URL
-    const tab2  = await chrome.tabs.get(supplierTabId)
-    let cartUrl = tab2.url ?? loginUrl
-    if (SEL.cart_url) {
-      cartUrl = SEL.cart_url.startsWith('http')
-        ? SEL.cart_url
-        : new URL(SEL.cart_url, cartUrl).href
+    // ── 5a: Warenkorb öffnen (Offcanvas ODER Navigation zu /cart) ──────────
+
+    if (SEL.go_to_checkout) {
+      await patch('searching', 'Öffne Warenkorb...')
+      const urlBefore = (await chrome.tabs.get(supplierTabId)).url
+
+      try {
+        await withHeal({
+          supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+          ctx: 'go_to_checkout', command: 'CLICK', selector: SEL.go_to_checkout,
+          timeout: 5000,
+        })
+
+        await sleep(1500) // Navigation oder Offcanvas-Animation abwarten
+
+        const urlAfterFirst = (await chrome.tabs.get(supplierTabId)).url
+        if (urlAfterFirst !== urlBefore) {
+          // Echte Navigation → Worker neu injizieren
+          await waitForTabLoad(supplierTabId, 8000)
+          await chrome.scripting.executeScript({
+            target: { tabId: supplierTabId },
+            files:  ['content-scripts/automation-worker.js'],
+          }).catch(e => console.warn('[sw] Re-inject nach go_to_checkout fehlgeschlagen:', e?.message))
+        }
+
+        // ── 5b: Zur Kasse gehen — nur wenn noch NICHT auf Checkout-Seite ───
+
+        const isOnCheckout = /\/(checkout|kasse|bestellung|order)(\/|$|\?)/i.test(urlAfterFirst)
+        console.log('[sw] 5b Check. isOnCheckout:', isOnCheckout, 'urlAfterFirst:', urlAfterFirst, 'SEL.proceed_to_checkout:', !!SEL.proceed_to_checkout)
+
+        if (!isOnCheckout && SEL.proceed_to_checkout) {
+          await patch('searching', 'Navigiere zur Kasse...')
+          await sleep(1500) // Offcanvas vollständig gerendert abwarten (Erhöht auf 1500ms)
+
+          try {
+            console.log('[sw] Executing proceed_to_checkout with selector:', SEL.proceed_to_checkout)
+            const proceedRes = await withHeal({
+              supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+              ctx: 'proceed_to_checkout', command: 'CLICK', selector: SEL.proceed_to_checkout,
+              timeout: 8000,
+            })
+            console.log('[sw] proceed_to_checkout result:', proceedRes)
+
+            const urlAfterProceed = (await chrome.tabs.get(supplierTabId)).url
+            console.log('[sw] urlAfterProceed:', urlAfterProceed)
+            if (urlAfterProceed !== urlAfterFirst) {
+              await waitForTabLoad(supplierTabId, 12_000)
+              await chrome.scripting.executeScript({
+                target: { tabId: supplierTabId },
+                files:  ['content-scripts/automation-worker.js'],
+              }).catch(e => console.warn('[sw] Re-inject nach proceed_to_checkout fehlgeschlagen:', e?.message))
+            }
+
+          } catch (proceedErr) {
+            // Non-fatal: User ist im Warenkorb, kann manuell weiter
+            console.warn('[sw] proceed_to_checkout fehlgeschlagen (non-fatal):', proceedErr.message)
+          }
+        }
+
+      } catch (checkoutErr) {
+        console.warn('[sw] go_to_checkout fehlgeschlagen, URL-Fallback wird versucht:', checkoutErr.message)
+
+        if (SEL.cart_url) {
+          const tab = await chrome.tabs.get(supplierTabId)
+          const fallbackUrl = SEL.cart_url.startsWith('http')
+            ? SEL.cart_url
+            : new URL(SEL.cart_url, tab.url).href
+          await chrome.tabs.update(supplierTabId, { url: fallbackUrl })
+          await waitForTabLoad(supplierTabId, 10_000)
+        }
+      }
     }
+
+    // Immer: Tab in den Vordergrund holen
+    await chrome.tabs.update(supplierTabId, { active: true })
+    try {
+      const finalTab = await chrome.tabs.get(supplierTabId)
+      if (finalTab.windowId) {
+        await chrome.windows.update(finalTab.windowId, { focused: true })
+      }
+    } catch (e) {
+      console.warn('[sw] Could not focus window:', e)
+    }
+
+    const finalTab = await chrome.tabs.get(supplierTabId)
+    const cartUrl  = finalTab.url ?? loginUrl
 
     let statusMsg = '[OK] Warenkorb bereit - jetzt bestellen.'
     if (hasError) {
@@ -375,11 +471,6 @@ async function runAutomation(payload) {
       price_warning:       hasWarning,
       price_deviation_pct: maxDelta,
     })
-
-    // Navigate the tab to the cart so the user only needs to click "Bestellen"
-    if (cartUrl !== tab2.url) {
-      await chrome.tabs.update(supplierTabId, { url: cartUrl })
-    }
 
     await chrome.storage.session.set({
       activeSession: { sessionId, supplierId, loginUrl, tabId: supplierTabId, status: 'ready' },
