@@ -1014,11 +1014,11 @@ async function findProceedToCheckoutButton(page: Page): Promise<string | null> {
 }
 
 async function isLoginPage(page: Page): Promise<boolean> {
-  const url   = page.url().toLowerCase()
-  const title = (await page.title()).toLowerCase()
-  const keywords = /(login|signin|anmeld|anmeldung|auth|konto|kundenbereich)/i
-  if (!keywords.test(url) && !keywords.test(title)) return false
   try {
+    const url   = page.url().toLowerCase()
+    const title = (await page.title()).toLowerCase()
+    const keywords = /(login|signin|anmeld|anmeldung|auth|konto|kundenbereich)/i
+    if (!keywords.test(url) && !keywords.test(title)) return false
     const pwdEl = await page.$('input[type="password"]')
     return pwdEl !== null && await pwdEl.isVisible()
   } catch {
