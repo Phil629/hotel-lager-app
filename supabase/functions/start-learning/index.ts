@@ -219,14 +219,22 @@ async function runLearningPipeline(
   const flushLogs = async (): Promise<void> => {
     if (_logFlushPending) { _logFlushQueued = true; return }
     _logFlushPending = true
-    const snap = [...runLogs]
-    await adminClient
-      .from("shop_playbooks")
-      .update({ learning_logs: snap })
-      .eq("domain", domain)
-      .then(({ error }) => { if (error) console.warn("[logDojo] DB-Fehler:", error.message) })
-    _logFlushPending = false
-    if (_logFlushQueued) { _logFlushQueued = false; void flushLogs() }
+    try {
+      const snap = [...runLogs]
+      const { error } = await adminClient
+        .from("shop_playbooks")
+        .update({ learning_logs: snap })
+        .eq("domain", domain)
+      if (error) console.warn("[logDojo] DB-Fehler:", error.message)
+    } catch (err) {
+      console.error("[logDojo] Unerwarteter Fehler beim Log-Schreiben:", err)
+    } finally {
+      _logFlushPending = false
+      if (_logFlushQueued) {
+        _logFlushQueued = false
+        void flushLogs()
+      }
+    }
   }
 
   const logDojo: LogFn = (level, message) => {
