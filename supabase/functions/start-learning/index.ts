@@ -253,7 +253,7 @@ async function runLearningPipeline(
     logDojo("info", "Erstelle Browserbase-Session (Residential Proxy)...")
     const loginSession = await createBrowserbaseSession(/* residentialProxy = */ true)
     currentSessionId   = loginSession.id
-    logDojo("info", `Browserbase-Session gestartet (ID: ${loginSession.id.substring(0, 8)}…)`)
+    logDojo("info", `Browserbase-Session gestartet (ID: ${loginSession.id})`)
     const loginBrowser = await chromium.connectOverCDP(loginSession.connectUrl)
 
     let loginSteps: PlaybookStep[] = []
@@ -296,7 +296,7 @@ async function runLearningPipeline(
     logDojo("info", "Erstelle neue Browserbase-Session (Residential Proxy)...")
     const cartSession = await createBrowserbaseSession(/* residentialProxy = */ true)
     currentSessionId  = cartSession.id
-    logDojo("info", `Neue Session gestartet (ID: ${cartSession.id.substring(0, 8)}…)`)
+    logDojo("info", `Neue Session gestartet (ID: ${cartSession.id})`)
     const cartBrowser = await chromium.connectOverCDP(cartSession.connectUrl)
 
     let itemSteps:     PlaybookStep[] = []
@@ -346,7 +346,7 @@ async function runLearningPipeline(
 
     const drySession = await createBrowserbaseSession(/* residentialProxy = */ false)
     currentSessionId = drySession.id
-    logDojo("dry_run", `Dry-Run Session gestartet (ID: ${drySession.id.substring(0, 8)}…)`)
+    logDojo("info", `Dry-Run Session gestartet (ID: ${drySession.id})`)
     const dryBrowser = await chromium.connectOverCDP(drySession.connectUrl)
 
     const candidatePlaybook: Playbook = {

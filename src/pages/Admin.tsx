@@ -411,6 +411,18 @@ export const Admin = () => {
         }
     };
 
+    const getLatestSessionId = (logs: LogEntry[]): string | null => {
+        for (let i = logs.length - 1; i >= 0; i--) {
+            const msg = logs[i].message;
+            const match = msg.match(/ID:\s*([a-f0-9\-]+)/i);
+            if (match && match[1]) {
+                const id = match[1].trim();
+                if (id.length > 10) return id;
+            }
+        }
+        return null;
+    };
+
     // ── Shops metrics ─────────────────────────────────────────────────────────
 
     const learningShops  = shops.filter(s => s.automation_status === 'learning_auth' || s.automation_status === 'learning_cart');
@@ -590,6 +602,51 @@ export const Admin = () => {
                                         animation: 'dojo-pulse 1.2s ease-in-out infinite',
                                     }} />
                                 )}
+                                {(() => {
+                                    const sessionId = getLatestSessionId(liveTerminalData?.logs || []);
+                                    if (!sessionId) return null;
+                                    return (
+                                        <a
+                                            href={`https://www.browserbase.com/sessions/${sessionId}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                background: 'rgba(239, 68, 68, 0.12)',
+                                                border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                color: '#f87171',
+                                                padding: '3px 10px',
+                                                borderRadius: '6px',
+                                                fontSize: '11px',
+                                                fontWeight: 600,
+                                                textDecoration: 'none',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s',
+                                                marginLeft: '8px'
+                                            }}
+                                            onMouseOver={e => {
+                                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                                e.currentTarget.style.borderColor = '#f87171';
+                                            }}
+                                            onMouseOut={e => {
+                                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)';
+                                                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                                            }}
+                                        >
+                                            <span style={{
+                                                width: 6,
+                                                height: 6,
+                                                borderRadius: '50%',
+                                                background: '#ef4444',
+                                                animation: 'dojo-pulse 1s ease-in-out infinite',
+                                                display: 'inline-block'
+                                            }} />
+                                            Live-Browser ansehen (VNC)
+                                        </a>
+                                    );
+                                })()}
                             </div>
                             <button
                                 onClick={() => setTerminalDomain(null)}
