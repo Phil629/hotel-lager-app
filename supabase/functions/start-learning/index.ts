@@ -1197,12 +1197,22 @@ async function findProceedToCheckoutButton(page: Page): Promise<string | null> {
 
 async function isLoginPage(page: Page): Promise<boolean> {
   try {
-    const url   = page.url().toLowerCase()
-    const title = (await page.title()).toLowerCase()
+    const url = page.url().toLowerCase()
+    
+    // 1. Wenn ein Passwort-Feld sichtbar ist, ist es eine Login-Seite (schnellster und sicherster Check!)
+    const pwdLoc = page.locator('input[type="password"]').first()
+    if (await pwdLoc.isVisible().catch(() => false)) {
+      return true
+    }
+
+    // 2. Fallback auf URL-Schlüsselwörter
     const keywords = /(login|signin|anmeld|anmeldung|auth|konto|kundenbereich)/i
-    if (!keywords.test(url) && !keywords.test(title)) return false
-    const pwdEl = await page.$('input[type="password"]')
-    return pwdEl !== null && await pwdEl.isVisible()
+    if (keywords.test(url)) {
+      const textInputLoc = page.locator('input[type="text"], input[type="email"]').first()
+      return await textInputLoc.isVisible().catch(() => false)
+    }
+    
+    return false
   } catch {
     return false
   }
