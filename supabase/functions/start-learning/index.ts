@@ -552,7 +552,7 @@ async function dismissCookieBanner(page: Page, logDojo: LogFn): Promise<Playbook
       await loc.click({ timeout: 3000 })
       await page.waitForTimeout(700)
       logDojo("info", `🍪 Layer 1 (CSS): ${sel}`)
-      return { step: "click", selector: sel, timeout: 3000 }
+      return { step: "click", selector: sel, timeout: 3000, optional: true }
     } catch { /* weiter */ }
   }
 
@@ -567,7 +567,7 @@ async function dismissCookieBanner(page: Page, logDojo: LogFn): Promise<Playbook
       await loc.first().click({ timeout: 3000 })
       await page.waitForTimeout(800)
       logDojo("info", `🍪 Layer 2 (Shadow DOM): ${sel}`)
-      return { step: "click", selector: sel, timeout: 3000 }
+      return { step: "click", selector: sel, timeout: 3000, optional: true }
     } catch { /* weiter */ }
   }
 
@@ -611,7 +611,7 @@ async function dismissCookieBanner(page: Page, logDojo: LogFn): Promise<Playbook
       await page.click(playbookSel, { timeout: 4000 }).catch(() => {})
       await page.waitForTimeout(1000)
       logDojo("info", `🍪 Layer 3 (In-Browser): ${playbookSel}`)
-      return { step: "click", selector: playbookSel, timeout: 3000 }
+      return { step: "click", selector: playbookSel, timeout: 3000, optional: true }
     }
   } catch (err) {
     console.warn("[cookie] Layer-3-Scan fehlgeschlagen:", (err as Error).message?.substring(0, 100))
@@ -975,35 +975,67 @@ async function learnCartFlow(
 
   if (!addCartSelector) {
     logDojo("info", "Womöglich auf einer Kategorieseite gelandet. Suche nach direkten B2B-Produkt-Links...")
-    // Suche nach typischen B2B-Produkt-Links wie "-p-[ID]" (z.B. Kruse / Reinigungsberater) oder "/p/"
-    const productDetailLink = page.locator('a[href*="-p-"], a[href*="/p-"], a[href*="-p/"]').first()
-    if (await safeIsVisible(productDetailLink, 2500)) {
-      const href = await productDetailLink.getAttribute("href").catch(() => null)
-      if (href) {
-        const fullUrl = href.startsWith("http") ? href : `https://${domain}${href}`
-        logDojo("info", `🔄 Fallback: Kategorieseite erkannt. Navigiere zu echtem Produkt: ${fullUrl}`)
-        testProductUrl = fullUrl
-        await page.goto(fullUrl, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
-        await smartWaitForLoad(page)
-        await checkForCloudflare(page)
-        await dismissCookieBanner(page, logDojo)
+    
+    let fallbackDetailUrl: string | null = null
+    const allLinks = await page.locator("a[href]").all()
+    
+    // Scanne die ersten 100 Links der Seite nach Produkt-Mustern
+    for (const link of allLinks.slice(0, 100)) {
+      try {
+        const href = await link.getAttribute("href") ?? ""
+        if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue
+        
+        const path = href.toLowerCase()
+        const isProductPattern =
+          // Shopware 5 / Gambio
+          path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
+          // WooCommerce / Shopify
+          path.includes("/product/") || path.includes("/products/") || path.includes("/produkt/") || path.includes("/produkte/") ||
+          // WooCommerce / JTL / Generic
+          path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
+          // JTL
+          /\/a-[a-z0-9]+/i.test(href) ||
+          // PrestaShop
+          /-\d+\.html$/i.test(href) ||
+          // Shopware 6 (UUID check: matches 32-char hex string)
+          /[a-f0-9]{32}/i.test(href)
+          
+        const isNotNavigation =
+          !path.includes("category") && !path.includes("kategorie") &&
+          !path.includes("search") && !path.includes("suche") &&
+          !path.includes("cart") && !path.includes("warenkorb") &&
+          !path.includes("account") && !path.includes("login")
 
-        // Nochmal versuchen, den Add-to-Cart-Button auf der neuen Produktseite zu scannen
-        for (const sel of ADD_CART_SELECTORS) {
-          const loc = page.locator(sel).first()
-          if (!(await safeIsVisible(loc, 1500))) continue
-          const el = await loc.elementHandle()
-          if (!el) continue
-          const elType = await el.getAttribute("type")
-          if (elType === "hidden") continue
-          const rect = await el.boundingBox()
-          if (!rect || rect.width === 0 || rect.height === 0) continue
-
-          addCartSelector = await extractStableSelector(page, el) ?? sel
-          await loc.click({ timeout: CLICK_MS })
-          await page.waitForTimeout(2500)
+        if (isProductPattern && isNotNavigation) {
+          fallbackDetailUrl = href.startsWith("http") ? href : `https://${domain}${href}`
           break
         }
+      } catch { /* weiter */ }
+    }
+    
+    if (fallbackDetailUrl) {
+      logDojo("info", `🔄 Fallback: Kategorieseite erkannt. Navigiere zu echtem Produkt: ${fallbackDetailUrl}`)
+      testProductUrl = fallbackDetailUrl
+      await page.goto(fallbackDetailUrl, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
+      await smartWaitForLoad(page)
+      await checkForCloudflare(page)
+      await dismissCookieBanner(page, logDojo)
+
+      // Nochmal versuchen, den Add-to-Cart-Button auf der neuen Produktseite zu scannen
+      for (const sel of ADD_CART_SELECTORS) {
+        const loc = page.locator(sel).first()
+        if (!(await safeIsVisible(loc, 1500))) continue
+        const el = await loc.elementHandle()
+        if (!el) continue
+        const elType = await el.getAttribute("type")
+        if (elType === "hidden") continue
+        const rect = await el.boundingBox()
+        if (!rect || rect.width === 0 || rect.height === 0) continue
+
+        addCartSelector = await extractStableSelector(page, el) ?? sel
+        await loc.click({ timeout: CLICK_MS })
+        await page.waitForTimeout(2500)
+        break
       }
     }
   }
@@ -1233,10 +1265,26 @@ async function executeStep(
       await smartWaitForLoad(page)
       break
     case "fill":
-      await page.fill(ip(step.selector)!, ip(step.value), { timeout: t })
+      try {
+        await page.fill(ip(step.selector)!, ip(step.value), { timeout: t })
+      } catch (err) {
+        if (step.optional) {
+          console.log(`[dry-run] Optionaler Fill-Schritt fehlgeschlagen: ${step.selector}`)
+        } else {
+          throw err
+        }
+      }
       break
     case "click":
-      await page.click(ip(step.selector)!, { timeout: t })
+      try {
+        await page.click(ip(step.selector)!, { timeout: t })
+      } catch (err) {
+        if (step.optional) {
+          console.log(`[dry-run] Optionaler Klick-Schritt fehlgeschlagen: ${step.selector}`)
+        } else {
+          throw err
+        }
+      }
       break
     case "wait_for_element":
       await page.waitForSelector(ip(step.selector)!, { timeout: t })
@@ -1297,7 +1345,25 @@ async function isLoginPage(page: Page): Promise<boolean> {
     const title = await safeTitle(page, 2000)
     const keywords = /(login|signin|anmeld|anmeldung|auth|konto|kundenbereich)/i
     if (!keywords.test(url) && !keywords.test(title)) return false
-    return await safeIsVisible(page.locator('input[type="password"]').first(), 2000)
+    
+    // 1. Password field check
+    if (await safeIsVisible(page.locator('input[type="password"]').first(), 2000)) {
+      return true
+    }
+    
+    // 2. Passwordless fallback check: email fields or OTP/code inputs
+    const passwordlessLoc = page.locator(
+      'input[type="email"], ' +
+      'input[name*="email" i], ' +
+      'input[name*="username" i], ' +
+      'input[name*="otp" i], ' +
+      'input[id*="otp" i], ' +
+      'input[name*="code" i], ' +
+      'input[id*="code" i], ' +
+      'input[autocomplete="one-time-code"]'
+    ).first()
+    
+    return await safeIsVisible(passwordlessLoc, 2000)
   } catch {
     return false
   }
@@ -1332,51 +1398,62 @@ async function getCartCount(page: Page): Promise<number | null> {
 async function extractStableSelector(page: Page, el: unknown): Promise<string | null> {
   try {
     return await page.evaluate((element: Element) => {
-      const tag = element.tagName.toLowerCase()
+      const getStable = (element: Element): string | null => {
+        const tag = element.tagName.toLowerCase()
 
-      if (element.id && !/^[0-9]/.test(element.id) && !/^[a-f0-9]{6,}$/.test(element.id)) {
-        return `#${CSS.escape(element.id)}`
-      }
-
-      const name = element.getAttribute("name")
-      if (name) return `${tag}[name="${name}"]`
-
-      const testId = element.getAttribute("data-testid")
-      if (testId) return `[data-testid="${testId}"]`
-
-      const action = element.getAttribute("data-action")
-      if (action && action.length < 50) return `[data-action="${action}"]`
-
-      const ariaLabel = element.getAttribute("aria-label")
-      if (ariaLabel && ariaLabel.length < 40) return `[aria-label="${ariaLabel}"]`
-
-      if (tag === "input") {
-        const t = (element as HTMLInputElement).type || "text"
-        // Semantisch stabile Typen zuerst (search/email/password/number)
-        if (t === "search" || t === "email" || t === "password" || t === "number") {
-          return `input[type="${t}"]`
+        if (element.id && !/^[0-9]/.test(element.id) && !/^[a-f0-9]{6,}$/.test(element.id)) {
+          return `#${CSS.escape(element.id)}`
         }
-        // type="text": erst nach Klassen-Check (weiter unten)
+
+        const name = element.getAttribute("name")
+        if (name) return `${tag}[name="${name}"]`
+
+        const testId = element.getAttribute("data-testid")
+        if (testId) return `[data-testid="${testId}"]`
+
+        const action = element.getAttribute("data-action")
+        if (action && action.length < 50) return `[data-action="${action}"]`
+
+        const ariaLabel = element.getAttribute("aria-label")
+        if (ariaLabel && ariaLabel.length < 40) return `[aria-label="${ariaLabel}"]`
+
+        if (tag === "input") {
+          const t = (element as HTMLInputElement).type || "text"
+          // Semantisch stabile Typen zuerst (search/email/password/number)
+          if (t === "search" || t === "email" || t === "password" || t === "number") {
+            return `input[type="${t}"]`
+          }
+          // type="text": erst nach Klassen-Check (weiter unten)
+        }
+
+        const classes = Array.from(element.classList).filter(
+          (c) =>
+            c.length > 2 &&
+            !/^[a-f0-9]{5,}$/.test(c) &&    // Hash-Klassen
+            !/^css-/.test(c) &&               // styled-components
+            !/^sc-/.test(c) &&                // styled-components
+            !/^[A-Z][a-z]+[A-Z]/.test(c) &&  // camelCase React-Internals
+            !/^_/.test(c)                     // private Klassen (Next.js)
+        ).slice(0, 2)
+
+        if (classes.length > 0) return `${tag}.${classes.join(".")}`
+
+        // type="text" als absoluter letzter Fallback
+        if (tag === "input" && (element as HTMLInputElement).type === "text") {
+          return `input[type="text"]`
+        }
+
+        return null
       }
 
-      const classes = Array.from(element.classList).filter(
-        (c) =>
-          c.length > 2 &&
-          !/^[a-f0-9]{5,}$/.test(c) &&    // Hash-Klassen
-          !/^css-/.test(c) &&               // styled-components
-          !/^sc-/.test(c) &&                // styled-components
-          !/^[A-Z][a-z]+[A-Z]/.test(c) &&  // camelCase React-Internals
-          !/^_/.test(c)                     // private Klassen (Next.js)
-      ).slice(0, 2)
+      const stable = getStable(element)
+      if (!stable) return null
 
-      if (classes.length > 0) return `${tag}.${classes.join(".")}`
-
-      // type="text" als absoluter letzter Fallback
-      if (tag === "input" && (element as HTMLInputElement).type === "text") {
-        return `input[type="text"]`
-      }
-
-      return null
+      // Check if element lives inside a Shadow Root
+      const root = element.getRootNode()
+      const isShadow = root instanceof ShadowRoot || (root && (root as DocumentFragment).host !== undefined)
+      
+      return isShadow ? `pierce/${stable}` : stable
     }, el)
   } catch {
     return null

@@ -742,63 +742,71 @@ async function executeSteps(supplierTabId, steps, ctx, patch, patchMsg) {
     const selector = step.selector ? interpolate(step.selector, ctx) : undefined
     const value    = step.value    ? interpolate(step.value, ctx)    : undefined
 
-    switch (step.step) {
-      case 'navigate': {
-        const url = interpolate(step.url, ctx)
-        if (patchMsg) await patch('searching', patchMsg)
-        await navigateAndReinject(supplierTabId, url, step.timeout ?? 15_000)
-        break
-      }
-      case 'fill': {
-        const res = await domAction(supplierTabId, {
-          command: 'FILL', selector, value, timeout: step.timeout ?? 8_000,
-        })
-        if (!res.success) throw new Error(`[playbook] FILL fehlgeschlagen: ${selector} — ${res.error}`)
-        break
-      }
-      case 'click': {
-        const res = await domAction(supplierTabId, {
-          command: 'CLICK', selector, timeout: step.timeout ?? 8_000,
-        })
-        if (!res.success) throw new Error(`[playbook] CLICK fehlgeschlagen: ${selector} — ${res.error}`)
-        break
-      }
-      case 'wait_for_element': {
-        // Poll via CHECK_EXISTS until found or timeout
-        const pollDeadline = Date.now() + (step.timeout ?? 10_000)
-        let found = false
-        while (Date.now() < pollDeadline) {
-          const r = await domAction(supplierTabId, { command: 'CHECK_EXISTS', selector, timeout: 1500 })
-          if (r.success) { found = true; break }
-          await sleep(400)
+    try {
+      switch (step.step) {
+        case 'navigate': {
+          const url = interpolate(step.url, ctx)
+          if (patchMsg) await patch('searching', patchMsg)
+          await navigateAndReinject(supplierTabId, url, step.timeout ?? 15_000)
+          break
         }
-        if (!found) throw new Error(`[playbook] wait_for_element timeout: ${selector}`)
-        break
+        case 'fill': {
+          const res = await domAction(supplierTabId, {
+            command: 'FILL', selector, value, timeout: step.timeout ?? 8_000,
+          })
+          if (!res.success) throw new Error(`[playbook] FILL fehlgeschlagen: ${selector} — ${res.error}`)
+          break
+        }
+        case 'click': {
+          const res = await domAction(supplierTabId, {
+            command: 'CLICK', selector, timeout: step.timeout ?? 8_000,
+          })
+          if (!res.success) throw new Error(`[playbook] CLICK fehlgeschlagen: ${selector} — ${res.error}`)
+          break
+        }
+        case 'wait_for_element': {
+          // Poll via CHECK_EXISTS until found or timeout
+          const pollDeadline = Date.now() + (step.timeout ?? 10_000)
+          let found = false
+          while (Date.now() < pollDeadline) {
+            const r = await domAction(supplierTabId, { command: 'CHECK_EXISTS', selector, timeout: 1500 })
+            if (r.success) { found = true; break }
+            await sleep(400)
+          }
+          if (!found) throw new Error(`[playbook] wait_for_element timeout: ${selector}`)
+          break
+        }
+        case 'wait_for_url': {
+          await waitForUrlPattern(supplierTabId, step.pattern, step.timeout ?? 10_000)
+          break
+        }
+        case 'wait_for_load': {
+          await waitForTabLoad(supplierTabId, step.timeout ?? 12_000)
+          await chrome.scripting.executeScript({
+            target: { tabId: supplierTabId },
+            files:  ['content-scripts/automation-worker.js'],
+          }).catch(e => console.warn('[playbook] Re-inject failed:', e?.message))
+          break
+        }
+        case 'key_press': {
+          await domAction(supplierTabId, {
+            command: 'KEY_PRESS', value: step.key ?? 'Enter', timeout: 2_000,
+          })
+          break
+        }
+        case 'sleep': {
+          await sleep(step.ms ?? 1_000)
+          break
+        }
+        default:
+          console.warn('[playbook] Unbekannter Step-Typ:', step.step)
       }
-      case 'wait_for_url': {
-        await waitForUrlPattern(supplierTabId, step.pattern, step.timeout ?? 10_000)
-        break
+    } catch (err) {
+      if (step.optional) {
+        console.log(`[playbook] Optionaler Schritt fehlgeschlagen (wird uebersprungen): ${step.step} - ${err.message || err}`)
+      } else {
+        throw err
       }
-      case 'wait_for_load': {
-        await waitForTabLoad(supplierTabId, step.timeout ?? 12_000)
-        await chrome.scripting.executeScript({
-          target: { tabId: supplierTabId },
-          files:  ['content-scripts/automation-worker.js'],
-        }).catch(e => console.warn('[playbook] Re-inject failed:', e?.message))
-        break
-      }
-      case 'key_press': {
-        await domAction(supplierTabId, {
-          command: 'KEY_PRESS', value: step.key ?? 'Enter', timeout: 2_000,
-        })
-        break
-      }
-      case 'sleep': {
-        await sleep(step.ms ?? 1_000)
-        break
-      }
-      default:
-        console.warn('[playbook] Unbekannter Step-Typ:', step.step)
     }
   }
 }
