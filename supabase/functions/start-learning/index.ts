@@ -937,6 +937,7 @@ async function executeStep(
 async function dismissCookieBanner(page: Page): Promise<PlaybookStep | null> {
   await page.waitForTimeout(600)
 
+  // 1. Statische CSS-Selektoren prüfen
   for (const sel of [...COOKIE_SELECTORS_DECLINE, ...COOKIE_SELECTORS_ACCEPT]) {
     try {
       const el = await page.$(sel)
@@ -946,6 +947,38 @@ async function dismissCookieBanner(page: Page): Promise<PlaybookStep | null> {
       console.log(`[learning] Cookie-Banner: ${sel}`)
       return { step: "click", selector: sel, timeout: 3000 }
     } catch { /* weiter */ }
+  }
+
+  // 2. Dynamische Textsuche als mächtiger Fallback für ungeplante Banner (z.B. Kruse / Reinigungsberater)
+  try {
+    const elements = [...(await page.$$("button")), ...(await page.$$("a"))]
+    for (const el of elements) {
+      if (!(await el.isVisible())) continue
+      const text = (await el.textContent() ?? "").trim().toLowerCase()
+      
+      const isCookieButton = 
+        text === "alle akzeptieren" || 
+        text === "alle zulassen" ||
+        text === "nur notwendige cookies akzeptieren" || 
+        text === "nur notwendige akzeptieren" || 
+        text === "cookies akzeptieren" || 
+        text.includes("alle akzeptieren") || 
+        text.includes("notwendige cookies") || 
+        text.includes("nur notwendige") ||
+        text.includes("zustimmen") || 
+        text.includes("allow all") || 
+        text.includes("accept all")
+      
+      if (isCookieButton) {
+        const stableSel = await extractStableSelector(page, el) ?? `button >> text="${text}"`
+        await el.click({ timeout: 3000 })
+        await page.waitForTimeout(1000)
+        console.log(`[learning] Cookie-Banner per dynamischer Textsuche gelöst: "${text}" (${stableSel})`)
+        return { step: "click", selector: stableSel, timeout: 3000 }
+      }
+    }
+  } catch (err) {
+    console.warn("[learning] Dynamische Cookie-Banner-Textsuche fehlgeschlagen:", err)
   }
 
   return null
