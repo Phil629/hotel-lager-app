@@ -117,8 +117,8 @@ serve(async (req) => {
       }
       const { data: profile } = await adminClient
         .from("profiles").select("role").eq("id", user.id).single()
-      if (profile?.role !== "admin") {
-        return respond({ error: "Nur SaaS-Admins dürfen den Lernprozess starten." }, 403)
+      if (profile?.role !== "admin" && profile?.role !== "owner") {
+        return respond({ error: "Nur SaaS-Admins oder Inhaber dürfen den Lernprozess starten." }, 403)
       }
     }
 
