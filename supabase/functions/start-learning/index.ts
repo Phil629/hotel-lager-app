@@ -62,6 +62,9 @@ interface BrowserbaseSession {
   connectUrl: string
 }
 
+// Logging-Funktion, die fire-and-forget in die DB schreibt und im Admin-Terminal sichtbar ist
+type LogFn = (level: string, message: string) => void
+
 // ── Cookie-Banner-Selektoren (erst ablehnen, dann akzeptieren als Fallback) ───
 
 const COOKIE_SELECTORS_DECLINE = [
@@ -150,6 +153,7 @@ serve(async (req) => {
           automation_status: "learning_auth",
           last_learning_run: new Date().toISOString(),
           learning_error:    null,
+          learning_logs:     [],
         },
         { onConflict: "domain" }
       )
@@ -201,6 +205,21 @@ async function runLearningPipeline(
     if (error) console.error("[learning] setStatus DB-Fehler:", error)
   }
 
+  // ── Logging-Infrastruktur ─────────────────────────────────────────────────
+  // Jeder logDojo-Aufruf schreibt fire-and-forget alle akkumulierten Logs in die DB.
+  // Das Admin-Terminal abonniert diese Updates via Supabase Realtime.
+  const runLogs: Array<{ timestamp: string; level: string; message: string }> = []
+
+  const logDojo: LogFn = (level, message) => {
+    runLogs.push({ timestamp: new Date().toISOString(), level, message })
+    console.log(`[dojo:${level}] ${message}`)
+    void adminClient
+      .from("shop_playbooks")
+      .update({ learning_logs: [...runLogs] })
+      .eq("domain", domain)
+      .then(({ error }) => { if (error) console.warn("[logDojo] DB-Fehler:", error.message) })
+  }
+
   let currentSessionId: string | null = null
 
   try {
@@ -209,10 +228,13 @@ async function runLearningPipeline(
     // Ziel: Login-Selektoren finden → login_steps erzeugen
     // Kosten: Residential Proxy (erster Eindruck, Fingerprint wichtig)
     // ════════════════════════════════════════════════════════════════════
+    logDojo("info", `Starte Lernprozess für ${domain}...`)
     console.log(`[learning] ═══ Phase 1 Start: ${domain} ═══`)
 
+    logDojo("info", "Erstelle Browserbase-Session (Residential Proxy)...")
     const loginSession = await createBrowserbaseSession(/* residentialProxy = */ true)
     currentSessionId   = loginSession.id
+    logDojo("info", `Browserbase-Session gestartet (ID: ${loginSession.id.substring(0, 8)}…)`)
     const loginBrowser = await chromium.connectOverCDP(loginSession.connectUrl)
 
     let loginSteps: PlaybookStep[] = []
@@ -221,6 +243,7 @@ async function runLearningPipeline(
       const loginCtx  = loginBrowser.contexts()[0]
       const loginPage = loginCtx.pages()[0] ?? await loginCtx.newPage()
 
+      logDojo("info", `Lade Homepage: https://${domain}`)
       await loginPage.goto(`https://${domain}`, {
         waitUntil: "domcontentloaded",
         timeout:   PAGE_LOAD_MS,
@@ -229,9 +252,12 @@ async function runLearningPipeline(
 
       // Cookie-Banner wegklicken
       const cookieStep = await dismissCookieBanner(loginPage)
+      if (cookieStep) logDojo("info", "Cookie-Banner erkannt und geschlossen.")
+      else logDojo("info", "Kein Cookie-Banner erkannt.")
 
       // Login-Flow-Selektoren lernen
-      loginSteps = await learnLoginFlow(loginPage, domain, cookieStep)
+      loginSteps = await learnLoginFlow(loginPage, domain, cookieStep, logDojo)
+      logDojo("success", `Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps gelernt.`)
       console.log(`[learning] Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps`)
     } finally {
       await loginBrowser.close().catch(() => {})
@@ -245,10 +271,13 @@ async function runLearningPipeline(
     // Kosten: Residential Proxy (fresh session, andere IP)
     // ════════════════════════════════════════════════════════════════════
     await setStatus("learning_cart")
+    logDojo("info", "Phase 2 gestartet — lerne Warenkorb-Flow...")
     console.log(`[learning] ═══ Phase 2 Start: ${domain} ═══`)
 
+    logDojo("info", "Erstelle neue Browserbase-Session (Residential Proxy)...")
     const cartSession = await createBrowserbaseSession(/* residentialProxy = */ true)
     currentSessionId  = cartSession.id
+    logDojo("info", `Neue Session gestartet (ID: ${cartSession.id.substring(0, 8)}…)`)
     const cartBrowser = await chromium.connectOverCDP(cartSession.connectUrl)
 
     let itemSteps:     PlaybookStep[] = []
@@ -258,16 +287,20 @@ async function runLearningPipeline(
       const cartCtx  = cartBrowser.contexts()[0]
       const cartPage = cartCtx.pages()[0] ?? await cartCtx.newPage()
 
+      logDojo("info", `Lade Homepage für Warenkorb-Session: https://${domain}`)
       await cartPage.goto(`https://${domain}`, {
         waitUntil: "domcontentloaded",
         timeout:   PAGE_LOAD_MS,
       })
       await cartPage.waitForTimeout(1800)
-      await dismissCookieBanner(cartPage)
 
-      const result = await learnCartFlow(cartPage, domain, testProduct)
+      const cookieStep2 = await dismissCookieBanner(cartPage)
+      if (cookieStep2) logDojo("info", "Cookie-Banner geschlossen (Phase 2).")
+
+      const result = await learnCartFlow(cartPage, domain, testProduct, logDojo)
       itemSteps     = result.item
       checkoutSteps = result.checkout
+      logDojo("success", `Phase 2 abgeschlossen: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps.`)
       console.log(`[learning] Phase 2: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps`)
     } finally {
       await cartBrowser.close().catch(() => {})
@@ -289,10 +322,12 @@ async function runLearningPipeline(
     // Muss in unter 30 Sekunden an der Kasse landen.
     // Kosten: Datacenter-Proxy (günstig, nur Selector-Validierung)
     // ════════════════════════════════════════════════════════════════════
+    logDojo("dry_run", "Dry-Run gestartet (Datacenter-Proxy, max. 30 Sek.)...")
     console.log(`[learning] ═══ Dry-Run Start: ${domain} ═══`)
 
     const drySession = await createBrowserbaseSession(/* residentialProxy = */ false)
     currentSessionId = drySession.id
+    logDojo("dry_run", `Dry-Run Session gestartet (ID: ${drySession.id.substring(0, 8)}…)`)
     const dryBrowser = await chromium.connectOverCDP(drySession.connectUrl)
 
     const candidatePlaybook: Playbook = {
@@ -310,7 +345,7 @@ async function runLearningPipeline(
 
       // Race gegen 30-Sekunden-Limit
       await Promise.race([
-        executeDryRun(dryPage, domain, candidatePlaybook, testProduct),
+        executeDryRun(dryPage, domain, candidatePlaybook, testProduct, logDojo),
         new Promise<never>((_, reject) =>
           setTimeout(
             () => reject(new Error(
@@ -322,9 +357,11 @@ async function runLearningPipeline(
       ])
 
       dryRunPassed = true
+      logDojo("dry_run", "✅ Dry-Run bestanden! Kassenseite erfolgreich erreicht.")
       console.log(`[learning] ✅ Dry-Run bestanden für ${domain}`)
     } catch (err) {
       dryRunError = err instanceof Error ? err.message : String(err)
+      logDojo("error", `❌ Dry-Run fehlgeschlagen: ${dryRunError}`)
       console.error(`[learning] ❌ Dry-Run fehlgeschlagen für ${domain}: ${dryRunError}`)
     } finally {
       await dryBrowser.close().catch(() => {})
@@ -341,16 +378,20 @@ async function runLearningPipeline(
         .eq("domain", domain)
         .single()
 
+      const newVersion = (current?.playbook_version ?? 0) + 1
+      logDojo("success", `🎉 Playbook v${newVersion} verifiziert und in Datenbank gespeichert!`)
+
       await setStatus("verified", {
         playbook:          candidatePlaybook,
         playbook_previous: current?.playbook ?? null,
-        playbook_version:  (current?.playbook_version ?? 0) + 1,
+        playbook_version:  newVersion,
         learning_error:    null,
         last_learning_run: new Date().toISOString(),
       })
 
-      console.log(`[learning] 🎉 ${domain} verifiziert! Playbook v${(current?.playbook_version ?? 0) + 1} gespeichert.`)
+      console.log(`[learning] 🎉 ${domain} verifiziert! Playbook v${newVersion} gespeichert.`)
     } else {
+      logDojo("error", "Lernprozess fehlgeschlagen. Fehler in Datenbank gespeichert.")
       await setStatus("failed", {
         learning_error:    dryRunError ?? "Dry-Run fehlgeschlagen ohne Fehlermeldung.",
         last_learning_run: new Date().toISOString(),
@@ -365,10 +406,14 @@ async function runLearningPipeline(
       await stopBrowserbaseSession(currentSessionId).catch(() => {})
     }
 
+    // Finalen Fehler noch in die Logs schreiben
+    runLogs.push({ timestamp: new Date().toISOString(), level: "error", message: `Fataler Fehler: ${msg}` })
+
     await adminClient.from("shop_playbooks").update({
       automation_status: "failed",
       learning_error:    msg,
       last_learning_run: new Date().toISOString(),
+      learning_logs:     [...runLogs],
     }).eq("domain", domain)
   }
 }
@@ -379,6 +424,7 @@ async function learnLoginFlow(
   page:       Page,
   domain:     string,
   cookieStep: PlaybookStep | null,
+  logDojo:    LogFn,
 ): Promise<PlaybookStep[]> {
   const steps: PlaybookStep[] = []
 
@@ -414,15 +460,32 @@ async function learnLoginFlow(
         if (!el) continue
 
         const stableSel = await extractStableSelector(page, el) ?? sel
-        await el.click({ timeout: 5000 })
-        await page.waitForLoadState("domcontentloaded", { timeout: 10_000 })
-        await page.waitForTimeout(800)
+        const urlBefore = page.url()
+        await el.click({ timeout: 4000 })
+        
+        // Warten, ob sich die URL ändert (echte Navigation)
+        const deadline = Date.now() + 3000
+        let navigated = false
+        while (Date.now() < deadline) {
+          if (page.url() !== urlBefore) {
+            navigated = true
+            break
+          }
+          await page.waitForTimeout(200)
+        }
+
+        if (navigated) {
+          await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {})
+        } else {
+          await page.waitForTimeout(600)
+        }
 
         onLoginPage = await isLoginPage(page)
         if (onLoginPage) {
           // Login-Navigate-Step ins Playbook schreiben
           steps.push({ step: "click", selector: stableSel, timeout: CLICK_MS })
           steps.push({ step: "wait_for_load", timeout: 10_000 })
+          logDojo("info", `Login-Navigation-Button geklickt: ${stableSel}`)
           console.log(`[learning] Login-Nav-Button: ${stableSel}`)
           break
         }
@@ -431,6 +494,7 @@ async function learnLoginFlow(
   }
 
   if (!onLoginPage) {
+    logDojo("warning", `Kein Login-Formular auf ${domain} gefunden — Login-Steps werden trotzdem generiert.`)
     console.warn(`[learning] Kein Login-Formular auf ${domain} gefunden — login_steps bleiben leer`)
     return steps
   }
@@ -455,6 +519,7 @@ async function learnLoginFlow(
     const el = await page.$(sel)
     if (el && await el.isVisible()) {
       usernameSelector = await extractStableSelector(page, el) ?? sel
+      logDojo("info", `E-Mail/Benutzername-Feld gefunden: ${usernameSelector}`)
       break
     }
   }
@@ -463,6 +528,7 @@ async function learnLoginFlow(
   // type="password" ist kanonisch — kein Fallback nötig
   const pwdEl = await page.$('input[type="password"]')
   const passwordSelector = (pwdEl && await pwdEl.isVisible()) ? 'input[type="password"]' : null
+  if (passwordSelector) logDojo("info", "Passwort-Feld gefunden.")
 
   // ── Submit-Button ─────────────────────────────────────────────────────────
   const SUBMIT_SELECTORS = [
@@ -482,6 +548,7 @@ async function learnLoginFlow(
     const el = await page.$(sel)
     if (el && await el.isVisible()) {
       submitSelector = await extractStableSelector(page, el) ?? sel
+      logDojo("info", `Login-Button gefunden: ${submitSelector}`)
       break
     }
   }
@@ -502,6 +569,7 @@ async function learnLoginFlow(
     steps.push({ step: "wait_for_load", timeout: 12_000 })
   }
 
+  logDojo("success", `Login-Steps generiert: ${steps.length} Steps (user=${!!usernameSelector}, pass=${!!passwordSelector}, submit=${!!submitSelector}).`)
   console.log(
     `[learning] Login-Selektoren: username=${usernameSelector} ` +
     `password=${passwordSelector} submit=${submitSelector}`
@@ -516,6 +584,7 @@ async function learnCartFlow(
   page:        Page,
   domain:      string,
   testProduct: string,
+  logDojo:     LogFn,
 ): Promise<{ item: PlaybookStep[]; checkout: PlaybookStep[] }> {
   const itemSteps:     PlaybookStep[] = []
   const checkoutSteps: PlaybookStep[] = []
@@ -554,9 +623,11 @@ async function learnCartFlow(
     throw new Error(`Kein Suchfeld auf ${domain} gefunden — Cart-Flow kann nicht gelernt werden.`)
   }
 
+  logDojo("info", `Suchfeld gefunden: ${searchSelector}`)
   console.log(`[learning] Suchfeld: ${searchSelector}`)
 
   // ── 2b: Testprodukt suchen ────────────────────────────────────────────────
+  logDojo("info", `Suche nach "${testProduct}"...`)
   await page.fill(searchSelector, testProduct)
   await page.keyboard.press("Enter")
   await page.waitForLoadState("domcontentloaded", { timeout: 15_000 })
@@ -608,6 +679,7 @@ async function learnCartFlow(
     )
   }
 
+  logDojo("info", `Test-Produkt-URL gefunden: ${testProductUrl}`)
   console.log(`[learning] Test-Produkt-URL: ${testProductUrl}`)
 
   // ── 2d: Zur Produktseite navigieren ───────────────────────────────────────
@@ -646,11 +718,13 @@ async function learnCartFlow(
 
   if (qtySelector) {
     itemSteps.push({ step: "fill", selector: qtySelector, value: "{item.quantity}", timeout: FILL_MS })
+    logDojo("info", `Mengenfeld gefunden: ${qtySelector}`)
     console.log(`[learning] Mengenfeld: ${qtySelector}`)
   }
 
   // ── 2f: Warenkorb-Counter VOR Add-to-Cart lesen ───────────────────────────
   const cartCountBefore = await getCartCount(page)
+  logDojo("info", `Warenkorb-Zähler vor Add-to-Cart: ${cartCountBefore ?? "nicht erkennbar"}`)
 
   // ── 2g: "In den Warenkorb"-Button finden und klicken ─────────────────────
   const ADD_CART_SELECTORS = [
@@ -706,8 +780,10 @@ async function learnCartFlow(
   const cartCountAfter = await getCartCount(page)
   if (cartCountBefore !== null && cartCountAfter !== null) {
     if (cartCountAfter > cartCountBefore) {
+      logDojo("success", `Warenkorb-Zähler bestätigt: ${cartCountBefore} → ${cartCountAfter} ✅`)
       console.log(`[learning] ✅ Warenkorb-Counter: ${cartCountBefore} → ${cartCountAfter}`)
     } else {
+      logDojo("warning", `Warenkorb-Zähler hat sich nicht erhöht (${cartCountBefore} → ${cartCountAfter}). Möglicherweise ist Login erforderlich.`)
       console.warn(
         `[learning] Warenkorb-Counter hat sich nicht erhöht (${cartCountBefore} → ${cartCountAfter}). ` +
         "Möglicherweise ist ein Login erforderlich."
@@ -715,6 +791,7 @@ async function learnCartFlow(
     }
   }
 
+  logDojo("info", `Add-to-Cart-Button gefunden und geklickt: ${addCartSelector}`)
   itemSteps.push({ step: "click", selector: addCartSelector, timeout: CLICK_MS })
   itemSteps.push({ step: "sleep", ms: 2000 })
 
@@ -758,6 +835,7 @@ async function learnCartFlow(
         if (!currentUrl.includes("404") && !currentUrl.includes("not-found")) {
           // Synthetischen Selector für URL-Fallback erzeugen
           cartIconSelector = `a[href="${path}"]`
+          logDojo("info", `Warenkorb-URL-Fallback verwendet: ${path}`)
           console.log(`[learning] Warenkorb-URL-Fallback: ${path}`)
           break
         }
@@ -766,6 +844,7 @@ async function learnCartFlow(
   }
 
   if (cartIconSelector) {
+    logDojo("info", `Warenkorb-Icon geklickt: ${cartIconSelector}`)
     checkoutSteps.push({ step: "click", selector: cartIconSelector, timeout: CLICK_MS })
     checkoutSteps.push({ step: "sleep", ms: 1500 })
   }
@@ -778,6 +857,7 @@ async function learnCartFlow(
     checkoutSteps.push({ step: "wait_for_load", timeout: 10_000 })
   } else {
     // Offcanvas-Muster: Ein kurzer Sleep, damit das Offcanvas vollständig gerendert wird
+    logDojo("info", "Offcanvas-Warenkorb erkannt (keine Seitennavigation).")
     checkoutSteps.push({ step: "sleep", ms: 1500 })
   }
 
@@ -791,8 +871,10 @@ async function learnCartFlow(
     (await findProceedToCheckoutButton(page)) !== null
 
   if (isCheckoutPage || isCartPage) {
+    logDojo("success", `Warenkorb oder Kassenseite erfolgreich erreicht: ${finalUrl}`)
     console.log(`[learning] ✅ Warenkorb oder Kassenseite erfolgreich erreicht: ${finalUrl}`)
   } else {
+    logDojo("warning", `Weder Warenkorb noch Kassenseite eindeutig erkannt: ${finalUrl}`)
     console.warn(`[learning] Weder Warenkorb noch Kassenseite eindeutig erkannt: ${finalUrl}`)
   }
 
@@ -802,12 +884,14 @@ async function learnCartFlow(
 // ── Dry-Run: Playbook mechanisch abspielen ────────────────────────────────────
 
 async function executeDryRun(
-  page:      Page,
-  domain:    string,
-  playbook:  Playbook,
+  page:        Page,
+  domain:      string,
+  playbook:    Playbook,
   testProduct: string,
+  logDojo:     LogFn,
 ): Promise<void> {
   // 1. Frische Session → Homepage
+  logDojo("dry_run", "Homepage wird geladen...")
   await page.goto(`https://${domain}`, {
     waitUntil: "domcontentloaded",
     timeout:   PAGE_LOAD_MS,
@@ -816,6 +900,7 @@ async function executeDryRun(
   await dismissCookieBanner(page)
 
   // 2. Test-Produkt-URL für {item.url} ermitteln (kurze Suche)
+  logDojo("dry_run", `Suche Test-Produkt-URL für "${testProduct}"...`)
   let testProductUrl: string | null = null
   const SEARCH_SELECTORS = [
     'input[type="search"]', 'input[name="s"]', 'input[name="q"]',
@@ -850,6 +935,8 @@ async function executeDryRun(
     )
   }
 
+  logDojo("dry_run", `Produkt-URL gefunden: ${testProductUrl}`)
+
   // 3. Template-Kontext für Interpolation
   const ctx = {
     loginUrl:  `https://${domain}`,
@@ -863,17 +950,20 @@ async function executeDryRun(
   }
 
   // 4. item_steps blind ausführen
+  logDojo("dry_run", `Führe ${playbook.item_steps.length} item_steps aus...`)
   for (const step of playbook.item_steps) {
     await executeStep(page, step, ctx)
   }
 
   // 5. checkout_steps blind ausführen
+  logDojo("dry_run", `Führe ${playbook.checkout_steps.length} checkout_steps aus...`)
   for (const step of playbook.checkout_steps) {
     await executeStep(page, step, ctx)
   }
 
   // 6. Erfolg validieren: Entweder Kassenseite erreicht ODER Warenkorb-Seite/Offcanvas-Warenkorb offen
   const finalUrl = page.url()
+  logDojo("dry_run", `Finale URL geprüft: ${finalUrl}`)
   const isCheckout =
     /\/(checkout|kasse|bestellung|order|bezahlen)(\/|$|\?)/i.test(finalUrl)
   const hasAddrFields =
