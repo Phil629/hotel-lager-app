@@ -933,6 +933,7 @@ async function learnCartFlow(
 
   let testProductUrl: string | null = null
   const visibleProductLink = await page.evaluate(({ selectors, domainStr }) => {
+    // 1. Spezifische Produktselektoren prüfen
     for (const sel of selectors) {
       try {
         const el = document.querySelector(sel);
@@ -940,31 +941,46 @@ async function learnCartFlow(
         const style = window.getComputedStyle(el);
         if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
         const href = el.getAttribute("href");
-        if (!href || href === "/" || href.startsWith("#")) continue;
+        if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
+        
+        // Verhindert, dass wir aus Versehen eine Kategorie-Seite als Produkt-Detailseite interpretieren
+        const path = href.toLowerCase();
+        if (path.includes("category") || path.includes("kategorie") || path.includes("search") || path.includes("suche")) continue;
+        
         return href.startsWith("http") ? href : `https://${domainStr}${href}`;
       } catch { /* ungültiger Selektor */ }
+    }
+    
+    // 2. Breitbandiger Fallback über alle Links der Seite natively im Browser (0 CDP Roundtrips)
+    const allLinks = Array.from(document.querySelectorAll("a[href]"));
+    for (const link of allLinks) {
+      const href = link.getAttribute("href");
+      if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
+      const path = href.toLowerCase();
+      
+      const isProductPattern =
+        path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
+        path.includes("/product/") || path.includes("/products/") || path.includes("/produkt/") || path.includes("/produkte/") ||
+        path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
+        /\/a-[a-z0-9]+/i.test(href) ||
+        /-\d+\.html$/i.test(href) ||
+        /[a-f0-9]{32}/i.test(href);
+        
+      const isNotNavigation =
+        !path.includes("category") && !path.includes("kategorie") &&
+        !path.includes("search") && !path.includes("suche") &&
+        !path.includes("cart") && !path.includes("warenkorb") &&
+        !path.includes("account") && !path.includes("login");
+        
+      if (isProductPattern && isNotNavigation) {
+        return href.startsWith("http") ? href : `https://${domainStr}${href}`;
+      }
     }
     return null;
   }, { selectors: PRODUCT_LINK_SELECTORS, domainStr: domain })
 
   if (visibleProductLink) {
     testProductUrl = visibleProductLink
-  }
-
-  // Fallback: alle <a> mit produktartigem Pfad (max. 60 Links scannen)
-  if (!testProductUrl) {
-    const allLinks = await page.locator("a[href]").all()
-    for (const link of allLinks.slice(0, 60)) {
-      const href = await link.getAttribute("href").catch(() => null) ?? ""
-      if (
-        (href.includes("/product") || href.includes("/artikel") ||
-         href.includes("/p/") || href.includes("/item") || href.includes("/produkt")) &&
-        !href.includes("category") && !href.includes("kategorie") && !href.includes("search")
-      ) {
-        testProductUrl = href.startsWith("http") ? href : `https://${domain}${href}`
-        break
-      }
-    }
   }
 
   if (!testProductUrl) {
@@ -1095,7 +1111,7 @@ async function learnCartFlow(
     
     const fallbackDetailUrl = await page.evaluate((domainStr: string) => {
       const allLinks = Array.from(document.querySelectorAll("a[href]"))
-      for (const link of allLinks.slice(0, 100)) {
+      for (const link of allLinks.slice(0, 600)) {
         const href = link.getAttribute("href")
         if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue
         
@@ -1336,16 +1352,36 @@ async function executeDryRun(
     await page.waitForLoadState("domcontentloaded", { timeout: 12_000 }).catch(() => {})
     await smartWaitForLoad(page)
 
-    const links = await page.locator("a[href]").all()
-    for (const link of links.slice(0, 80)) {
-      const href = await link.getAttribute("href").catch(() => null) ?? ""
-      if (
-        href.includes("/product") || href.includes("/artikel") ||
-        href.includes("/p/") || href.includes("/item") || href.includes("/produkt")
-      ) {
-        testProductUrl = href.startsWith("http") ? href : `https://${domain}${href}`
-        break
+    const foundDryProductUrl = await page.evaluate((domainStr) => {
+      const allLinks = Array.from(document.querySelectorAll("a[href]"));
+      for (const link of allLinks.slice(0, 500)) {
+        const href = link.getAttribute("href");
+        if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
+        const path = href.toLowerCase();
+        
+        const isProductPattern =
+          path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
+          path.includes("/product/") || path.includes("/products/") || path.includes("/produkt/") || path.includes("/produkte/") ||
+          path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
+          /\/a-[a-z0-9]+/i.test(href) ||
+          /-\d+\.html$/i.test(href) ||
+          /[a-f0-9]{32}/i.test(href);
+          
+        const isNotNavigation =
+          !path.includes("category") && !path.includes("kategorie") &&
+          !path.includes("search") && !path.includes("suche") &&
+          !path.includes("cart") && !path.includes("warenkorb") &&
+          !path.includes("account") && !path.includes("login");
+          
+        if (isProductPattern && isNotNavigation) {
+          return href.startsWith("http") ? href : `https://${domainStr}${href}`;
+        }
       }
+      return null;
+    }, domain);
+
+    if (foundDryProductUrl) {
+      testProductUrl = foundDryProductUrl;
     }
     if (testProductUrl) break
   }
