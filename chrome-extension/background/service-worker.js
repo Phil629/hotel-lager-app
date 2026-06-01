@@ -66,6 +66,11 @@ async function runAutomation(payload) {
     activeSession: { sessionId, supplierId, loginUrl, status: 'starting' },
   })
 
+  // Store auth context separately so the popup can call RPCs (e.g. report_checkout_failure)
+  await chrome.storage.session.set({
+    sessionAuth: { supabaseUrl, supabaseAnonKey, userJwt, supplierId },
+  })
+
   const patch = (status, message, extra = {}) =>
     patchSession({ supabaseUrl, supabaseAnonKey, userJwt, sessionId, status, message, extra })
 
@@ -94,6 +99,28 @@ async function runAutomation(payload) {
 
     // Tiny pause so the worker's onMessage listener is registered
     await sleep(300)
+
+    // ── Playbook path: try verified static playbook before legacy selector flow ──
+    // If a cloud-validated playbook exists for this domain, execute it directly.
+    // On success: skip all legacy steps and go straight to 'ready'.
+    const playbookResult = await loadAndRunPlaybook(payload, supplierTabId, patch)
+    if (playbookResult) {
+      const { cartUrl, updatedItems, hasWarning, maxDelta } = playbookResult
+      let statusMsg = '[OK] Warenkorb bereit - jetzt bestellen.'
+      if (hasWarning) statusMsg = '[Warnung] Preisabweichung erkannt - bitte vor dem Bestellen prüfen!'
+
+      await patch('ready', statusMsg, {
+        cart_url:            cartUrl,
+        items:               updatedItems,
+        price_warning:       hasWarning,
+        price_deviation_pct: maxDelta,
+      })
+      await chrome.storage.session.set({
+        activeSession: { sessionId, supplierId, loginUrl, tabId: supplierTabId, status: 'ready' },
+      })
+      console.log('[sw] Playbook path completed. cartUrl=', cartUrl)
+      return
+    }
 
     // ── Step 3: Login ───────────────────────────────────────────────────────
 
@@ -246,7 +273,8 @@ async function runAutomation(payload) {
           console.error(`[sw] Search failed for ${item.product_name}:`, searchErr)
           // Continue to next item if search fails
           updatedItems[idx].status = 'error'
-          await patch('error', `Fehler bei Suche: ${item.product_name}`, { items: updatedItems })
+          const translated = translateError(searchErr.message || String(searchErr))
+          await patch('error', `Fehler bei der Suche (${item.product_name}): ${translated}`, { items: updatedItems })
           continue
         }
       }
@@ -352,7 +380,8 @@ async function runAutomation(payload) {
       } catch (cartErr) {
         console.error(`[sw] Add to cart failed for ${item.product_name}:`, cartErr)
         updatedItems[idx].status = 'error'
-        await patch('error', `Fehler beim Warenkorb: ${item.product_name}`, { items: updatedItems })
+        const translated = translateError(cartErr.message || String(cartErr))
+        await patch('error', `Fehler beim Einlegen in den Warenkorb (${item.product_name}): ${translated}`, { items: updatedItems })
       }
 
       console.log(
@@ -472,17 +501,37 @@ async function runAutomation(payload) {
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    const translatedMsg = translateError(msg)
     console.error('[sw] Automation failed:', msg)
 
-    await patch('error', 'Fehler: ' + msg, { error_message: msg })
+    await patch('error', 'Kritischer Fehler: ' + translatedMsg, { error_message: msg })
 
     await chrome.storage.session.set({
-      activeSession: { sessionId, supplierId, loginUrl, tabId: supplierTabId, status: 'error', error: msg },
+      activeSession: { sessionId, supplierId, loginUrl, tabId: supplierTabId, status: 'error', error: translatedMsg },
     })
   }
 }
 
-// ── withHeal: DOM action + self-healing fallback ──────────────────────────────
+function translateError(msg) {
+  if (msg.includes('Receiving end does not exist') || msg.includes('No tab with id') || msg.includes('tab was closed')) {
+    return 'Der Shop-Tab wurde unerwartet geschlossen oder die Shop-Seite hat im Hintergrund neugeladen. Bitte starte den Bestellvorgang neu.'
+  }
+  if (msg.includes('Timeout')) {
+    return 'Ein wichtiges Element auf der Shop-Seite konnte nicht rechtzeitig gefunden werden (Timeout).'
+  }
+  if (msg.includes('context must be one of')) {
+    return 'Interner KI-Fehler: Unbekannter Reparaturbefehl.'
+  }
+  if (msg.includes('Gemini 404') || msg.includes('not supported for generateContent') || msg.includes('Gemini 400')) {
+    return 'Die künstliche Intelligenz ist aktuell nicht erreichbar. Wir versuchen es später noch einmal.'
+  }
+  if (msg.includes('Failed to fetch')) {
+    return 'Netzwerkfehler: Keine Verbindung zum Shop oder zur Cloud möglich. Prüfe deine Internetverbindung.'
+  }
+  return msg
+}
+
+// 🧰 withHeal: DOM action + self-healing fallback ──────────────────────────────
 
 async function withHeal({ supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
                            ctx, command, selector, value, timeout = 8000 }) {
@@ -640,3 +689,212 @@ async function patchSession({ supabaseUrl, supabaseAnonKey, userJwt, sessionId, 
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// ── Playbook System ───────────────────────────────────────────────────────────
+
+function extractDomain(url) {
+  if (!url) return null
+  try {
+    const normalized = url.startsWith('http') ? url : `https://${url}`
+    return new URL(normalized).hostname.replace(/^www\./, '').toLowerCase()
+  } catch { return null }
+}
+
+function interpolate(template, ctx) {
+  if (!template) return template
+  return template
+    .replace(/\{loginUrl\}/g,      ctx.loginUrl      ?? '')
+    .replace(/\{username\}/g,      ctx.username       ?? '')
+    .replace(/\{password\}/g,      ctx.password       ?? '')
+    .replace(/\{item\.url\}/g,     ctx.item?.url      ?? '')
+    .replace(/\{item\.quantity\}/g, String(ctx.item?.quantity ?? ''))
+    .replace(/\{item\.name\}/g,    ctx.item?.product_name ?? '')
+    .replace(/\{item\.sku\}/g,     ctx.item?.product_number ?? '')
+}
+
+async function waitForUrlPattern(tabId, pattern, timeout = 10_000) {
+  const re = new RegExp(pattern, 'i')
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    const tab = await chrome.tabs.get(tabId)
+    if (re.test(tab.url ?? '')) return
+    await sleep(300)
+  }
+  throw new Error(`URL-Pattern /${pattern}/ nicht erreicht nach ${timeout}ms`)
+}
+
+async function executeSteps(supplierTabId, steps, ctx, patch, patchMsg) {
+  if (!Array.isArray(steps) || steps.length === 0) return
+
+  for (const step of steps) {
+    const selector = step.selector ? interpolate(step.selector, ctx) : undefined
+    const value    = step.value    ? interpolate(step.value, ctx)    : undefined
+
+    switch (step.step) {
+      case 'navigate': {
+        const url = interpolate(step.url, ctx)
+        if (patchMsg) await patch('searching', patchMsg)
+        await navigateAndReinject(supplierTabId, url, step.timeout ?? 15_000)
+        break
+      }
+      case 'fill': {
+        const res = await domAction(supplierTabId, {
+          command: 'FILL', selector, value, timeout: step.timeout ?? 8_000,
+        })
+        if (!res.success) throw new Error(`[playbook] FILL fehlgeschlagen: ${selector} — ${res.error}`)
+        break
+      }
+      case 'click': {
+        const res = await domAction(supplierTabId, {
+          command: 'CLICK', selector, timeout: step.timeout ?? 8_000,
+        })
+        if (!res.success) throw new Error(`[playbook] CLICK fehlgeschlagen: ${selector} — ${res.error}`)
+        break
+      }
+      case 'wait_for_element': {
+        // Poll via CHECK_EXISTS until found or timeout
+        const pollDeadline = Date.now() + (step.timeout ?? 10_000)
+        let found = false
+        while (Date.now() < pollDeadline) {
+          const r = await domAction(supplierTabId, { command: 'CHECK_EXISTS', selector, timeout: 1500 })
+          if (r.success) { found = true; break }
+          await sleep(400)
+        }
+        if (!found) throw new Error(`[playbook] wait_for_element timeout: ${selector}`)
+        break
+      }
+      case 'wait_for_url': {
+        await waitForUrlPattern(supplierTabId, step.pattern, step.timeout ?? 10_000)
+        break
+      }
+      case 'wait_for_load': {
+        await waitForTabLoad(supplierTabId, step.timeout ?? 12_000)
+        await chrome.scripting.executeScript({
+          target: { tabId: supplierTabId },
+          files:  ['content-scripts/automation-worker.js'],
+        }).catch(e => console.warn('[playbook] Re-inject failed:', e?.message))
+        break
+      }
+      case 'key_press': {
+        await domAction(supplierTabId, {
+          command: 'KEY_PRESS', value: step.key ?? 'Enter', timeout: 2_000,
+        })
+        break
+      }
+      case 'sleep': {
+        await sleep(step.ms ?? 1_000)
+        break
+      }
+      default:
+        console.warn('[playbook] Unbekannter Step-Typ:', step.step)
+    }
+  }
+}
+
+async function loadAndRunPlaybook(payload, supplierTabId, patch) {
+  const {
+    supabaseUrl, supabaseAnonKey, userJwt,
+    loginUrl, username, password,
+    items: ITEMS, sessionId, supplierId,
+    priceThresholdPct: THRESHOLD,
+  } = payload
+
+  const domain = extractDomain(loginUrl)
+  if (!domain) return null
+
+  let playbookRow = null
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/shop_playbooks?domain=eq.${encodeURIComponent(domain)}&select=playbook,automation_status`,
+      { headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${userJwt}` } }
+    )
+    const rows = await res.json()
+    playbookRow = rows?.[0]
+  } catch (e) {
+    console.warn('[playbook] Fetch fehlgeschlagen, Legacy-Pfad wird genutzt:', e.message)
+    return null
+  }
+
+  if (!playbookRow?.playbook || playbookRow.automation_status !== 'verified') {
+    console.log(`[playbook] Kein verifiziertes Playbook für ${domain} (status: ${playbookRow?.automation_status ?? 'nicht gefunden'})`)
+    return null
+  }
+
+  const { login_steps = [], item_steps = [], checkout_steps = [] } = playbookRow.playbook
+  console.log(`[playbook] Verifiziertes Playbook gefunden für ${domain} — starte Playbook-Pfad`)
+
+  const baseCtx = { loginUrl, username, password }
+
+  try {
+    // Phase 1: Login
+    if (login_steps.length > 0) {
+      await patch('logging_in', 'Melde an (Playbook)...')
+      await executeSteps(supplierTabId, login_steps, baseCtx, patch, null)
+      await sleep(500)
+
+      if (await isAuthWall(supplierTabId)) {
+        throw new Error('Login fehlgeschlagen! Bitte Zugangsdaten in den Lieferanten-Einstellungen prüfen.')
+      }
+    }
+
+    // Phase 2: Pro Artikel
+    const updatedItems = ITEMS.map(i => ({ ...i }))
+
+    for (let idx = 0; idx < ITEMS.length; idx++) {
+      const item = ITEMS[idx]
+      const itemCtx = { ...baseCtx, item }
+
+      await patch('searching', `Öffne Produkt: ${item.product_name}...`, { items: updatedItems })
+
+      try {
+        await executeSteps(supplierTabId, item_steps, itemCtx, patch, `Suche ${item.product_name}...`)
+
+        // Produkt-URL nach erfolgreichem Add-to-Cart in DB sichern
+        if (item.product_id) {
+          try {
+            const currentTab = await chrome.tabs.get(supplierTabId)
+            const url = currentTab.url
+            if (url && !url.includes('search') && !url.includes('?q=')) {
+              await fetch(`${supabaseUrl}/rest/v1/products?id=eq.${item.product_id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization:  `Bearer ${userJwt}`,
+                  apikey:          supabaseAnonKey,
+                  Prefer:          'return=minimal',
+                },
+                body: JSON.stringify({ order_url: url }),
+              })
+            }
+          } catch (_) {}
+        }
+
+        updatedItems[idx] = { ...item, status: 'ok' }
+      } catch (itemErr) {
+        console.error(`[playbook] Artikel fehlgeschlagen: ${item.product_name}`, itemErr.message)
+        updatedItems[idx] = { ...item, status: 'error' }
+        await patch('error', `Fehler bei ${item.product_name}: ${itemErr.message}`, { items: updatedItems })
+      }
+    }
+
+    // Phase 3: Checkout
+    if (checkout_steps.length > 0) {
+      await patch('searching', 'Navigiere zur Kasse (Playbook)...')
+      await executeSteps(supplierTabId, checkout_steps, baseCtx, patch, 'Öffne Warenkorb...')
+    }
+
+    await chrome.tabs.update(supplierTabId, { active: false })
+    const finalTab  = await chrome.tabs.get(supplierTabId)
+    const cartUrl   = finalTab.url ?? loginUrl
+    const hasWarning = updatedItems.some(i => i.status === 'error')
+    const maxDelta   = null
+
+    return { cartUrl, updatedItems, hasWarning, maxDelta }
+
+  } catch (err) {
+    console.error('[playbook] Playbook-Ausführung fehlgeschlagen, Fallback auf Legacy-Pfad:', err.message)
+    // Reopen tab fresh for the legacy path
+    await navigateAndReinject(supplierTabId, loginUrl, 15_000)
+    return null
+  }
+}

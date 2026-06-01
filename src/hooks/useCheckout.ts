@@ -17,6 +17,7 @@ export interface CheckoutLineItem {
   price_delta_pct: number | null
   price_ok:        boolean | null
   url:             string | null
+  status?:         string
 }
 
 export interface CheckoutSession {

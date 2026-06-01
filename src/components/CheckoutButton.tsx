@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react'
-import { ShoppingCart, AlertTriangle, CheckCircle, X, ExternalLink } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { ShoppingCart, AlertTriangle, CheckCircle, X, ExternalLink, XCircle, Copy, Save } from 'lucide-react'
 import {
   useCheckout,
   type CheckoutRequestItem,
@@ -466,7 +466,7 @@ const StatusPanel: React.FC<{
   )
 }
 
-// ── Item Row ──────────────────────────────────────────────────────────────────
+// ── Item Row ──────────────────────────────────────────────────────────────────────────────
 
 const ItemRow: React.FC<{
   item:              CheckoutSession['items'][0]
@@ -474,9 +474,35 @@ const ItemRow: React.FC<{
   priceThresholdPct: number
 }> = ({ item, spinning }) => {
   const hasPriceData = item.price_actual != null
-  const isWarn       = item.price_ok === false
-  const isOk         = item.price_ok === true
-  const isPending    = item.price_ok === null
+  const isError      = item.status === 'error'
+  const isWarn       = item.price_ok === false && !isError
+  const isOk         = item.price_ok === true && !isError
+  const isPending    = item.price_ok === null && !isError
+
+  const [directLink, setDirectLink] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const handleSaveLink = async () => {
+    if (!directLink || !item.product_id) return
+    setIsSaving(true)
+    try {
+      const supabase = getSupabaseClient()
+      if (!supabase) throw new Error('Supabase Client nicht verfügbar')
+      
+      // URL validation / auto-protocol
+      let finalUrl = directLink.trim()
+      if (finalUrl && !/^https?:\/\//i.test(finalUrl)) {
+        finalUrl = 'https://' + finalUrl
+      }
+      await supabase.from('products').update({ order_url: finalUrl }).eq('id', item.product_id)
+      setSaveSuccess(true)
+    } catch (err) {
+      console.error('Failed to save link', err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   const fmtPrice = (v: number | null | undefined) => {
     if (v == null) return '-'
@@ -487,53 +513,138 @@ const ItemRow: React.FC<{
 
   return (
     <div style={{
-      padding:         '10px 14px',
       borderBottom:    '1px solid var(--color-border, #e2e8f0)',
-      display:         'flex',
-      alignItems:      'center',
-      gap:             '10px',
-      backgroundColor: isWarn ? '#fffbeb' : 'transparent',
+      backgroundColor: isError ? '#fef2f2' : (isWarn ? '#fffbeb' : 'transparent'),
       transition:      'background-color 0.4s',
+      padding:         '10px 14px',
+      display:         'flex',
+      flexDirection:   'column',
+      gap:             '10px',
     }}>
-      {/* State icon */}
-      <div style={{ width: '18px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-        {isOk  && <CheckCircle   size={15} color="#16a34a" />}
-        {isWarn && <AlertTriangle size={15} color="#d97706" />}
-        {isPending && spinning && <Spinner size={13} color="#94a3b8" />}
-        {isPending && !spinning && (
-          <div style={{ width: 11, height: 11, borderRadius: '50%', backgroundColor: '#e2e8f0' }} />
+      <div style={{
+        display:         'flex',
+        alignItems:      'center',
+        gap:             '10px',
+      }}>
+        {/* State icon */}
+        <div style={{ width: '18px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          {isError && <XCircle size={15} color="#dc2626" />}
+          {isOk  && <CheckCircle   size={15} color="#16a34a" />}
+          {isWarn && <AlertTriangle size={15} color="#d97706" />}
+          {isPending && spinning && <Spinner size={13} color="#94a3b8" />}
+          {isPending && !spinning && (
+            <div style={{ width: 11, height: 11, borderRadius: '50%', backgroundColor: '#e2e8f0' }} />
+          )}
+        </div>
+
+        {/* Name + qty */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{
+              fontSize:     '13px',
+              fontWeight:   600,
+              color:        isError ? '#991b1b' : 'var(--color-text-main, #0f172a)',
+              whiteSpace:   'nowrap',
+              overflow:     'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {item.product_name}
+            </div>
+            {isError && (
+              <button
+                onClick={() => navigator.clipboard.writeText(item.product_name)}
+                title="Produktname kopieren"
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', color: '#991b1b', opacity: 0.7
+                }}
+                onMouseOver={e => e.currentTarget.style.opacity = '1'}
+                onMouseOut={e => e.currentTarget.style.opacity = '0.7'}
+              >
+                <Copy size={13} />
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: '12px', color: isError ? '#b91c1c' : 'var(--color-text-muted, #64748b)', marginTop: '1px' }}>
+            {item.quantity} {item.unit}
+            {item.price_expected != null && (
+              <span style={{ marginLeft: '6px' }}>• erw. {fmtPrice(item.price_expected)}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Actual price + delta */}
+        {hasPriceData && (
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: isWarn ? '#d97706' : '#16a34a' }}>
+              {fmtPrice(item.price_actual!)}
+            </div>
+            {item.price_delta_pct !== null && (
+              <div style={{ fontSize: '11px', fontWeight: 600, color: isWarn ? '#d97706' : '#64748b' }}>
+                {fmtDelta(item.price_delta_pct)}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Name + qty */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* Fallback Error UI */}
+      {isError && (
         <div style={{
-          fontSize:     '13px',
-          fontWeight:   600,
-          color:        'var(--color-text-main, #0f172a)',
-          whiteSpace:   'nowrap',
-          overflow:     'hidden',
-          textOverflow: 'ellipsis',
+          marginLeft: '28px',
+          padding: '10px',
+          backgroundColor: '#fee2e2',
+          borderRadius: '6px',
+          border: '1px solid #fca5a5',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
         }}>
-          {item.product_name}
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--color-text-muted, #64748b)', marginTop: '1px' }}>
-          {item.quantity} {item.unit}
-          {item.price_expected != null && (
-            <span style={{ marginLeft: '6px' }}>· erw. {fmtPrice(item.price_expected)}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Actual price + delta */}
-      {hasPriceData && (
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: isWarn ? '#d97706' : '#16a34a' }}>
-            {fmtPrice(item.price_actual!)}
+          <div style={{ fontSize: '12px', color: '#991b1b', fontWeight: 500 }}>
+            Das Produkt konnte nicht automatisch gefunden werden. Bitte kopiere oben den Namen, suche es manuell im Shop und füge hier den direkten Produkt-Link ein:
           </div>
-          {item.price_delta_pct !== null && (
-            <div style={{ fontSize: '11px', fontWeight: 600, color: isWarn ? '#d97706' : '#64748b' }}>
-              {fmtDelta(item.price_delta_pct)}
+          {saveSuccess ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#16a34a', fontSize: '13px', fontWeight: 600 }}>
+              <CheckCircle size={14} /> Link erfolgreich für die nächste Bestellung gespeichert!
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input
+                type="url"
+                placeholder="https://..."
+                value={directLink}
+                onChange={e => setDirectLink(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  fontSize: '12px',
+                  borderRadius: '4px',
+                  border: '1px solid #f87171',
+                  outline: 'none',
+                  backgroundColor: '#fff'
+                }}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveLink() }}
+              />
+              <button
+                onClick={handleSaveLink}
+                disabled={!directLink || isSaving}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#dc2626',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: directLink && !isSaving ? 'pointer' : 'not-allowed',
+                  opacity: directLink && !isSaving ? 1 : 0.6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                {isSaving ? <Spinner size={12} color="#fff" /> : <Save size={12} />}
+                Speichern
+              </button>
             </div>
           )}
         </div>
