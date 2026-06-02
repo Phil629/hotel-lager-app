@@ -92,7 +92,7 @@ const COOKIE_SELECTORS_ACCEPT = [
 ]
 
 // Regex für In-Browser-Textscan (Layer 3) und Shadow-DOM-Filter (Layer 2)
-const COOKIE_TEXT_RE = /alle akzeptieren|alle zulassen|nur notwendige|cookies akzeptieren|zustimmen|einverstanden|accept all|allow all|i agree/i
+const COOKIE_TEXT_RE = /alles akzeptieren|alle akzeptieren|alle zulassen|nur notwendige|cookies akzeptieren|zustimmen|einverstanden|accept all|allow all|i agree/i
 
 // ── Entry Point ───────────────────────────────────────────────────────────────
 
@@ -564,51 +564,34 @@ async function checkForCloudflare(page: Page): Promise<void> {
 async function dismissCookieBanner(page: Page, logDojo: LogFn): Promise<PlaybookStep | null> {
   const allStaticSelectors = [...COOKIE_SELECTORS_DECLINE, ...COOKIE_SELECTORS_ACCEPT]
 
-  // Warte auf Banner-Erscheinen: Race zwischen bekannten Selektoren und 2.5s Timeout.
-  // Lazy-geladene CMPs (z.B. Cookiebot) erscheinen oft erst nach 1-2s.
-  await Promise.race([
-    page.waitForSelector(allStaticSelectors.join(","), { timeout: 2500 }),
-    page.waitForTimeout(2500),
-  ]).catch(() => {})
+  // Wait a short time for lazy-loaded cookie banners (e.g. Usercentrics, Cookiebot) to inject into DOM
+  await page.waitForTimeout(1500)
 
-  // Layer 1: Statische CSS-Selektoren
-  const foundSelector = await page.evaluate((selectors) => {
-    for (const sel of selectors) {
-      try {
-        const el = document.querySelector(sel);
-        if (!el) continue;
-        const style = window.getComputedStyle(el);
-        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) continue;
-        return sel;
-      } catch { /* ungültiger Selektor */ }
-    }
-    return null;
-  }, allStaticSelectors);
-
-  if (foundSelector) {
+  // Layer 1: Statische CSS-Selektoren (Playwright locates elements natively, piercing shadow DOM by default!)
+  for (const sel of allStaticSelectors) {
     try {
-      const loc = page.locator(foundSelector).first()
-      await loc.click({ timeout: 3000 })
-      await page.waitForTimeout(700)
-      logDojo("info", `🍪 Layer 1 (CSS): ${foundSelector}`)
-      return { step: "click", selector: foundSelector, timeout: 3000, optional: true }
+      const loc = page.locator(sel).first()
+      if (await safeIsVisible(loc, 1000)) {
+        await loc.click({ timeout: 3000 })
+        await page.waitForTimeout(800)
+        logDojo("info", `🍪 Layer 1 (CSS + Shadow DOM): ${sel}`)
+        return { step: "click", selector: sel, timeout: 3000, optional: true }
+      }
     } catch { /* weiter */ }
   }
 
   // Layer 2: Shadow DOM piercing — Shopware 6, Usercentrics, Cookiebot v2
-  // pierce/ engine durchdringt Shadow Roots, die document.querySelectorAll nicht sieht.
   for (const tag of ["button", "a"] as const) {
     try {
       const loc = page.locator(`pierce/${tag}`).filter({ hasText: COOKIE_TEXT_RE })
-      if (!(await safeIsVisible(loc.first(), 1500))) continue
-      const el  = await loc.first().elementHandle()
-      const sel = el ? (await extractStableSelector(page, el) ?? `pierce/${tag}`) : `pierce/${tag}`
-      await loc.first().click({ timeout: 3000 })
-      await page.waitForTimeout(800)
-      logDojo("info", `🍪 Layer 2 (Shadow DOM): ${sel}`)
-      return { step: "click", selector: sel, timeout: 3000, optional: true }
+      if (await safeIsVisible(loc.first(), 1000)) {
+        const el  = await loc.first().elementHandle()
+        const sel = el ? (await extractStableSelector(page, el) ?? `pierce/${tag}`) : `pierce/${tag}`
+        await loc.first().click({ timeout: 3000 })
+        await page.waitForTimeout(800)
+        logDojo("info", `🍪 Layer 2 (Shadow DOM text): ${sel}`)
+        return { step: "click", selector: sel, timeout: 3000, optional: true }
+      }
     } catch { /* weiter */ }
   }
 
