@@ -1698,12 +1698,21 @@ async function aiHealSelector(
       screenshotBase64 = encodeBase64(screenshot)
     }
     
-    const htmlSnippet = await page.content().catch(() => "")
+    const htmlSnippet = await page.evaluate(() => {
+      try {
+        const bodyClone = document.body.cloneNode(true) as HTMLElement
+        const toRemove = bodyClone.querySelectorAll("script, style, svg, noscript, iframe, link, path, symbol")
+        toRemove.forEach((el) => el.remove())
+        return bodyClone.outerHTML.substring(0, 60_000)
+      } catch {
+        return document.body.innerText.substring(0, 20_000)
+      }
+    }).catch(() => "")
 
     const CONTEXT_DESCRIPTIONS: Record<string, string> = {
       search:              'Produkt im Shop suchen (Suchfeld befüllen)',
       add_to_cart:         'Produkt in den Warenkorb legen oder Bestellmenge in ein Zahlenfeld eingeben',
-      go_to_checkout:      'Warenkorb-Icon oder Warenkorb-Link anklicken, um den Warenkorb zu öffnen',
+      go_to_checkout:      'Warenkorb-Icon oder Warenkorb-Link anklicken, um den Warenkorb to öffnen',
     }
 
     const taskPrompt = `Du bist ein Experte für Web-Scraping und CSS-Selektoren. \
@@ -1735,7 +1744,7 @@ Antworte ausschließlich als JSON:
       geminiParts.push({ inlineData: { mimeType: 'image/jpeg', data: screenshotBase64 } })
     }
     if (htmlSnippet) {
-      geminiParts.push({ text: `HTML (max. 45 KB):\n\`\`\`html\n${htmlSnippet.substring(0, 45_000)}\n\`\`\`` })
+      geminiParts.push({ text: `HTML (max. 60 KB):\n\`\`\`html\n${htmlSnippet}\n\`\`\`` })
     }
     geminiParts.push({ text: taskPrompt })
 
