@@ -126,64 +126,72 @@ export default async function ({ page, context }) {
   try {
     // ── Step 1: Login ────────────────────────────────────────────────────────
 
-    await patchSession('logging_in', 'Verbinde mit ' + new URL(loginUrl).hostname + '…')
-
-    await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 30000 })
-
-    const isAlreadyLoggedIn = await page.evaluate(() => {
-      const isLogoutLink = (el) => {
-        const href = (el.getAttribute('href') || '').toLowerCase();
-        const text = (el.innerText || '').toLowerCase();
-        
-        const isNewsletter = href.includes('newsletter') || text.includes('newsletter') || text.includes('news');
-        if (isNewsletter) return false;
-        
-        const matchesHref = href.includes('logout') || href.includes('abmelden') || href.includes('signout') || href.includes('logoff') || href.includes('log-out');
-        const matchesText = text === 'abmelden' || text === 'logout' || text === 'ausloggen' || text === 'abmeldung' || 
-                            text.includes('abmelden') || text.includes('logout') || text.includes('ausloggen');
-                            
-        return matchesHref || matchesText;
-      };
-      
-      const links = Array.from(document.querySelectorAll('a[href], button, [onclick]'));
-      const hasRealLogout = links.some(isLogoutLink);
-      const hasPasswordInput = !!document.querySelector('input[type="password"]');
-      
-      if (hasPasswordInput) return false;
-      
-      return hasRealLogout;
-    });
-
-    if (isAlreadyLoggedIn) {
-      console.log('[script] Sitzung bereits angemeldet (überspringe Login).')
-      await patchSession('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+    const loginRequired = SEL.login_required ?? false
+    if (!loginRequired) {
+      console.log('[script] Login nicht zwingend erforderlich. Überspringe Login-Schritte.')
+      await patchSession('logging_in', 'Login übersprungen (nicht erforderlich)…')
+      await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 30000 }).catch(e => console.warn('[script] Navigate to loginUrl failed but continuing:', e.message))
       await page.waitForTimeout(1000)
-    } else if (SEL.login_username && SEL.login_password && username) {
-      await withHeal(
-        'login',
-        (s, t) => page.fill(s, username, { timeout: t }),
-        SEL.login_username
-      )
-      await withHeal(
-        'login',
-        (s, t) => page.fill(s, password, { timeout: t }),
-        SEL.login_password
-      )
+    } else {
+      await patchSession('logging_in', 'Verbinde mit ' + new URL(loginUrl).hostname + '…')
 
-      if (SEL.login_submit) {
+      await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 30000 })
+
+      const isAlreadyLoggedIn = await page.evaluate(() => {
+        const isLogoutLink = (el) => {
+          const href = (el.getAttribute('href') || '').toLowerCase();
+          const text = (el.innerText || '').toLowerCase();
+          
+          const isNewsletter = href.includes('newsletter') || text.includes('newsletter') || text.includes('news');
+          if (isNewsletter) return false;
+          
+          const matchesHref = href.includes('logout') || href.includes('abmelden') || href.includes('signout') || href.includes('logoff') || href.includes('log-out');
+          const matchesText = text === 'abmelden' || text === 'logout' || text === 'ausloggen' || text === 'abmeldung' || 
+                              text.includes('abmelden') || text.includes('logout') || text.includes('ausloggen');
+                              
+          return matchesHref || matchesText;
+        };
+        
+        const links = Array.from(document.querySelectorAll('a[href], button, [onclick]'));
+        const hasRealLogout = links.some(isLogoutLink);
+        const hasPasswordInput = !!document.querySelector('input[type="password"]');
+        
+        if (hasPasswordInput) return false;
+        
+        return hasRealLogout;
+      });
+
+      if (isAlreadyLoggedIn) {
+        console.log('[script] Sitzung bereits angemeldet (überspringe Login).')
+        await patchSession('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+        await page.waitForTimeout(1000)
+      } else if (SEL.login_username && SEL.login_password && username) {
         await withHeal(
           'login',
-          (s, t) => page.click(s, { timeout: t }),
-          SEL.login_submit
+          (s, t) => page.fill(s, username, { timeout: t }),
+          SEL.login_username
         )
-      } else {
-        await page.keyboard.press('Enter')
-      }
+        await withHeal(
+          'login',
+          (s, t) => page.fill(s, password, { timeout: t }),
+          SEL.login_password
+        )
 
-      // Wait for redirect after login; non-fatal if it takes longer
-      await page
-        .waitForLoadState('networkidle', { timeout: 20000 })
-        .catch(() => console.warn('[script] networkidle after login timed out — continuing'))
+        if (SEL.login_submit) {
+          await withHeal(
+            'login',
+            (s, t) => page.click(s, { timeout: t }),
+            SEL.login_submit
+          )
+        } else {
+          await page.keyboard.press('Enter')
+        }
+
+        // Wait for redirect after login; non-fatal if it takes longer
+        await page
+          .waitForLoadState('networkidle', { timeout: 20000 })
+          .catch(() => console.warn('[script] networkidle after login timed out — continuing'))
+      }
     }
 
     console.log('[script] Login abgeschlossen')

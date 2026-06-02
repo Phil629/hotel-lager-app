@@ -124,72 +124,79 @@ async function runAutomation(payload) {
 
     // ── Step 3: Login ───────────────────────────────────────────────────────
 
-    const loggedIn = await checkAlreadyLoggedIn(supplierTabId)
-    if (loggedIn) {
-      console.log('[sw] Already logged in. Skipping legacy login steps.')
-      await patch('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+    const loginRequired = SEL?.login_required ?? false
+    if (!loginRequired) {
+      console.log('[sw] Login not required. Skipping legacy login steps.')
+      await patch('logging_in', 'Login übersprungen (nicht erforderlich)…')
       await sleep(1000)
-    } else if (SEL.login_username && SEL.login_password && username) {
-      try {
-        // Check if login field is visible
-        const checkRes = await domAction(supplierTabId, { command: 'CHECK_EXISTS', selector: SEL.login_username, timeout: 2000 })
-        
-        if (!checkRes.success) {
-          console.log('[sw] Login username field not found initially, trying to navigate to login page...')
-          await patch('logging_in', 'Suche Login-Bereich...')
+    } else {
+      const loggedIn = await checkAlreadyLoggedIn(supplierTabId)
+      if (loggedIn) {
+        console.log('[sw] Already logged in. Skipping legacy login steps.')
+        await patch('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+        await sleep(1000)
+      } else if (SEL.login_username && SEL.login_password && username) {
+        try {
+          // Check if login field is visible
+          const checkRes = await domAction(supplierTabId, { command: 'CHECK_EXISTS', selector: SEL.login_username, timeout: 2000 })
+          
+          if (!checkRes.success) {
+            console.log('[sw] Login username field not found initially, trying to navigate to login page...')
+            await patch('logging_in', 'Suche Login-Bereich...')
+            await withHeal({
+              supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+              ctx: 'login_navigate', command: 'CLICK', selector: SEL.login_navigate || 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]', timeout: 5000
+            })
+            await waitForTabLoad(supplierTabId, 10_000)
+            await chrome.scripting.executeScript({
+              target: { tabId: supplierTabId },
+              files:  ['content-scripts/automation-worker.js'],
+            }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
+            await sleep(1000)
+          }
+
+          await patch('logging_in', 'Melde an...')
           await withHeal({
             supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-            ctx: 'login_navigate', command: 'CLICK', selector: SEL.login_navigate || 'a[href*="login"], a[href*="konto"], a[href*="anmelden"]', timeout: 5000
+            ctx: 'login', command: 'FILL', selector: SEL.login_username, value: username,
           })
-          await waitForTabLoad(supplierTabId, 10_000)
+          await withHeal({
+            supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+            ctx: 'login', command: 'FILL', selector: SEL.login_password, value: password,
+          })
+
+          if (SEL.login_submit) {
+            await withHeal({
+              supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+              ctx: 'login', command: 'CLICK', selector: SEL.login_submit,
+            })
+          } else {
+            await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
+          }
+
+          await waitForTabLoad(supplierTabId)
           await chrome.scripting.executeScript({
             target: { tabId: supplierTabId },
             files:  ['content-scripts/automation-worker.js'],
           }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
+          await sleep(500)
+          console.log('[sw] Login completed')
+        } catch (loginErr) {
+          // Fehler wird hier bewusst nicht weitergeworfen.
+          // Der Post-Login-Check direkt danach stellt sicher, dass wir tatsächlich eingeloggt sind.
+          console.warn('[sw] Login step failed, continuing (user might already be logged in).', loginErr.message)
+          await patch('logging_in', 'Login-Schritt übersprungen/fehlgeschlagen...')
           await sleep(1000)
         }
-
-        await patch('logging_in', 'Melde an...')
-        await withHeal({
-          supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-          ctx: 'login', command: 'FILL', selector: SEL.login_username, value: username,
-        })
-        await withHeal({
-          supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-          ctx: 'login', command: 'FILL', selector: SEL.login_password, value: password,
-        })
-
-        if (SEL.login_submit) {
-          await withHeal({
-            supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
-            ctx: 'login', command: 'CLICK', selector: SEL.login_submit,
-          })
-        } else {
-          await domAction(supplierTabId, { command: 'KEY_PRESS', value: 'Enter' })
-        }
-
-        await waitForTabLoad(supplierTabId)
-        await chrome.scripting.executeScript({
-          target: { tabId: supplierTabId },
-          files:  ['content-scripts/automation-worker.js'],
-        }).catch(e => console.warn('[sw] Re-inject failed:', e?.message))
-        await sleep(500)
-        console.log('[sw] Login completed')
-      } catch (loginErr) {
-        // Fehler wird hier bewusst nicht weitergeworfen.
-        // Der Post-Login-Check direkt danach stellt sicher, dass wir tatsächlich eingeloggt sind.
-        console.warn('[sw] Login step failed, continuing (user might already be logged in).', loginErr.message)
-        await patch('logging_in', 'Login-Schritt übersprungen/fehlgeschlagen...')
-        await sleep(1000)
+      } else {
+        console.log('[sw] No login credentials provided, skipping login step')
       }
-    } else {
-      console.log('[sw] No login credentials provided, skipping login step')
     }
 
     // ── Post-Login Verification ─────────────────────────────────────────────
     // Unabhängig davon, ob Login versucht wurde oder nicht: Sicherstellen,
     // dass wir nicht auf einer Login-Seite festhängen.
-    if (await isAuthWall(supplierTabId)) {
+    if (loginRequired && await isAuthWall(supplierTabId)) {
       throw new Error(
         'Login fehlgeschlagen! Bitte Zugangsdaten und Selektoren in den Lieferanten-Einstellungen prüfen.'
       )
@@ -855,6 +862,7 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
   const {
     supabaseUrl, supabaseAnonKey, userJwt,
     loginUrl, username, password,
+    selectors: SEL,
     items: ITEMS, sessionId, supplierId,
     priceThresholdPct: THRESHOLD,
   } = payload
@@ -887,18 +895,25 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
 
   try {
     // Phase 1: Login
-    const loggedIn = await checkAlreadyLoggedIn(supplierTabId)
-    if (loggedIn) {
-      console.log('[playbook] Already logged in. Skipping playbook login steps.')
-      await patch('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+    const loginRequired = SEL?.login_required ?? false
+    if (!loginRequired) {
+      console.log('[playbook] Login not required. Skipping playbook login steps.')
+      await patch('logging_in', 'Login übersprungen (nicht erforderlich)…')
       await sleep(1000)
-    } else if (login_steps.length > 0) {
-      await patch('logging_in', 'Melde an (Playbook)...')
-      await executeSteps(supplierTabId, login_steps, baseCtx, patch, null)
-      await sleep(500)
+    } else {
+      const loggedIn = await checkAlreadyLoggedIn(supplierTabId)
+      if (loggedIn) {
+        console.log('[playbook] Already logged in. Skipping playbook login steps.')
+        await patch('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+        await sleep(1000)
+      } else if (login_steps.length > 0) {
+        await patch('logging_in', 'Melde an (Playbook)...')
+        await executeSteps(supplierTabId, login_steps, baseCtx, patch, null)
+        await sleep(500)
 
-      if (await isAuthWall(supplierTabId)) {
-        throw new Error('Login fehlgeschlagen! Bitte Zugangsdaten in den Lieferanten-Einstellungen prüfen.')
+        if (await isAuthWall(supplierTabId)) {
+          throw new Error('Login fehlgeschlagen! Bitte Zugangsdaten in den Lieferanten-Einstellungen prüfen.')
+        }
       }
     }
 

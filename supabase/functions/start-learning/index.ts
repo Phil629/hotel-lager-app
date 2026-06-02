@@ -922,14 +922,6 @@ async function learnCartFlow(
   logDojo("info", `🔍 Suchfeld gefunden: ${searchSelector}`)
   console.log(`[learning] Suchfeld: ${searchSelector}`)
 
-  // ── 2b: Testprodukt suchen ────────────────────────────────────────────────
-  logDojo("info", `Suche nach "${testProduct}"...`)
-  await page.fill(searchSelector, testProduct)
-  await page.keyboard.press("Enter")
-  await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => {})
-  await smartWaitForLoad(page)
-  await checkForCloudflare(page)
-
   // ── 2c: Produkt-Link in Suchergebnissen ───────────────────────────────────
   const PRODUCT_LINK_SELECTORS = [
     '.product--box a.product--title',
@@ -948,6 +940,72 @@ async function learnCartFlow(
     '[class*="product-card"] a',
     '[class*="product--"] a',
   ]
+
+  // ── 2b: Testprodukt suchen ────────────────────────────────────────────────
+  let resolvedTestProduct = testProduct
+  logDojo("info", `Starte automatische Testprodukt-Erkennung auf der Homepage…`)
+  const discoveredProductName = await page.evaluate(({ selectors, domainStr }) => {
+    // 1. Spezifische Produktselektoren
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const text = el.innerText || el.getAttribute("title");
+        if (text && text.trim().length > 3) return text.trim();
+      } catch {}
+    }
+    
+    // 2. Breitbandiger Scan über alle Links auf der Homepage
+    const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 400);
+    for (const link of allLinks) {
+      const href = link.getAttribute("href");
+      if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
+      const path = href.toLowerCase();
+      
+      const isProductPattern =
+        path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
+        path.endsWith(".html") ||
+        path.includes("/product/") || path.includes("/products/") ||
+        path.includes("/produkt/") || path.includes("/produkte/") ||
+        path.includes("/artikel/") || path.includes("/item/") || path.includes("/detail/") ||
+        /\/a-[a-z0-9]+/i.test(href) ||
+        /-\d+\.html$/i.test(href) ||
+        /-\d{4,}(?:\/|$)/.test(href) ||
+        path.includes("cl=details") ||
+        path.includes("artnr=") || path.includes("artno=") ||
+        path.includes("article_id=") || path.includes("articleid=");
+
+      const isNotNavigation =
+        !path.includes("category") && !path.includes("kategorie") &&
+        !path.includes("search") && !path.includes("suche") &&
+        !path.includes("cart") && !path.includes("warenkorb") &&
+        !path.includes("checkout") && !path.includes("kasse") &&
+        !path.includes("account") && !path.includes("login") &&
+        !path.includes("impressum") && !path.includes("agb") &&
+        !path.includes("datenschutz") && !path.includes("contact") &&
+        !path.includes("kontakt") && !path.includes("about");
+
+      if (isProductPattern && isNotNavigation) {
+        const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
+        if (text && text.trim().length > 3) return text.trim();
+      }
+    }
+    return null;
+  }, { selectors: PRODUCT_LINK_SELECTORS, domainStr: domain })
+
+  if (discoveredProductName) {
+    resolvedTestProduct = discoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+    logDojo("info", `🎯 Testprodukt dynamisch im Shop entdeckt: "${resolvedTestProduct}"`)
+  } else {
+    logDojo("info", `Kein Testprodukt auf Homepage entdeckt, nutze Standard-Suchbegriff: "${resolvedTestProduct}"`)
+  }
+
+  logDojo("info", `Suche nach "${resolvedTestProduct}"...`)
+  await page.fill(searchSelector, resolvedTestProduct)
+  await page.keyboard.press("Enter")
+  await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => {})
+  await smartWaitForLoad(page)
+  await checkForCloudflare(page)
 
   let testProductUrl: string | null = null
   const visibleProductLink = await page.evaluate(({ selectors, domainStr }) => {

@@ -163,6 +163,7 @@ export const Suppliers: React.FC = () => {
                 defaultCategory: formData.defaultCategory || undefined,
                 emailSubjectTemplate: formData.emailSubjectTemplate,
                 emailBodyTemplate: formData.emailBodyTemplate,
+                selectors: formData.selectors,
             } as Supplier;
             
             payloadDebug = JSON.stringify(supplierToSave);
@@ -520,6 +521,24 @@ export const Suppliers: React.FC = () => {
                                     </p>
                                     <div style={{ backgroundColor: 'var(--color-warning-bg)', border: '1px solid #fcd34d', borderRadius: 'var(--radius-md)', padding: '10px var(--spacing-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', color: '#92400e' }}>
                                         ⚠️ Passwörter werden verschlüsselt gespeichert und sind nur für Inhaber und Administratoren sichtbar.
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--color-surface-elevated)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginBottom: 'var(--spacing-md)' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            id="loginRequired" 
+                                            checked={!!(formData.selectors?.login_required)} 
+                                            onChange={e => setFormData({ 
+                                                ...formData, 
+                                                selectors: { 
+                                                    ...(formData.selectors || {}), 
+                                                    login_required: e.target.checked 
+                                                } 
+                                            })} 
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }} 
+                                        />
+                                        <label htmlFor="loginRequired" style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-main)', cursor: 'pointer' }}>
+                                            Anmeldung im Webshop ist zwingend erforderlich (andernfalls wird der Login übersprungen)
+                                        </label>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
                                         <div className="form-group">

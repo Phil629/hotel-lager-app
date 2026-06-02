@@ -51,6 +51,7 @@ export interface Supplier {
   customerNumber?: string; // e.g. "Kd-Nr. 12345"
   paymentMethod?: string; // e.g. "Rechnung", "Lastschriftmandat / Bankeinzug", etc.
   defaultCategory?: string; // Default product category for products from this supplier
+  selectors?: Record<string, any>;
 }
 
 export interface Product {

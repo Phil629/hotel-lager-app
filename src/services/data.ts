@@ -35,7 +35,8 @@ const toSupabaseSupplier = (s: Supplier) => {
         ignore_order_proposals: s.ignoreOrderProposals,
         customer_number: s.customerNumber?.trim() || null,
         payment_method: s.paymentMethod?.trim() || null,
-        default_category: s.defaultCategory?.trim() || null
+        default_category: s.defaultCategory?.trim() || null,
+        selectors: s.selectors || null
     };
     if (s.company_id !== undefined) payload.company_id = s.company_id;
     if (s.user_id !== undefined) payload.user_id = s.user_id;
@@ -66,7 +67,8 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     ignoreOrderProposals: s.ignore_order_proposals,
     customerNumber: s.customer_number,
     paymentMethod: s.payment_method,
-    defaultCategory: s.default_category
+    defaultCategory: s.default_category,
+    selectors: s.selectors || {}
 });
 
 const toSupabaseProduct = (p: Product) => ({
