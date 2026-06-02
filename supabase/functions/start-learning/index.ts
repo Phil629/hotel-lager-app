@@ -929,8 +929,18 @@ async function learnCartFlow(
 
   // ── 2c: Produkt-Link in Suchergebnissen ───────────────────────────────────
   const PRODUCT_LINK_SELECTORS = [
+    '.product--box a.product--title',
+    '.product--box a',
+    '.product--info a',
     '.product-item a[href*="/"]',
     '.product-card a[href*="/"]',
+    '.product-box a',
+    '.product-title a',
+    '.product-image a',
+    '.product--image a',
+    '.product--title a',
+    '.product--box .product--title a',
+    '.product--box .product--info a',
     ".search-result a",
     ".product a",
     "article a",
@@ -938,6 +948,7 @@ async function learnCartFlow(
     ".products a",
     '[class*="product-item"] a',
     '[class*="product-card"] a',
+    '[class*="product--"] a',
   ]
 
   let testProductUrl: string | null = null
@@ -1760,7 +1771,7 @@ async function aiHealSelector(
 
   logDojo("info", `🤖 Dojo AI-Healing wird gestartet für Kontext: "${context}"...`)
   try {
-    const screenshot = await page.screenshot({ type: "png" }).catch(() => null)
+    const screenshot = await page.screenshot({ type: "jpeg", quality: 70 }).catch(() => null)
     let screenshotBase64 = ""
     if (screenshot) {
       screenshotBase64 = encodeBase64(screenshot)
@@ -1800,7 +1811,7 @@ Antworte ausschließlich als JSON:
 
     const geminiParts: unknown[] = []
     if (screenshotBase64) {
-      geminiParts.push({ inlineData: { mimeType: 'image/png', data: screenshotBase64 } })
+      geminiParts.push({ inlineData: { mimeType: 'image/jpeg', data: screenshotBase64 } })
     }
     if (htmlSnippet) {
       geminiParts.push({ text: `HTML (max. 45 KB):\n\`\`\`html\n${htmlSnippet.substring(0, 45_000)}\n\`\`\`` })
