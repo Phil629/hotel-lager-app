@@ -941,11 +941,6 @@ async function learnCartFlow(
     '.product--title a',
     '.product--box .product--title a',
     '.product--box .product--info a',
-    ".search-result a",
-    ".product a",
-    "article a",
-    "li.product a",
-    ".products a",
     '[class*="product-item"] a',
     '[class*="product-card"] a',
     '[class*="product--"] a',
@@ -1135,88 +1130,7 @@ async function learnCartFlow(
     }
   }
 
-  if (!addCartSelector) {
-    logDojo("info", "Womöglich auf einer Kategorieseite gelandet. Suche nach direkten B2B-Produkt-Links...")
-    
-    const fallbackDetailUrl = await page.evaluate((domainStr: string) => {
-      const allLinks = Array.from(document.querySelectorAll("a[href]"))
-      for (const link of allLinks.slice(0, 600)) {
-        const href = link.getAttribute("href")
-        if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue
-        
-        const path = href.toLowerCase()
-        const isProductPattern =
-          // Shopware 5 / Gambio
-          path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-          // WooCommerce / Shopify
-          path.includes("/product/") || path.includes("/products/") || path.includes("/produkt/") || path.includes("/produkte/") ||
-          // WooCommerce / JTL / Generic
-          path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
-          // JTL
-          /\/a-[a-z0-9]+/i.test(href) ||
-          // PrestaShop
-          /-\d+\.html$/i.test(href) ||
-          // Shopware 6 (UUID check)
-          /[a-f0-9]{32}/i.test(href)
-          
-        const isNotNavigation =
-          !path.includes("category") && !path.includes("kategorie") &&
-          !path.includes("search") && !path.includes("suche") &&
-          !path.includes("cart") && !path.includes("warenkorb") &&
-          !path.includes("checkout") && !path.includes("kasse") &&
-          !path.includes("account") && !path.includes("login") &&
-          !path.includes("impressum") && !path.includes("agb") &&
-          !path.includes("datenschutz") && !path.includes("contact") &&
-          !path.includes("kontakt") && !path.includes("about") &&
-          !path.includes("faq") && !path.includes("blog") &&
-          !path.includes("brand") && !path.includes("hersteller") &&
-          !path.includes("manufacturer") && !path.includes("filter") &&
-          !path.includes("sort=") && !path.includes("page=") &&
-          !path.includes("view=") && !path.endsWith(".pdf")
 
-        if (isProductPattern && isNotNavigation) {
-          return href.startsWith("http") ? href : `https://${domainStr}${href}`
-        }
-      }
-      return null
-    }, domain)
-    
-    if (fallbackDetailUrl) {
-      logDojo("info", `🔄 Fallback: Kategorieseite erkannt. Navigiere zu echtem Produkt: ${fallbackDetailUrl}`)
-      testProductUrl = fallbackDetailUrl
-      await page.goto(fallbackDetailUrl, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
-      await smartWaitForLoad(page)
-      await checkForCloudflare(page)
-      await dismissCookieBanner(page, logDojo)
-
-      // Nochmal versuchen, den Add-to-Cart-Button auf der neuen Produktseite zu scannen
-      const visibleAddCartSelectorFallback = await page.evaluate((selectors) => {
-        for (const sel of selectors) {
-          try {
-            const el = document.querySelector(sel);
-            if (!el) continue;
-            const style = window.getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
-            if (el.getAttribute("type") === "hidden") continue;
-            const rect = el.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) continue;
-            return sel;
-          } catch { /* ungültiger Selektor */ }
-        }
-        return null;
-      }, ADD_CART_SELECTORS)
-
-      if (visibleAddCartSelectorFallback) {
-        const loc = page.locator(visibleAddCartSelectorFallback).first()
-        const el = await loc.elementHandle()
-        if (el) {
-          addCartSelector = await extractStableSelector(page, el) ?? visibleAddCartSelectorFallback
-          await loc.click({ timeout: CLICK_MS })
-          await page.waitForTimeout(2500)
-        }
-      }
-    }
-  }
 
   if (!addCartSelector) {
     addCartSelector = await aiHealSelector(page, "add_to_cart", ADD_CART_SELECTORS.join(", "), logDojo)
