@@ -220,16 +220,25 @@ async function runLearningPipeline(
   const flushLogs = async (): Promise<void> => {
     if (_logFlushPending) { _logFlushQueued = true; return }
     _logFlushPending = true
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
     try {
       const snap = [...runLogs]
-      const { error } = await adminClient
-        .from("shop_playbooks")
-        .update({ learning_logs: snap })
-        .eq("domain", domain)
+      const { error } = await Promise.race([
+        adminClient
+          .from("shop_playbooks")
+          .update({ learning_logs: snap })
+          .eq("domain", domain)
+          .abortSignal(controller.signal),
+        new Promise<{ error: { message: string } | null }>((_, reject) =>
+          setTimeout(() => reject(new Error("Supabase Log Update Timeout")), 8000)
+        )
+      ])
       if (error) console.warn("[logDojo] DB-Fehler:", error.message)
     } catch (err) {
       console.error("[logDojo] Unerwarteter Fehler beim Log-Schreiben:", err)
     } finally {
+      clearTimeout(timeoutId)
       _logFlushPending = false
       if (_logFlushQueued) {
         _logFlushQueued = false
@@ -951,8 +960,8 @@ async function learnCartFlow(
       } catch { /* ungültiger Selektor */ }
     }
     
-    // 2. Breitbandiger Fallback über alle Links der Seite natively im Browser (0 CDP Roundtrips)
-    const allLinks = Array.from(document.querySelectorAll("a[href]"));
+    // 2. Breitbandiger Fallback über alle Links der Seite natively im Browser (0 CDP Roundtrips) - Sliced auf 600 für max. Performance
+    const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 600);
     for (const link of allLinks) {
       const href = link.getAttribute("href");
       if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
@@ -970,7 +979,16 @@ async function learnCartFlow(
         !path.includes("category") && !path.includes("kategorie") &&
         !path.includes("search") && !path.includes("suche") &&
         !path.includes("cart") && !path.includes("warenkorb") &&
-        !path.includes("account") && !path.includes("login");
+        !path.includes("checkout") && !path.includes("kasse") &&
+        !path.includes("account") && !path.includes("login") &&
+        !path.includes("impressum") && !path.includes("agb") &&
+        !path.includes("datenschutz") && !path.includes("contact") &&
+        !path.includes("kontakt") && !path.includes("about") &&
+        !path.includes("faq") && !path.includes("blog") &&
+        !path.includes("brand") && !path.includes("hersteller") &&
+        !path.includes("manufacturer") && !path.includes("filter") &&
+        !path.includes("sort=") && !path.includes("page=") &&
+        !path.includes("view=") && !path.endsWith(".pdf");
         
       if (isProductPattern && isNotNavigation) {
         return href.startsWith("http") ? href : `https://${domainStr}${href}`;
@@ -1134,7 +1152,16 @@ async function learnCartFlow(
           !path.includes("category") && !path.includes("kategorie") &&
           !path.includes("search") && !path.includes("suche") &&
           !path.includes("cart") && !path.includes("warenkorb") &&
-          !path.includes("account") && !path.includes("login")
+          !path.includes("checkout") && !path.includes("kasse") &&
+          !path.includes("account") && !path.includes("login") &&
+          !path.includes("impressum") && !path.includes("agb") &&
+          !path.includes("datenschutz") && !path.includes("contact") &&
+          !path.includes("kontakt") && !path.includes("about") &&
+          !path.includes("faq") && !path.includes("blog") &&
+          !path.includes("brand") && !path.includes("hersteller") &&
+          !path.includes("manufacturer") && !path.includes("filter") &&
+          !path.includes("sort=") && !path.includes("page=") &&
+          !path.includes("view=") && !path.endsWith(".pdf")
 
         if (isProductPattern && isNotNavigation) {
           return href.startsWith("http") ? href : `https://${domainStr}${href}`
@@ -1354,7 +1381,7 @@ async function executeDryRun(
 
     const foundDryProductUrl = await page.evaluate((domainStr) => {
       const allLinks = Array.from(document.querySelectorAll("a[href]"));
-      for (const link of allLinks.slice(0, 500)) {
+      for (const link of allLinks.slice(0, 600)) {
         const href = link.getAttribute("href");
         if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
         const path = href.toLowerCase();
@@ -1371,7 +1398,16 @@ async function executeDryRun(
           !path.includes("category") && !path.includes("kategorie") &&
           !path.includes("search") && !path.includes("suche") &&
           !path.includes("cart") && !path.includes("warenkorb") &&
-          !path.includes("account") && !path.includes("login");
+          !path.includes("checkout") && !path.includes("kasse") &&
+          !path.includes("account") && !path.includes("login") &&
+          !path.includes("impressum") && !path.includes("agb") &&
+          !path.includes("datenschutz") && !path.includes("contact") &&
+          !path.includes("kontakt") && !path.includes("about") &&
+          !path.includes("faq") && !path.includes("blog") &&
+          !path.includes("brand") && !path.includes("hersteller") &&
+          !path.includes("manufacturer") && !path.includes("filter") &&
+          !path.includes("sort=") && !path.includes("page=") &&
+          !path.includes("view=") && !path.endsWith(".pdf");
           
         if (isProductPattern && isNotNavigation) {
           return href.startsWith("http") ? href : `https://${domainStr}${href}`;
@@ -1561,7 +1597,7 @@ async function isLoginPage(page: Page): Promise<boolean> {
     const url   = page.url().toLowerCase()
     // safeTitle verhindert ewiges Hängen in headless/proxy Umgebungen
     const title = await safeTitle(page, 2000)
-    const keywords = /(login|signin|anmeld|anmeldung|auth|konto|kundenbereich)/i
+    const keywords = /(login|signin|sign-in|log-in|anmeld|anmeldung|auth|konto|kundenbereich|sso|oauth|passkey|webauthn|otp|passwordless)/i
     if (!keywords.test(url) && !keywords.test(title)) return false
     
     // 1. Password field check
@@ -1578,10 +1614,32 @@ async function isLoginPage(page: Page): Promise<boolean> {
       'input[id*="otp" i], ' +
       'input[name*="code" i], ' +
       'input[id*="code" i], ' +
-      'input[autocomplete="one-time-code"]'
+      'input[autocomplete="one-time-code"], ' +
+      'input[autocomplete="webauthn"], ' +
+      'input[id*="passkey" i], ' +
+      'input[name*="passkey" i], ' +
+      'button[id*="passkey" i], ' +
+      'button[class*="passkey" i], ' +
+      'button[id*="sso" i], ' +
+      'button[class*="sso" i], ' +
+      '[data-testid*="passkey" i], ' +
+      '[data-testid*="sso" i]'
     ).first()
     
-    return await safeIsVisible(passwordlessLoc, 2000)
+    if (await safeIsVisible(passwordlessLoc, 2000)) {
+      return true
+    }
+
+    // 3. SSO / Passkey / WebAuthn button text triggers (covers standard B2B auth walls)
+    const ssoButtonLoc = page.locator(
+      'button:has-text("passkey"), button:has-text("sso"), ' +
+      'a:has-text("passkey"), a:has-text("sso"), ' +
+      'button:has-text("sign in with"), button:has-text("log in with"), ' +
+      'button:has-text("mit google anmelden"), button:has-text("mit google einloggen"), ' +
+      'button:has-text("passwortlos"), button:has-text("passwordless")'
+    ).first()
+    
+    return await safeIsVisible(ssoButtonLoc, 1500)
   } catch {
     return false
   }
@@ -1622,7 +1680,7 @@ async function getCartCount(page: Page): Promise<number | null> {
  * Priorisierung: id > name > data-testid > data-action > aria-label > input[type] > gefilterte Klassen
  * Fix: input[type="text"] wird nur als absoluter Fallback genutzt (nicht vor Klassen-Check).
  */
-async function extractStableSelector(page: Page, el: unknown): Promise<string | null> {
+async function extractStableSelector(page: Page, el: any): Promise<string | null> {
   try {
     return await page.evaluate((element: Element) => {
       const getStable = (element: Element): string | null => {
@@ -1676,9 +1734,10 @@ async function extractStableSelector(page: Page, el: unknown): Promise<string | 
       const stable = getStable(element)
       if (!stable) return null
 
-      // Check if element lives inside a Shadow Root
+      // Check if element lives inside a Shadow Root (fully compatible with Playwright and Chrome Extension runner)
       const root = element.getRootNode()
-      const isShadow = root instanceof ShadowRoot || (root && (root as DocumentFragment).host !== undefined)
+      const isShadow = (typeof ShadowRoot !== "undefined" && root instanceof ShadowRoot) || 
+                       (root && (root as any).host !== undefined)
       
       return isShadow ? `pierce/${stable}` : stable
     }, el)
