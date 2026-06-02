@@ -212,6 +212,11 @@ const StatusPanel: React.FC<{
   const [reportSuccess, setReportSuccess] = React.useState(false);
 
   const handleReportError = async () => {
+    const confirmed = window.confirm(
+      "Möchtest du diesen Fehler wirklich melden? Dadurch wird das gelernte KI-Gedächtnis (Selektoren) für diesen Shop zurückgesetzt und beim nächsten Mal frisch erlernt."
+    );
+    if (!confirmed) return;
+
     setIsReporting(true);
     try {
       const supabase = getSupabaseClient();
@@ -390,7 +395,7 @@ const StatusPanel: React.FC<{
             onMouseOut={e  => (e.currentTarget.style.opacity = '1')}
           >
             <ExternalLink size={16} />
-            {session.priceWarning ? 'Trotzdem bestellen →' : 'Jetzt bestellen →'}
+            {session.priceWarning ? 'Trotzdem zum Warenkorb →' : 'Warenkorb öffnen →'}
           </button>
         )}
 
