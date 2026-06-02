@@ -32,7 +32,7 @@ const CORS = {
 
 const GLOBAL_PIPELINE_TIMEOUT_MS = 140_000
 const CDP_CONNECT_TIMEOUT_MS     =  30_000
-const PAGE_LOAD_MS               =  20_000
+const PAGE_LOAD_MS               =  35_000  // Generous timeout for protected B2B sites and residential proxy handshakes
 const NETWORK_SETTLE_MS          =   3_500  // Extra SPA-Hydrations-Zeit nach DOMContentLoaded
 const CLICK_MS                   =   8_000
 const FILL_MS                    =   6_000
@@ -279,8 +279,9 @@ async function runLearningPipeline(
       const loginCtx  = loginBrowser.contexts()[0]
       const loginPage = loginCtx.pages()[0] ?? await loginCtx.newPage()
 
-      logDojo("info", `🌐 Lade Homepage: https://${domain}`)
-      await loginPage.goto(`https://${domain}`, {
+      const resilientUrl = getResilientStartUrl(domain)
+      logDojo("info", `🌐 Lade Homepage: ${resilientUrl}`)
+      await loginPage.goto(resilientUrl, {
         waitUntil: "domcontentloaded",
         timeout:   PAGE_LOAD_MS,
       })
@@ -326,8 +327,9 @@ async function runLearningPipeline(
       const cartCtx  = cartBrowser.contexts()[0]
       const cartPage = cartCtx.pages()[0] ?? await cartCtx.newPage()
 
-      logDojo("info", `🌐 Lade Homepage für Phase 2: https://${domain}`)
-      await cartPage.goto(`https://${domain}`, {
+      const resilientUrl = getResilientStartUrl(domain)
+      logDojo("info", `🌐 Lade Homepage für Phase 2: ${resilientUrl}`)
+      await cartPage.goto(resilientUrl, {
         waitUntil: "domcontentloaded",
         timeout:   PAGE_LOAD_MS,
       })
@@ -464,6 +466,15 @@ async function runLearningPipeline(
 }
 
 // ── Playwright-Helfer ─────────────────────────────────────────────────────────
+
+/** Prepend www. to naked root domains to bypass proxy DNS issues and redirect cycles. */
+function getResilientStartUrl(domain: string): string {
+  const parts = domain.split(".");
+  if (parts.length === 2 && !domain.startsWith("www.")) {
+    return `https://www.${domain}`;
+  }
+  return `https://${domain}`;
+}
 
 /** Sicheres isVisible: gibt false zurück statt zu werfen. Niemals hängend. */
 async function safeIsVisible(locator: Locator, timeoutMs = 2000): Promise<boolean> {
@@ -1142,7 +1153,7 @@ async function learnCartFlow(
   // Immer zur Homepage zurückkehren — der Kategorie-Tiefenscan hat die Seite verlassen.
   // Ohne diesen Reset würde die Suche auf einer Kategorie-Seite statt auf der Homepage starten.
   logDojo("info", `Kehre zur Homepage zurück, um die Suche zu starten…`)
-  await page.goto(`https://${domain}`, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {})
+  await page.goto(getResilientStartUrl(domain), { waitUntil: "domcontentloaded", timeout: 35_000 }).catch(() => {})
   await smartWaitForLoad(page)
 
   logDojo("info", `Suche nach "${resolvedTestProduct}"...`)
@@ -1539,7 +1550,7 @@ async function executeDryRun(
   logDojo:              LogFn,
 ): Promise<void> {
   logDojo("dry_run", "🌐 Lade Homepage für Dry-Run...")
-  await page.goto(`https://${domain}`, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
+  await page.goto(getResilientStartUrl(domain), { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
   await smartWaitForLoad(page)
   await checkForCloudflare(page)
   await dismissCookieBanner(page, logDojo)
@@ -1621,7 +1632,7 @@ async function executeDryRun(
   logDojo("dry_run", `📦 Produkt-URL: ${testProductUrl}`)
 
   const ctx = {
-    loginUrl: `https://${domain}`,
+    loginUrl: getResilientStartUrl(domain),
     username: "",
     password: "",
     item:     { url: testProductUrl, quantity: "2", product_name: testProduct },
