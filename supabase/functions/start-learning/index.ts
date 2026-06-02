@@ -265,156 +265,133 @@ async function runLearningPipeline(
     logDojo("info", `🚀 Starte Dojo v2 für ${domain}...`)
 
     logDojo("info", "Erstelle Browserbase-Session (Residential Proxy)...")
-    const loginSession = await createBrowserbaseSession(true)
-    currentSessionId   = loginSession.id
+    const globalSession = await createBrowserbaseSession(true)
+    currentSessionId    = globalSession.id
 
     // VNC-Link im Admin-Terminal (Admin.tsx parst "ID: ..." und zeigt Live-Video-Button)
-    logDojo("info", `📡 Session aktiv — ID: ${loginSession.id}`)
-    logDojo("info", `🔴 Live-Browser: https://www.browserbase.com/sessions/${loginSession.id}`)
+    logDojo("info", `📡 Session aktiv — ID: ${globalSession.id}`)
+    logDojo("info", `🔴 Live-Browser: https://www.browserbase.com/sessions/${globalSession.id}`)
 
-    const loginBrowser = await connectWithTimeout(loginSession.connectUrl)
+    const globalBrowser = await connectWithTimeout(globalSession.connectUrl)
     let loginSteps: PlaybookStep[] = []
-
-    try {
-      const loginCtx  = loginBrowser.contexts()[0]
-      const loginPage = loginCtx.pages()[0] ?? await loginCtx.newPage()
-
-      const resilientUrl = getResilientStartUrl(domain)
-      logDojo("info", `🌐 Lade Homepage: ${resilientUrl}`)
-      await loginPage.goto(resilientUrl, {
-        waitUntil: "domcontentloaded",
-        timeout:   PAGE_LOAD_MS,
-      })
-      await smartWaitForLoad(loginPage)
-
-      await checkForCloudflare(loginPage)
-
-      const cookieStep = await dismissCookieBanner(loginPage, logDojo)
-      if (cookieStep) logDojo("info", "🍪 Cookie-Banner erfolgreich geschlossen.")
-      else            logDojo("info", "Kein Cookie-Banner erkannt.")
-
-      loginSteps = await learnLoginFlow(loginPage, domain, cookieStep, logDojo)
-      logDojo("success", `✅ Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps gelernt.`)
-      console.log(`[learning] Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps`)
-    } finally {
-      await loginBrowser.close().catch(() => {})
-      await stopBrowserbaseSession(currentSessionId)
-      currentSessionId = null
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    // PHASE 2 — Warenkorb & Checkout-Flow lernen (anonymer Gast)
-    // Ziel: item_steps + checkout_steps erzeugen
-    // Kosten: Residential Proxy (fresh session, andere IP)
-    // ════════════════════════════════════════════════════════════════════
-    await setStatus("learning_cart")
-    logDojo("info", "🛒 Phase 2 gestartet — lerne Warenkorb-Flow...")
-    console.log(`[learning] ═══ Phase 2 Start: ${domain} ═══`)
-
-    logDojo("info", "Erstelle neue Browserbase-Session (Residential Proxy)...")
-    const cartSession = await createBrowserbaseSession(true)
-    currentSessionId  = cartSession.id
-
-    logDojo("info", `📡 Neue Session aktiv — ID: ${cartSession.id}`)
-    logDojo("info", `🔴 Live-Browser: https://www.browserbase.com/sessions/${cartSession.id}`)
-
-    const cartBrowser = await connectWithTimeout(cartSession.connectUrl)
     let itemSteps:      PlaybookStep[] = []
     let checkoutSteps:  PlaybookStep[] = []
     let testProductUrl: string | null = null
 
     try {
-      const cartCtx  = cartBrowser.contexts()[0]
-      const cartPage = cartCtx.pages()[0] ?? await cartCtx.newPage()
+      // ════════════════════════════════════════════════════════════════════
+      // PHASE 1 — Login-Formular-Selektoren lernen (anonymer Besuch)
+      // Ziel: login_steps erzeugen
+      // ════════════════════════════════════════════════════════════════════
+      const loginCtx  = await globalBrowser.newContext()
+      const loginPage = await loginCtx.newPage()
 
-      const resilientUrl = getResilientStartUrl(domain)
-      logDojo("info", `🌐 Lade Homepage für Phase 2: ${resilientUrl}`)
-      await cartPage.goto(resilientUrl, {
-        waitUntil: "domcontentloaded",
-        timeout:   PAGE_LOAD_MS,
-      })
-      await smartWaitForLoad(cartPage)
+      try {
+        const resilientUrl = getResilientStartUrl(domain)
+        logDojo("info", `🌐 Lade Homepage: ${resilientUrl}`)
+        await loginPage.goto(resilientUrl, {
+          waitUntil: "domcontentloaded",
+          timeout:   PAGE_LOAD_MS,
+        })
+        await smartWaitForLoad(loginPage)
 
-      await checkForCloudflare(cartPage)
+        await checkForCloudflare(loginPage)
 
-      const cookieStep2 = await dismissCookieBanner(cartPage, logDojo)
-      if (cookieStep2) logDojo("info", "🍪 Cookie-Banner geschlossen (Phase 2).")
+        const cookieStep = await dismissCookieBanner(loginPage, logDojo)
+        if (cookieStep) logDojo("info", "🍪 Cookie-Banner erfolgreich geschlossen.")
+        else            logDojo("info", "Kein Cookie-Banner erkannt.")
 
-      const result   = await learnCartFlow(cartPage, domain, testProduct, logDojo)
-      itemSteps      = result.item
-      checkoutSteps  = result.checkout
-      testProductUrl = result.productUrl
-      logDojo("success", `✅ Phase 2 abgeschlossen: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps.`)
-      console.log(`[learning] Phase 2: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps`)
-    } finally {
-      await cartBrowser.close().catch(() => {})
-      await stopBrowserbaseSession(currentSessionId)
-      currentSessionId = null
-    }
+        loginSteps = await learnLoginFlow(loginPage, domain, cookieStep, logDojo)
+        logDojo("success", `✅ Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps gelernt.`)
+        console.log(`[learning] Phase 1 abgeschlossen: ${loginSteps.length} Login-Steps`)
+      } finally {
+        await loginCtx.close().catch(() => {})
+      }
 
-    if (itemSteps.length === 0) {
-      throw new Error(
-        "Keine item_steps gelernt. Add-to-Cart-Button konnte nicht gefunden werden. " +
-        "Möglicherweise ist ein Login für den Warenkorb erforderlich."
-      )
-    }
+      // ════════════════════════════════════════════════════════════════════
+      // PHASE 2 — Warenkorb & Checkout-Flow lernen (anonymer Gast)
+      // Ziel: item_steps + checkout_steps erzeugen
+      // ════════════════════════════════════════════════════════════════════
+      await setStatus("learning_cart")
+      logDojo("info", "🛒 Phase 2 gestartet — lerne Warenkorb-Flow...")
+      console.log(`[learning] ═══ Phase 2 Start: ${domain} ═══`)
 
-    // ════════════════════════════════════════════════════════════════════
-    // PHASE 3 — Dry-Run (Garantieschranke, max. 50s, Residential Proxy)
-    // Spielt das Playbook BLIND ab — kein AI, rein mechanisch.
-    // Kosten: Residential Proxy (sicherer gegen Cloudflare-Blocks)
-    // ════════════════════════════════════════════════════════════════════
-    logDojo("dry_run", "🧪 Dry-Run gestartet (Residential Proxy, max. 50 Sek.)...")
-    console.log(`[learning] ═══ Dry-Run Start: ${domain} ═══`)
+      const cartCtx  = await globalBrowser.newContext()
+      const cartPage = await cartCtx.newPage()
 
-    // We use Residential Proxy (true) for the Dry-Run as well, because B2B portals 
-    // are highly protected and cheap Datacenter proxies will be instantly blocked by Cloudflare/WAFs, 
-    // leading to false-positive timeouts.
-    const drySession = await createBrowserbaseSession(true)
-    currentSessionId = drySession.id
+      try {
+        const resilientUrl = getResilientStartUrl(domain)
+        logDojo("info", `🌐 Lade Homepage für Phase 2: ${resilientUrl}`)
+        await cartPage.goto(resilientUrl, {
+          waitUntil: "domcontentloaded",
+          timeout:   PAGE_LOAD_MS,
+        })
+        await smartWaitForLoad(cartPage)
 
-    logDojo("dry_run", `📡 Dry-Run Session — ID: ${drySession.id}`)
-    logDojo("info", `🔴 Live-Browser: https://www.browserbase.com/sessions/${drySession.id}`)
+        await checkForCloudflare(cartPage)
 
-    const dryBrowser = await connectWithTimeout(drySession.connectUrl)
+        const cookieStep2 = await dismissCookieBanner(cartPage, logDojo)
+        if (cookieStep2) logDojo("info", "🍪 Cookie-Banner geschlossen (Phase 2).")
 
-    const candidatePlaybook: Playbook = {
-      login_steps:    loginSteps,
-      item_steps:     itemSteps,
-      checkout_steps: checkoutSteps,
-    }
+        const result   = await learnCartFlow(cartPage, domain, testProduct, logDojo)
+        itemSteps      = result.item
+        checkoutSteps  = result.checkout
+        testProductUrl = result.productUrl
+        logDojo("success", `✅ Phase 2 abgeschlossen: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps.`)
+        console.log(`[learning] Phase 2: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps`)
+      } finally {
+        await cartCtx.close().catch(() => {})
+      }
 
-    let dryRunPassed = false
-    let dryRunError:  string | null = null
+      if (itemSteps.length === 0) {
+        throw new Error(
+          "Keine item_steps gelernt. Add-to-Cart-Button konnte nicht gefunden werden. " +
+          "Möglicherweise ist ein Login für den Warenkorb erforderlich."
+        )
+      }
 
-    try {
-      const dryCtx  = dryBrowser.contexts()[0]
-      const dryPage = dryCtx.pages()[0] ?? await dryCtx.newPage()
+      // ════════════════════════════════════════════════════════════════════
+      // PHASE 3 — Dry-Run (Garantieschranke, max. 50s)
+      // Spielt das Playbook BLIND ab — kein AI, rein mechanisch.
+      // ════════════════════════════════════════════════════════════════════
+      logDojo("dry_run", "🧪 Dry-Run gestartet (Residential Proxy, max. 50 Sek.)...")
+      console.log(`[learning] ═══ Dry-Run Start: ${domain} ═══`)
 
-      await Promise.race([
-        executeDryRun(dryPage, domain, candidatePlaybook, testProduct, testProductUrl, logDojo),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error(
-              `Dry-Run Timeout: ${DRY_RUN_TIMEOUT_MS / 1000}s überschritten.`
-            )),
-            DRY_RUN_TIMEOUT_MS
-          )
-        ),
-      ])
+      const candidatePlaybook: Playbook = {
+        login_steps:    loginSteps,
+        item_steps:     itemSteps,
+        checkout_steps: checkoutSteps,
+      }
 
-      dryRunPassed = true
-      logDojo("dry_run", "✅ Dry-Run bestanden! Kassenseite erfolgreich erreicht.")
-      console.log(`[learning] ✅ Dry-Run bestanden für ${domain}`)
-    } catch (err) {
-      dryRunError = err instanceof Error ? err.message : String(err)
-      logDojo("error", `❌ Dry-Run fehlgeschlagen: ${dryRunError}`)
-      console.error(`[learning] ❌ Dry-Run fehlgeschlagen für ${domain}: ${dryRunError}`)
-    } finally {
-      await dryBrowser.close().catch(() => {})
-      await stopBrowserbaseSession(currentSessionId)
-      currentSessionId = null
-    }
+      let dryRunPassed = false
+      let dryRunError:  string | null = null
+
+      const dryCtx  = await globalBrowser.newContext()
+      const dryPage = await dryCtx.newPage()
+
+      try {
+        await Promise.race([
+          executeDryRun(dryPage, domain, candidatePlaybook, testProduct, testProductUrl, logDojo),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(
+                `Dry-Run Timeout: ${DRY_RUN_TIMEOUT_MS / 1000}s überschritten.`
+              )),
+              DRY_RUN_TIMEOUT_MS
+            )
+          ),
+        ])
+
+        dryRunPassed = true
+        logDojo("dry_run", "✅ Dry-Run bestanden! Kassenseite erfolgreich erreicht.")
+        console.log(`[learning] ✅ Dry-Run bestanden für ${domain}`)
+      } catch (err) {
+        dryRunError = err instanceof Error ? err.message : String(err)
+        logDojo("error", `❌ Dry-Run fehlgeschlagen: ${dryRunError}`)
+        console.error(`[learning] ❌ Dry-Run fehlgeschlagen für ${domain}: ${dryRunError}`)
+      } finally {
+        await dryCtx.close().catch(() => {})
+      }
 
     // ── Ergebnis in DB committen ──────────────────────────────────────────────
     if (dryRunPassed) {
@@ -442,6 +419,11 @@ async function runLearningPipeline(
         learning_error:    dryRunError ?? "Dry-Run fehlgeschlagen ohne Fehlermeldung.",
         last_learning_run: new Date().toISOString(),
       })
+    }
+    } finally {
+      await globalBrowser.close().catch(() => {})
+      await stopBrowserbaseSession(currentSessionId)
+      currentSessionId = null
     }
 
   } catch (err) {
