@@ -358,11 +358,11 @@ async function runLearningPipeline(
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 3 — Dry-Run (Garantieschranke, max. 30s, Datacenter-Proxy)
+    // PHASE 3 — Dry-Run (Garantieschranke, max. 50s, Residential Proxy)
     // Spielt das Playbook BLIND ab — kein AI, rein mechanisch.
-    // Kosten: Datacenter-Proxy (günstig, nur Selector-Validierung)
+    // Kosten: Residential Proxy (sicherer gegen Cloudflare-Blocks)
     // ════════════════════════════════════════════════════════════════════
-    logDojo("dry_run", "🧪 Dry-Run gestartet (Datacenter-Proxy, max. 30 Sek.)...")
+    logDojo("dry_run", "🧪 Dry-Run gestartet (Residential Proxy, max. 50 Sek.)...")
     console.log(`[learning] ═══ Dry-Run Start: ${domain} ═══`)
 
     // We use Residential Proxy (true) for the Dry-Run as well, because B2B portals 
@@ -1456,6 +1456,9 @@ async function learnCartFlow(
     }
   }
 
+  let usedUrlFallback = false
+  let fallbackPath = ""
+
   // Fallback: direkte URL-Navigation zur Warenkorb-Seite
   if (!cartIconSelector) {
     for (const path of ["/cart", "/warenkorb", "/basket", "/shopping-cart"]) {
@@ -1464,7 +1467,8 @@ async function learnCartFlow(
         await page.goto(testUrl, { waitUntil: "domcontentloaded", timeout: 8000 })
         const currentUrl = page.url()
         if (!currentUrl.includes("404") && !currentUrl.includes("not-found")) {
-          cartIconSelector = `a[href="${path}"]`
+          fallbackPath = path
+          usedUrlFallback = true
           logDojo("info", `↩️ Warenkorb-URL-Fallback: ${path}`)
           console.log(`[learning] Warenkorb-URL-Fallback: ${path}`)
           break
@@ -1473,18 +1477,23 @@ async function learnCartFlow(
     }
   }
 
-  if (!cartIconSelector) {
-    cartIconSelector = await aiHealSelector(page, "go_to_checkout", CART_ICON_SELECTORS.join(", "), logDojo)
-    if (cartIconSelector) {
-      await page.click(cartIconSelector, { timeout: 5000 })
-      await page.waitForTimeout(1500)
-    }
-  }
-
-  if (cartIconSelector) {
-    logDojo("info", `🛒 Warenkorb-Icon geklickt: ${cartIconSelector}`)
-    checkoutSteps.push({ step: "click", selector: cartIconSelector, timeout: CLICK_MS })
+  if (usedUrlFallback) {
+    checkoutSteps.push({ step: "navigate", url: `https://${domain}${fallbackPath}`, timeout: PAGE_LOAD_MS })
     checkoutSteps.push({ step: "sleep", ms: 1500 })
+  } else {
+    if (!cartIconSelector) {
+      cartIconSelector = await aiHealSelector(page, "go_to_checkout", CART_ICON_SELECTORS.join(", "), logDojo)
+      if (cartIconSelector) {
+        await page.click(cartIconSelector, { timeout: 5000 })
+        await page.waitForTimeout(1500)
+      }
+    }
+
+    if (cartIconSelector) {
+      logDojo("info", `🛒 Warenkorb-Icon geklickt: ${cartIconSelector}`)
+      checkoutSteps.push({ step: "click", selector: cartIconSelector, timeout: CLICK_MS })
+      checkoutSteps.push({ step: "sleep", ms: 1500 })
+    }
   }
 
   const urlAfterCart = page.url()
@@ -2098,7 +2107,7 @@ Antworte ausschließlich als JSON:
     let geminiRes;
     try {
       geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },

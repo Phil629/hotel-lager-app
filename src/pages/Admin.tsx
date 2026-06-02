@@ -115,6 +115,27 @@ export const Admin = () => {
             return;
         }
         const client = supabase;
+
+        // Fetch latest state immediately to avoid race conditions/stale list data
+        const fetchLatestTerminalData = async () => {
+            try {
+                const { data, error } = await client
+                    .from('shop_playbooks')
+                    .select('automation_status, learning_logs')
+                    .eq('domain', terminalDomain)
+                    .single();
+                if (!error && data) {
+                    setLiveTerminalData({
+                        status: data.automation_status,
+                        logs: (data.learning_logs || []) as LogEntry[],
+                    });
+                }
+            } catch (err) {
+                console.error('[admin] Fehler beim Laden der Live-Logs:', err);
+            }
+        };
+        void fetchLatestTerminalData();
+
         const channel = client
             .channel(`dojo-terminal-${terminalDomain}`)
             .on('postgres_changes', {
@@ -274,10 +295,26 @@ export const Admin = () => {
 
     const triggerLearning = async (domain: string) => {
         if (!supabase) return;
+
+        // Open the terminal modal immediately with fresh visual starting logs
+        setLiveTerminalData({
+            status: 'learning_auth',
+            logs: [{
+                timestamp: new Date().toISOString(),
+                level: 'info',
+                message: `🚀 Starte Dojo v2 für ${domain}...`
+            }]
+        });
+        setTerminalDomain(domain);
+
         try {
-            // Set status to learning_auth immediately for instant visual feedback
+            // Set status to learning_auth immediately and clear previous logs and errors in the database
             await supabase.from('shop_playbooks')
-                .update({ automation_status: 'learning_auth', learning_error: null })
+                .update({ 
+                    automation_status: 'learning_auth', 
+                    learning_error: null,
+                    learning_logs: []
+                })
                 .eq('domain', domain);
 
             // Reset complaints for this domain so the trigger counter resets
@@ -768,7 +805,7 @@ export const Admin = () => {
                                 <button
                                     className="btn btn-primary"
                                     style={{ padding: '7px 14px', fontSize: '12px' }}
-                                    onClick={() => { setTerminalDomain(null); triggerLearning(terminalDomain); }}
+                                    onClick={() => { if (terminalDomain) triggerLearning(terminalDomain); }}
                                 >
                                     <RefreshCw size={13} /> Neu lernen
                                 </button>
