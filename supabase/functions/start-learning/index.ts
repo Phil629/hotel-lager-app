@@ -993,11 +993,115 @@ async function learnCartFlow(
     return null;
   }, { selectors: PRODUCT_LINK_SELECTORS, domainStr: domain })
 
-  if (discoveredProductName) {
-    resolvedTestProduct = discoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let finalDiscoveredProductName = discoveredProductName
+  if (!finalDiscoveredProductName) {
+    logDojo("info", `Kein Produkt direkt auf der Homepage gefunden. Probiere Kategorie-Fallback…`)
+    
+    // 1. Finde Kategorie-Links auf der Homepage
+    const categoryUrls = await page.evaluate(() => {
+      const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 400);
+      const urls = [];
+      for (const link of allLinks) {
+        const href = link.getAttribute("href");
+        if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("tel:") || href.startsWith("mailto:")) continue;
+        const path = href.toLowerCase();
+        
+        const isNotNavigation =
+          !path.includes("search") && !path.includes("suche") &&
+          !path.includes("cart") && !path.includes("warenkorb") &&
+          !path.includes("checkout") && !path.includes("kasse") &&
+          !path.includes("account") && !path.includes("login") &&
+          !path.includes("impressum") && !path.includes("agb") &&
+          !path.includes("datenschutz") && !path.includes("contact") &&
+          !path.includes("kontakt") && !path.includes("about") &&
+          !path.includes("widerruf") && !path.includes("versand") && !path.includes("zahlungs");
+
+        const isPage = !path.includes(".") || path.includes(".html") || path.includes(".php");
+        
+        if (isNotNavigation && isPage) {
+          try {
+            const urlObj = new URL(href, window.location.origin);
+            if (urlObj.origin === window.location.origin && !urls.includes(urlObj.href)) {
+              urls.push(urlObj.href);
+            }
+          } catch {}
+        }
+      }
+      return urls;
+    });
+
+    logDojo("info", `${categoryUrls.length} potenzielle Kategorie-Links auf der Homepage gefunden.`)
+
+    // 2. Probiere die ersten 5 Kategorien aus, um ein Produkt zu finden
+    for (const catUrl of categoryUrls.slice(0, 5)) {
+      logDojo("info", `Navigiere zu Kategorie: ${catUrl}`)
+      await page.goto(catUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {});
+      await smartWaitForLoad(page);
+      
+      const foundName = await page.evaluate(({ selectors }) => {
+        for (const sel of selectors) {
+          try {
+            const el = document.querySelector(sel);
+            if (!el) continue;
+            const text = el.innerText || el.getAttribute("title");
+            if (text && text.trim().length > 3) return text.trim();
+          } catch {}
+        }
+
+        const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 400);
+        for (const link of allLinks) {
+          const href = link.getAttribute("href");
+          if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
+          const path = href.toLowerCase();
+          
+          const isProductPattern =
+            path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
+            path.endsWith(".html") ||
+            path.includes("/product/") || path.includes("/products/") ||
+            path.includes("/produkt/") || path.includes("/produkte/") ||
+            path.includes("/artikel/") || path.includes("/item/") || path.includes("/detail/") ||
+            /\/a-[a-z0-9]+/i.test(href) ||
+            /-\d+\.html$/i.test(href) ||
+            /-\d{4,}(?:\/|$)/.test(href) ||
+            path.includes("cl=details") ||
+            path.includes("artnr=") || path.includes("artno=") ||
+            path.includes("article_id=") || path.includes("articleid=");
+
+          const isNotNavigation =
+            !path.includes("category") && !path.includes("kategorie") &&
+            !path.includes("search") && !path.includes("suche") &&
+            !path.includes("cart") && !path.includes("warenkorb") &&
+            !path.includes("checkout") && !path.includes("kasse") &&
+            !path.includes("account") && !path.includes("login") &&
+            !path.includes("impressum") && !path.includes("agb") &&
+            !path.includes("datenschutz") && !path.includes("contact") &&
+            !path.includes("kontakt") && !path.includes("about");
+
+          if (isProductPattern && isNotNavigation) {
+            const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
+            if (text && text.trim().length > 3) return text.trim();
+          }
+        }
+        return null;
+      }, { selectors: PRODUCT_LINK_SELECTORS });
+
+      if (foundName) {
+        finalDiscoveredProductName = foundName;
+        logDojo("info", `🎯 Testprodukt in Kategorie entdeckt: "${finalDiscoveredProductName}"`);
+        break;
+      }
+    }
+  }
+
+  if (finalDiscoveredProductName) {
+    resolvedTestProduct = finalDiscoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
     logDojo("info", `🎯 Testprodukt dynamisch im Shop entdeckt: "${resolvedTestProduct}"`)
+    
+    logDojo("info", `Kehre zur Homepage zurück, um die Suche zu starten…`)
+    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {})
+    await smartWaitForLoad(page)
   } else {
-    logDojo("info", `Kein Testprodukt auf Homepage entdeckt, nutze Standard-Suchbegriff: "${resolvedTestProduct}"`)
+    logDojo("info", `Kein Testprodukt auf Homepage oder in Kategorien entdeckt, nutze Standard-Suchbegriff: "${resolvedTestProduct}"`)
   }
 
   logDojo("info", `Suche nach "${resolvedTestProduct}"...`)
