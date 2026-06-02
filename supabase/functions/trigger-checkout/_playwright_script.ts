@@ -131,16 +131,27 @@ export default async function ({ page, context }) {
     await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 30000 })
 
     const isAlreadyLoggedIn = await page.evaluate(() => {
-      const bodyText = document.body ? document.body.innerText.toLowerCase() : '';
-      const loggedInKeywords = [
-        'abmelden', 'ausloggen', 'abmeldung', 'logout', 'log out', 
-        'sign out', 'signout', 'deconnexion'
-      ];
-      const hasLoggedInKeyword = loggedInKeywords.some(kw => bodyText.includes(kw));
-      const hasPasswordInput = !!document.querySelector('input[type="password"]');
-      const hasLogoutLink = !!document.querySelector('a[href*="logout"], a[href*="abmelden"], a[href*="signout"]');
+      const isLogoutLink = (el) => {
+        const href = (el.getAttribute('href') || '').toLowerCase();
+        const text = (el.innerText || '').toLowerCase();
+        
+        const isNewsletter = href.includes('newsletter') || text.includes('newsletter') || text.includes('news');
+        if (isNewsletter) return false;
+        
+        const matchesHref = href.includes('logout') || href.includes('abmelden') || href.includes('signout') || href.includes('logoff') || href.includes('log-out');
+        const matchesText = text === 'abmelden' || text === 'logout' || text === 'ausloggen' || text === 'abmeldung' || 
+                            text.includes('abmelden') || text.includes('logout') || text.includes('ausloggen');
+                            
+        return matchesHref || matchesText;
+      };
       
-      return (!hasPasswordInput && hasLoggedInKeyword) || hasLogoutLink;
+      const links = Array.from(document.querySelectorAll('a[href], button, [onclick]'));
+      const hasRealLogout = links.some(isLogoutLink);
+      const hasPasswordInput = !!document.querySelector('input[type="password"]');
+      
+      if (hasPasswordInput) return false;
+      
+      return hasRealLogout;
     });
 
     if (isAlreadyLoggedIn) {
