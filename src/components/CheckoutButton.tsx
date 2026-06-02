@@ -478,7 +478,7 @@ const ItemRow: React.FC<{
   spinning:          boolean
   priceThresholdPct: number
 }> = ({ item, spinning }) => {
-  const hasPriceData = item.price_actual != null
+  const hasPriceData = item.price_actual != null && item.price_actual > 0
   const isError      = item.status === 'error'
   const isWarn       = item.price_ok === false && !isError
   const isOk         = item.price_ok === true && !isError

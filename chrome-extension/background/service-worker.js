@@ -81,7 +81,11 @@ async function runAutomation(payload) {
 
     await patch('logging_in', 'Browser-Tab wird geöffnet…')
 
-    const tab = await chrome.tabs.create({ url: loginUrl, active: false })
+    const loginRequired = SEL?.login_required ?? false
+    // Wenn kein Login erforderlich ist, öffnen wir direkt die Homepage statt der Login-Seite
+    const startUrl = loginRequired ? loginUrl : (loginUrl ? `https://${extractDomain(loginUrl)}` : loginUrl)
+
+    const tab = await chrome.tabs.create({ url: startUrl, active: false })
     supplierTabId = tab.id
 
     await chrome.storage.session.set({
@@ -445,7 +449,7 @@ async function runAutomation(payload) {
         // UX Refinement: Standardmäßig auf dem Warenkorb anstatt der Kasse stoppen.
         // Der Klick auf 'proceed_to_checkout' wird absichtlich übersprungen!
         if (false && !isOnCheckout && SEL.proceed_to_checkout) {
-          await patch('searching', 'Navigiere zur Kasse...')
+          await patch('searching', 'Warenkorb wird geöffnet...')
           await sleep(1500) // Offcanvas vollständig gerendert abwarten (Erhöht auf 1500ms)
 
           try {
@@ -782,7 +786,7 @@ async function waitForUrlPattern(tabId, pattern, timeout = 10_000) {
   throw new Error(`URL-Pattern /${pattern}/ nicht erreicht nach ${timeout}ms`)
 }
 
-async function executeSteps(supplierTabId, steps, ctx, patch, patchMsg) {
+async function executeSteps(supplierTabId, steps, ctx, patch, patchMsg, payload) {
   if (!Array.isArray(steps) || steps.length === 0) return
 
   for (const step of steps) {
@@ -798,17 +802,35 @@ async function executeSteps(supplierTabId, steps, ctx, patch, patchMsg) {
           break
         }
         case 'fill': {
-          const res = await domAction(supplierTabId, {
-            command: 'FILL', selector, value, timeout: step.timeout ?? 8_000,
-          })
-          if (!res.success) throw new Error(`[playbook] FILL fehlgeschlagen: ${selector} — ${res.error}`)
+          if (payload) {
+            const { sessionId, supplierId, selfHealUrl, userJwt } = payload
+            await withHeal({
+              supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+              ctx: step.step_context || 'playbook_fill', command: 'FILL',
+              selector, value, timeout: step.timeout ?? 8_000
+            })
+          } else {
+            const res = await domAction(supplierTabId, {
+              command: 'FILL', selector, value, timeout: step.timeout ?? 8_000,
+            })
+            if (!res.success) throw new Error(`[playbook] FILL fehlgeschlagen: ${selector} — ${res.error}`)
+          }
           break
         }
         case 'click': {
-          const res = await domAction(supplierTabId, {
-            command: 'CLICK', selector, timeout: step.timeout ?? 8_000,
-          })
-          if (!res.success) throw new Error(`[playbook] CLICK fehlgeschlagen: ${selector} — ${res.error}`)
+          if (payload) {
+            const { sessionId, supplierId, selfHealUrl, userJwt } = payload
+            await withHeal({
+              supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
+              ctx: step.step_context || 'playbook_click', command: 'CLICK',
+              selector, timeout: step.timeout ?? 8_000
+            })
+          } else {
+            const res = await domAction(supplierTabId, {
+              command: 'CLICK', selector, timeout: step.timeout ?? 8_000,
+            })
+            if (!res.success) throw new Error(`[playbook] CLICK fehlgeschlagen: ${selector} — ${res.error}`)
+          }
           break
         }
         case 'wait_for_element': {
@@ -908,7 +930,7 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
         await sleep(1000)
       } else if (login_steps.length > 0) {
         await patch('logging_in', 'Melde an (Playbook)...')
-        await executeSteps(supplierTabId, login_steps, baseCtx, patch, null)
+        await executeSteps(supplierTabId, login_steps, baseCtx, patch, null, payload)
         await sleep(500)
 
         if (await isAuthWall(supplierTabId)) {
@@ -927,7 +949,7 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
       await patch('searching', `Öffne Produkt: ${item.product_name}...`, { items: updatedItems })
 
       try {
-        await executeSteps(supplierTabId, item_steps, itemCtx, patch, `Suche ${item.product_name}...`)
+        await executeSteps(supplierTabId, item_steps, itemCtx, patch, `Suche ${item.product_name}...`, payload)
 
         // Produkt-URL nach erfolgreichem Add-to-Cart in DB sichern
         if (item.product_id) {
@@ -959,8 +981,8 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
 
     // Phase 3: Checkout
     if (checkout_steps.length > 0) {
-      await patch('searching', 'Navigiere zur Kasse (Playbook)...')
-      await executeSteps(supplierTabId, checkout_steps, baseCtx, patch, 'Öffne Warenkorb...')
+      await patch('searching', 'Warenkorb wird geöffnet...')
+      await executeSteps(supplierTabId, checkout_steps, baseCtx, patch, 'Öffne Warenkorb...', payload)
     }
 
     await chrome.tabs.update(supplierTabId, { active: false })
