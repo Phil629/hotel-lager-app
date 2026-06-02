@@ -36,7 +36,7 @@ const PAGE_LOAD_MS               =  20_000
 const NETWORK_SETTLE_MS          =   3_500  // Extra SPA-Hydrations-Zeit nach DOMContentLoaded
 const CLICK_MS                   =   8_000
 const FILL_MS                    =   6_000
-const DRY_RUN_TIMEOUT_MS         =  30_000
+const DRY_RUN_TIMEOUT_MS         =  50_000
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
 
@@ -49,6 +49,7 @@ interface PlaybookStep {
   ms?:       number
   timeout?:  number
   pattern?:  string
+  optional?: boolean
 }
 
 interface Playbook {
@@ -976,13 +977,28 @@ async function learnCartFlow(
       const path = href.toLowerCase();
       
       const isProductPattern =
+        // Shopware 5: artikel-name-p-12345
         path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-        path.includes("/product/") || path.includes("/products/") || path.includes("/produkt/") || path.includes("/produkte/") ||
+        // Generic paths
+        path.includes("/product/") || path.includes("/products/") ||
+        path.includes("/produkt/") || path.includes("/produkte/") ||
         path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
+        path.includes("/detail/") ||
+        // Shopware 6: /a-UUID
         /\/a-[a-z0-9]+/i.test(href) ||
+        // Magento / PrestaShop: slug-12345.html or -12345.html
         /-\d+\.html$/i.test(href) ||
+        // Shopware 5 / JTL: slug-12345 (numeric ID suffix without .html)
+        /-\d{4,}(?:\/|$)/.test(href) ||
+        // OXID eShop
+        path.includes("cl=details") ||
+        // JTL Shop
+        path.includes("artnr=") || path.includes("artno=") ||
+        // Gambio
+        path.includes("article_id=") || path.includes("articleid=") ||
+        // UUID-based (some shops use MD5 or UUIDs as product IDs)
         /[a-f0-9]{32}/i.test(href);
-        
+
       const isNotNavigation =
         !path.includes("category") && !path.includes("kategorie") &&
         !path.includes("search") && !path.includes("suche") &&
@@ -1082,8 +1098,10 @@ async function learnCartFlow(
 
   // ── 2f: "In den Warenkorb"-Button ────────────────────────────────────────
   const ADD_CART_SELECTORS = [
-    'form.add-cart-form button',
-    '.add-cart-form button',
+    'form.add-cart-form button.add-cart',
+    'form.add-cart-form button.btn-cart',
+    '.add-cart-form button.add-cart',
+    '.add-cart-form button.btn-cart',
     'button.add-cart',
     'button.btn-cart',
     'button[class*="btn-cart" i]',
@@ -1326,12 +1344,18 @@ async function executeDryRun(
           
           const isProductPattern =
             path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-            path.includes("/product/") || path.includes("/products/") || path.includes("/produkt/") || path.includes("/produkte/") ||
+            path.includes("/product/") || path.includes("/products/") ||
+            path.includes("/produkt/") || path.includes("/produkte/") ||
             path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
+            path.includes("/detail/") ||
             /\/a-[a-z0-9]+/i.test(href) ||
             /-\d+\.html$/i.test(href) ||
+            /-\d{4,}(?:\/|$)/.test(href) ||
+            path.includes("cl=details") ||
+            path.includes("artnr=") || path.includes("artno=") ||
+            path.includes("article_id=") || path.includes("articleid=") ||
             /[a-f0-9]{32}/i.test(href);
-            
+
           const isNotNavigation =
             !path.includes("category") && !path.includes("kategorie") &&
             !path.includes("search") && !path.includes("suche") &&
@@ -1673,7 +1697,9 @@ async function extractStableSelector(page: Page, el: any): Promise<string | null
       const stable = getStable(element)
       if (!stable) return null
 
-      // Check if element lives inside a Shadow Root (fully compatible with Playwright and Chrome Extension runner)
+      // pierce/ prefix is Playwright-CDP-only. Chrome Extension document.querySelector cannot cross shadow roots.
+      // Cookie steps use optional:true so the extension skips them — safe because consent was already accepted.
+      // Non-cookie steps with pierce/ indicate a shop using web components for core flow (unsupported by extension).
       const root = element.getRootNode()
       const isShadow = (typeof ShadowRoot !== "undefined" && root instanceof ShadowRoot) || 
                        (root && (root as any).host !== undefined)
@@ -1707,10 +1733,91 @@ async function aiHealSelector(
     
     const htmlSnippet = await page.evaluate(() => {
       try {
+        // Flatten shadow roots into the clone so Gemini sees web-component internals
+        const flattenShadow = (root: Element | ShadowRoot): string => {
+          let html = ""
+          for (const child of Array.from(root.childNodes)) {
+            if (child.nodeType === Node.ELEMENT_NODE) {
+              const el = child as Element
+              const sr = (el as any).shadowRoot as ShadowRoot | null
+              if (sr) {
+                html += `<shadow-root host="${el.tagName.toLowerCase()}">${flattenShadow(sr)}</shadow-root>`
+              } else {
+                html += el.outerHTML
+              }
+            }
+          }
+          return html
+        }
+
         const bodyClone = document.body.cloneNode(true) as HTMLElement
-        const toRemove = bodyClone.querySelectorAll("script, style, svg, noscript, iframe, link, path, symbol")
-        toRemove.forEach((el) => el.remove())
-        return bodyClone.outerHTML.substring(0, 60_000)
+
+        // Remove non-semantic nodes
+        bodyClone.querySelectorAll(
+          "script, style, svg, noscript, iframe, link, path, symbol, head, meta, " +
+          "template, [hidden], [aria-hidden='true']"
+        ).forEach((el) => el.remove())
+
+        // Strip noisy attributes — keep only selector-stable and semantic ones
+        const KEEP_ATTRS = new Set([
+          "id", "name", "type", "placeholder", "value", "role",
+          "aria-label", "aria-labelledby", "aria-describedby",
+          "data-testid", "data-action", "data-cy", "data-qa",
+          "for", "href", "action", "method",
+        ])
+        bodyClone.querySelectorAll("*").forEach((el) => {
+          const toRemove: string[] = []
+          for (const attr of Array.from(el.attributes)) {
+            if (KEEP_ATTRS.has(attr.name)) continue
+            if (attr.name === "class") {
+              // Keep class but strip hash/generated values
+              const cleaned = attr.value
+                .split(/\s+/)
+                .filter(c =>
+                  c.length > 2 &&
+                  !/^[a-f0-9]{5,}$/.test(c) &&
+                  !/^css-/.test(c) &&
+                  !/^sc-/.test(c) &&
+                  !/^_/.test(c)
+                )
+                .join(" ")
+              if (cleaned) el.setAttribute("class", cleaned)
+              else toRemove.push("class")
+              continue
+            }
+            // Remove data-react*, data-n-*, inline base64 src
+            if (attr.name.startsWith("data-react") || attr.name.startsWith("data-n-") || attr.name.startsWith("data-v-")) {
+              toRemove.push(attr.name)
+              continue
+            }
+            if (attr.name === "src" && attr.value.startsWith("data:")) {
+              toRemove.push(attr.name)
+              continue
+            }
+            if (!attr.name.startsWith("data-") && !attr.name.startsWith("aria-")) {
+              toRemove.push(attr.name)
+            }
+          }
+          toRemove.forEach(a => el.removeAttribute(a))
+        })
+
+        // Include shadow DOM content for web component shops (Shopware 6, etc.)
+        const shadowFragments = Array.from(document.querySelectorAll("*"))
+          .filter(el => !!(el as any).shadowRoot)
+          .map(el => {
+            const sr = (el as any).shadowRoot as ShadowRoot
+            return `<shadow-root host="${el.tagName.toLowerCase()}" id="${el.id || ""}">${flattenShadow(sr)}</shadow-root>`
+          })
+          .join("\n")
+
+        const lightHtml  = bodyClone.outerHTML
+        const combined   = lightHtml + (shadowFragments ? `\n<!-- Shadow DOM -->\n${shadowFragments}` : "")
+
+        // Truncate at last closing tag before 55KB to avoid sending malformed HTML to Gemini
+        const MAX = 55_000
+        if (combined.length <= MAX) return combined
+        const cutoff = combined.lastIndexOf("</", MAX)
+        return cutoff > 0 ? combined.substring(0, cutoff) + "…" : combined.substring(0, MAX)
       } catch {
         return document.body.innerText.substring(0, 20_000)
       }
@@ -1719,7 +1826,7 @@ async function aiHealSelector(
     const CONTEXT_DESCRIPTIONS: Record<string, string> = {
       search:              'Produkt im Shop suchen (Suchfeld befüllen)',
       add_to_cart:         'Produkt in den Warenkorb legen oder Bestellmenge in ein Zahlenfeld eingeben',
-      go_to_checkout:      'Warenkorb-Icon oder Warenkorb-Link anklicken, um den Warenkorb to öffnen',
+      go_to_checkout:      'Warenkorb-Icon oder Warenkorb-Link anklicken, um den Warenkorb zu öffnen',
     }
 
     const taskPrompt = `Du bist ein Experte für Web-Scraping und CSS-Selektoren. \
@@ -1760,7 +1867,7 @@ Antworte ausschließlich als JSON:
     let geminiRes;
     try {
       geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
