@@ -1748,17 +1748,29 @@ Antworte ausschließlich als JSON:
     }
     geminiParts.push({ text: taskPrompt })
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: geminiParts }],
-          generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-        }),
-      }
-    )
+    const geminiController = new AbortController();
+    const geminiTimeoutId = setTimeout(() => geminiController.abort(), 25000);
+    let geminiRes;
+    try {
+      geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: geminiParts }],
+            generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+          }),
+          signal: geminiController.signal,
+        }
+      )
+    } catch (err) {
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
+      logDojo("warning", `🤖 Dojo AI-Healing fehlgeschlagen: ${isAbort ? "Gemini API-Timeout (25s) überschritten." : (err as Error).message}`)
+      return null;
+    } finally {
+      clearTimeout(geminiTimeoutId);
+    }
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text()
@@ -1809,19 +1821,11 @@ async function createBrowserbaseSession(
     body.proxies = true
   }
 
-  let res = await fetch("https://api.browserbase.com/v1/sessions", {
-    method:  "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-bb-api-key": BROWSERBASE_API_KEY,
-    },
-    body: JSON.stringify(body),
-  })
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-  // HTTP 402: Residential Proxies nicht im Plan → Fallback auf Standard-Verbindung
-  if (res.status === 402 && body.proxies) {
-    console.warn("[browserbase] Residential Proxies nicht verfügbar (402). Fallback auf Standard...")
-    delete body.proxies
+  let res;
+  try {
     res = await fetch("https://api.browserbase.com/v1/sessions", {
       method:  "POST",
       headers: {
@@ -1829,7 +1833,46 @@ async function createBrowserbaseSession(
         "x-bb-api-key": BROWSERBASE_API_KEY,
       },
       body: JSON.stringify(body),
-    })
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const isAbort = err instanceof DOMException && err.name === "AbortError";
+    throw new Error(
+      isAbort 
+        ? "Browserbase API-Timeout (15s) überschritten bei Session-Erstellung. Keine Verbindung zu Residential Proxies möglich." 
+        : `Browserbase API-Verbindung fehlgeschlagen: ${(err as Error).message}`
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  // HTTP 402: Residential Proxies nicht im Plan → Fallback auf Standard-Verbindung
+  if (res.status === 402 && body.proxies) {
+    console.warn("[browserbase] Residential Proxies nicht verfügbar (402). Fallback auf Standard...")
+    delete body.proxies
+    
+    const fallbackController = new AbortController();
+    const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 15000);
+    try {
+      res = await fetch("https://api.browserbase.com/v1/sessions", {
+        method:  "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-bb-api-key": BROWSERBASE_API_KEY,
+        },
+        body: JSON.stringify(body),
+        signal: fallbackController.signal,
+      });
+    } catch (err) {
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
+      throw new Error(
+        isAbort 
+          ? "Browserbase Fallback API-Timeout (15s) überschritten." 
+          : `Browserbase Fallback-Verbindung fehlgeschlagen: ${(err as Error).message}`
+      );
+    } finally {
+      clearTimeout(fallbackTimeoutId);
+    }
   }
 
   if (!res.ok) {
@@ -1858,6 +1901,8 @@ async function createBrowserbaseSession(
 
 async function stopBrowserbaseSession(sessionId: string): Promise<void> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     await fetch(`https://api.browserbase.com/v1/sessions/${sessionId}`, {
       method:  "PATCH",
       headers: {
@@ -1865,7 +1910,8 @@ async function stopBrowserbaseSession(sessionId: string): Promise<void> {
         "x-bb-api-key": BROWSERBASE_API_KEY,
       },
       body: JSON.stringify({ status: "REQUEST_RELEASE" }),
-    })
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
     console.log(`[browserbase] Session freigegeben: ${sessionId}`)
   } catch (e) {
     console.warn("[browserbase] Session-Freigabe fehlgeschlagen:", e)
