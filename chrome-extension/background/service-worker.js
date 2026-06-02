@@ -128,7 +128,6 @@ async function runAutomation(payload) {
 
     // ── Step 3: Login ───────────────────────────────────────────────────────
 
-    const loginRequired = SEL?.login_required ?? false
     if (!loginRequired) {
       console.log('[sw] Login not required. Skipping legacy login steps.')
       await patch('logging_in', 'Login übersprungen (nicht erforderlich)…')
