@@ -1010,15 +1010,7 @@ async function learnCartFlow(
         path.includes("artnr=") || path.includes("artno=") ||
         path.includes("article_id=") || path.includes("articleid=");
 
-      const isNotNavigation =
-        !path.includes("category") && !path.includes("kategorie") &&
-        !path.includes("search") && !path.includes("suche") &&
-        !path.includes("cart") && !path.includes("warenkorb") &&
-        !path.includes("checkout") && !path.includes("kasse") &&
-        !path.includes("account") && !path.includes("login") &&
-        !path.includes("impressum") && !path.includes("agb") &&
-        !path.includes("datenschutz") && !path.includes("contact") &&
-        !path.includes("kontakt") && !path.includes("about");
+      const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|versand|zahlungs|retoure|rueckgab|sitemap|info)/i.test(path);
 
       if (isProductPattern && isNotNavigation) {
         const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
@@ -1041,15 +1033,7 @@ async function learnCartFlow(
         if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("tel:") || href.startsWith("mailto:")) continue;
         const path = href.toLowerCase();
         
-        const isNotNavigation =
-          !path.includes("search") && !path.includes("suche") &&
-          !path.includes("cart") && !path.includes("warenkorb") &&
-          !path.includes("checkout") && !path.includes("kasse") &&
-          !path.includes("account") && !path.includes("login") &&
-          !path.includes("impressum") && !path.includes("agb") &&
-          !path.includes("datenschutz") && !path.includes("contact") &&
-          !path.includes("kontakt") && !path.includes("about") &&
-          !path.includes("widerruf") && !path.includes("versand") && !path.includes("zahlungs");
+        const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|versand|zahlungs|retoure|rueckgab|sitemap|info)/i.test(path);
 
         // Erlaubnisliste statt Verbotsliste: schließt Asset-Dateien aus, erlaubt alles andere.
         // `!path.includes(".")` würde absolute URLs (https://domain.com/kat) fälschlich ausschließen.
@@ -1104,15 +1088,7 @@ async function learnCartFlow(
             path.includes("artnr=") || path.includes("artno=") ||
             path.includes("article_id=") || path.includes("articleid=");
 
-          const isNotNavigation =
-            !path.includes("category") && !path.includes("kategorie") &&
-            !path.includes("search") && !path.includes("suche") &&
-            !path.includes("cart") && !path.includes("warenkorb") &&
-            !path.includes("checkout") && !path.includes("kasse") &&
-            !path.includes("account") && !path.includes("login") &&
-            !path.includes("impressum") && !path.includes("agb") &&
-            !path.includes("datenschutz") && !path.includes("contact") &&
-            !path.includes("kontakt") && !path.includes("about");
+          const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|versand|zahlungs|retoure|rueckgab|sitemap|info)/i.test(path);
 
           if (isProductPattern && isNotNavigation) {
             const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
