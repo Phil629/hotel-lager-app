@@ -243,8 +243,28 @@ export default async function ({ page, context }) {
         await withHeal(
           'add_to_cart',
           async (s, t) => {
-            await page.fill(s, '', { timeout: t })
-            await page.fill(s, String(item.quantity), { timeout: t })
+            const loc = page.locator(s).first()
+            const isReadonly = await loc.evaluate(el => el.hasAttribute('readonly') || (el as any).readOnly).catch(() => false);
+            if (isReadonly) {
+              console.log('[script] Qty-Feld ist schreibgeschützt (readonly). Verwende JS-Fallback…')
+              await loc.evaluate((el, val) => {
+                (el as HTMLInputElement).value = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+              }, String(item.quantity))
+            } else {
+              try {
+                await page.fill(s, '', { timeout: t })
+                await page.fill(s, String(item.quantity), { timeout: t })
+              } catch (err: any) {
+                console.warn('[script] Standard fill fehlgeschlagen, versuche JS-Fallback:', err.message)
+                await loc.evaluate((el, val) => {
+                  (el as HTMLInputElement).value = val;
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                }, String(item.quantity))
+              }
+            }
           },
           SEL.product_qty
         ).catch(e => {

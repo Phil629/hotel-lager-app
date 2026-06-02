@@ -1094,8 +1094,22 @@ async function learnCartFlow(
   }
 
   if (finalDiscoveredProductName) {
-    resolvedTestProduct = finalDiscoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
-    logDojo("info", `🎯 Testprodukt dynamisch im Shop entdeckt: "${resolvedTestProduct}"`)
+    let clean = finalDiscoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+    // 1. Preise entfernen (z.B. 29,99€, 150.00 €, 29,99 € brutto, etc.)
+    clean = clean.replace(/\d+[\.,]\d+\s*(?:€|EUR|CHF|\$)?(?:\s*(?:netto|brutto|zzgl|inkl|NEW|NEU))?/gi, '');
+    // 2. Währungszeichen entfernen
+    clean = clean.replace(/[€$]/g, '');
+    // 3. Typische Labels entfernen
+    clean = clean.replace(/\b(?:NEW|NEU|SALE|BESTSELLER|AKTION|TOP|DEAL)\b/gi, '');
+    // 4. Überflüssige Leerzeichen & Anführungszeichen säubern
+    clean = clean.replace(/["'“”]+/g, ' ').replace(/\s+/g, ' ').trim();
+    
+    if (clean.length > 3) {
+      resolvedTestProduct = clean;
+    } else {
+      resolvedTestProduct = finalDiscoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    logDojo("info", `🎯 Testprodukt dynamisch im Shop entdeckt und bereinigt: "${resolvedTestProduct}"`)
     
     logDojo("info", `Kehre zur Homepage zurück, um die Suche zu starten…`)
     await page.goto("https://" + domain, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {})
@@ -1245,8 +1259,28 @@ async function learnCartFlow(
     const el = await loc.elementHandle()
     if (el) {
       qtySelector = await extractStableSelector(page, el) ?? visibleQtySelector
-      await loc.fill("2")
-      await page.waitForTimeout(300)
+      
+      try {
+        const isReadonly = await loc.evaluate(el => el.hasAttribute('readonly') || (el as any).readOnly).catch(() => false);
+        if (isReadonly) {
+          logDojo("info", `🔢 Mengenfeld ist schreibgeschützt (readonly). Verwende JS-Fallback…`)
+          await loc.evaluate((el, val) => {
+            (el as HTMLInputElement).value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }, "2")
+        } else {
+          await loc.fill("2")
+        }
+        await page.waitForTimeout(300)
+      } catch (e: any) {
+        logDojo("warn", `Fehler beim Befüllen des Mengenfelds, versuche JS-Fallback: ${e.message}`)
+        await loc.evaluate((el, val) => {
+          (el as HTMLInputElement).value = val;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }, "2").catch(() => {})
+      }
     }
   }
 
