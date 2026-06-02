@@ -979,7 +979,7 @@ async function learnCartFlow(
       
       const isProductPattern =
         path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-        path.endsWith(".html") ||
+        (path.endsWith(".html") && (/\d/.test(path.replace(/^https?:\/\/[^\/]+/, "")) || (path.replace(/^https?:\/\/[^\/]+/, "").match(/\//g) || []).length >= 2)) ||
         path.includes("/product/") || path.includes("/products/") ||
         path.includes("/produkt/") || path.includes("/produkte/") ||
         path.includes("/artikel/") || path.includes("/item/") || path.includes("/detail/") ||
@@ -1177,7 +1177,7 @@ async function learnCartFlow(
         // Shopware 5: artikel-name-p-12345
         path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
         // Universal SEO paths ending in .html (e.g. cent-online.de products)
-        path.endsWith(".html") ||
+        (path.endsWith(".html") && (/\d/.test(path.replace(/^https?:\/\/[^\/]+/, "")) || (path.replace(/^https?:\/\/[^\/]+/, "").match(/\//g) || []).length >= 2)) ||
         // Generic paths
         path.includes("/product/") || path.includes("/products/") ||
         path.includes("/produkt/") || path.includes("/produkte/") ||
