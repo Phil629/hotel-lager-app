@@ -240,6 +240,18 @@ export default async function ({ page, context }) {
       })
 
       if (SEL.product_qty) {
+        // React-kompatibler Wertschreiber: nativer Prototyp-Setter + InputEvent + blur.
+        // Einfaches el.value= umgeht Reacts fiber-internen nativeValue-Tracker.
+        // composed:true lässt Events Shadow-DOM-Grenzen passieren (Shopware 6 Web Components).
+        // blur-Event triggert WooCommerce/JTL-Qty-Plugins die erst bei Fokusverlust reagieren.
+        const reactSafeSetValue = (el: HTMLInputElement, val: string): void => {
+          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+          if (nativeSetter) { nativeSetter.call(el, val) } else { el.value = val }
+          el.dispatchEvent(new InputEvent('input',  { bubbles: true, composed: true, data: val }))
+          el.dispatchEvent(new Event('change', { bubbles: true, composed: true }))
+          el.dispatchEvent(new Event('blur',   { bubbles: true, composed: true }))
+        }
+
         await withHeal(
           'add_to_cart',
           async (s, t) => {
@@ -247,22 +259,14 @@ export default async function ({ page, context }) {
             const isReadonly = await loc.evaluate(el => el.hasAttribute('readonly') || (el as any).readOnly).catch(() => false);
             if (isReadonly) {
               console.log('[script] Qty-Feld ist schreibgeschützt (readonly). Verwende JS-Fallback…')
-              await loc.evaluate((el, val) => {
-                (el as HTMLInputElement).value = val;
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-              }, String(item.quantity))
+              await loc.evaluate(reactSafeSetValue, String(item.quantity))
             } else {
               try {
                 await page.fill(s, '', { timeout: t })
                 await page.fill(s, String(item.quantity), { timeout: t })
               } catch (err: any) {
                 console.warn('[script] Standard fill fehlgeschlagen, versuche JS-Fallback:', err.message)
-                await loc.evaluate((el, val) => {
-                  (el as HTMLInputElement).value = val;
-                  el.dispatchEvent(new Event('input', { bubbles: true }));
-                  el.dispatchEvent(new Event('change', { bubbles: true }));
-                }, String(item.quantity))
+                await loc.evaluate(reactSafeSetValue, String(item.quantity))
               }
             }
           },

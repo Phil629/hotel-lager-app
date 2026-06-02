@@ -861,6 +861,24 @@ async function learnLoginFlow(
   return steps
 }
 
+// ── Qty-Feld: React/Vue/Svelte/Alpine-kompatibler Wertschreiber ───────────────
+// Direktes `el.value = val` umgeht Reacts Fiber-Tracker → onChange feuert nie.
+// Lösung: nativer Prototyp-Setter täuscht React, als käme die Änderung vom Browser.
+// composed:true lässt Events Shadow-DOM-Grenzen passieren (Shopware 6 Web Components).
+// blur-Event triggert WooCommerce/JTL-Qty-Plugins, die erst bei Fokusverlust reagieren.
+const reactSafeSetValue = (el: Element, val: string): void => {
+  const input = el as HTMLInputElement
+  const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+  if (nativeSetter) {
+    nativeSetter.call(input, val)
+  } else {
+    input.value = val
+  }
+  input.dispatchEvent(new InputEvent('input',  { bubbles: true, composed: true, data: val }))
+  input.dispatchEvent(new Event('change', { bubbles: true, composed: true }))
+  input.dispatchEvent(new Event('blur',   { bubbles: true, composed: true }))
+}
+
 // ── Phase 2: Warenkorb-Flow lernen ────────────────────────────────────────────
 
 async function learnCartFlow(
@@ -1019,7 +1037,9 @@ async function learnCartFlow(
           !path.includes("kontakt") && !path.includes("about") &&
           !path.includes("widerruf") && !path.includes("versand") && !path.includes("zahlungs");
 
-        const isPage = !path.includes(".") || path.includes(".html") || path.includes(".php");
+        // Erlaubnisliste statt Verbotsliste: schließt Asset-Dateien aus, erlaubt alles andere.
+        // `!path.includes(".")` würde absolute URLs (https://domain.com/kat) fälschlich ausschließen.
+        const isPage = !/\.(png|jpe?g|gif|svg|webp|ico|css|js|woff2?|ttf|pdf|zip|mp4|xml|json)(\?.*)?$/i.test(path);
         
         if (isNotNavigation && isPage) {
           try {
@@ -1098,28 +1118,32 @@ async function learnCartFlow(
 
   if (finalDiscoveredProductName) {
     let clean = finalDiscoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
-    // 1. Preise entfernen (z.B. 29,99€, 150.00 €, 29,99 € brutto, etc.)
-    clean = clean.replace(/\d+[\.,]\d+\s*(?:€|EUR|CHF|\$)?(?:\s*(?:netto|brutto|zzgl|inkl|NEW|NEU))?/gi, '');
-    // 2. Währungszeichen entfernen
+    // 1. Nur echte Preise entfernen: Dezimalzahl MUSS von Währungszeichen oder Preis-Suffix gefolgt werden.
+    //    Ohne diese Einschränkung würden Maßangaben wie “2.5L”, “pH 7.0” fälschlich entfernt.
+    clean = clean.replace(/\d+(?:[\.,]\d+)?\s*(?:€|EUR|CHF|\$)/gi, '');
+    clean = clean.replace(/\d+[\.,]\d+\s*(?:netto|brutto|zzgl\.?\s*(?:mwst\.?)?|inkl\.?\s*(?:mwst\.?)?)/gi, '');
+    // 2. Alleinstehende Währungszeichen (Überbleibsel)
     clean = clean.replace(/[€$]/g, '');
-    // 3. Typische Labels entfernen
+    // 3. Typische Marketing-Labels (nur als ganzes Wort)
     clean = clean.replace(/\b(?:NEW|NEU|SALE|BESTSELLER|AKTION|TOP|DEAL)\b/gi, '');
     // 4. Überflüssige Leerzeichen & Anführungszeichen säubern
-    clean = clean.replace(/["'“”]+/g, ' ').replace(/\s+/g, ' ').trim();
-    
+    clean = clean.replace(/[“'””]+/g, ' ').replace(/\s+/g, ' ').trim();
+
     if (clean.length > 3) {
       resolvedTestProduct = clean;
     } else {
       resolvedTestProduct = finalDiscoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
     }
     logDojo("info", `🎯 Testprodukt dynamisch im Shop entdeckt und bereinigt: "${resolvedTestProduct}"`)
-    
-    logDojo("info", `Kehre zur Homepage zurück, um die Suche zu starten…`)
-    await page.goto("https://" + domain, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {})
-    await smartWaitForLoad(page)
   } else {
     logDojo("info", `Kein Testprodukt auf Homepage oder in Kategorien entdeckt, nutze Standard-Suchbegriff: "${resolvedTestProduct}"`)
   }
+
+  // Immer zur Homepage zurückkehren — der Kategorie-Tiefenscan hat die Seite verlassen.
+  // Ohne diesen Reset würde die Suche auf einer Kategorie-Seite statt auf der Homepage starten.
+  logDojo("info", `Kehre zur Homepage zurück, um die Suche zu starten…`)
+  await page.goto(`https://${domain}`, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {})
+  await smartWaitForLoad(page)
 
   logDojo("info", `Suche nach "${resolvedTestProduct}"...`)
   await page.fill(searchSelector, resolvedTestProduct)
@@ -1654,21 +1678,13 @@ async function executeStep(
         const isReadonly = await loc.evaluate(el => el.hasAttribute('readonly') || (el as any).readOnly).catch(() => false);
         if (isReadonly) {
           console.log(`[dry-run] Feld ${selectorStr} ist schreibgeschützt (readonly). Verwende JS-Fallback…`)
-          await loc.evaluate((el, val) => {
-            (el as HTMLInputElement).value = val;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          }, valueStr)
+          await loc.evaluate(reactSafeSetValue, valueStr)
         } else {
           try {
             await page.fill(selectorStr, valueStr, { timeout: t })
           } catch (err: any) {
             console.log(`[dry-run] Standard fill fehlgeschlagen, versuche JS-Fallback für ${selectorStr}:`, err.message)
-            await loc.evaluate((el, val) => {
-              (el as HTMLInputElement).value = val;
-              el.dispatchEvent(new Event('input', { bubbles: true }));
-              el.dispatchEvent(new Event('change', { bubbles: true }));
-            }, valueStr)
+            await loc.evaluate(reactSafeSetValue, valueStr)
           }
         }
       } catch (err) {
