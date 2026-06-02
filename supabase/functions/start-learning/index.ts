@@ -1098,7 +1098,7 @@ async function learnCartFlow(
     logDojo("info", `🎯 Testprodukt dynamisch im Shop entdeckt: "${resolvedTestProduct}"`)
     
     logDojo("info", `Kehre zur Homepage zurück, um die Suche zu starten…`)
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {})
+    await page.goto("https://" + domain, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {})
     await smartWaitForLoad(page)
   } else {
     logDojo("info", `Kein Testprodukt auf Homepage oder in Kategorien entdeckt, nutze Standard-Suchbegriff: "${resolvedTestProduct}"`)
