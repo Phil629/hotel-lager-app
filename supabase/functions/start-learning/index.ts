@@ -370,8 +370,10 @@ async function runLearningPipeline(
         }).eq("domain", domain)
 
         logDojo("info", "Triggere Dry-Run-Verifikation (Phase 3) in neuer serverloser Invocation...")
-        triggerDryRunInvocation(domain, testProduct).catch((e) =>
-          console.error("[learning] Fehler beim Triggern der Dry-Run Invocation:", e)
+        EdgeRuntime.waitUntil(
+          triggerDryRunInvocation(domain, testProduct).catch((e) =>
+            console.error("[learning] Fehler beim Triggern der Dry-Run Invocation:", e)
+          )
         )
 
         await setStatus("learning_cart")
@@ -1010,7 +1012,7 @@ async function learnCartFlow(
         path.includes("artnr=") || path.includes("artno=") ||
         path.includes("article_id=") || path.includes("articleid=");
 
-      const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info)/i.test(path);
+      const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path);
 
       if (isProductPattern && isNotNavigation) {
         const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
@@ -1033,7 +1035,7 @@ async function learnCartFlow(
         if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("tel:") || href.startsWith("mailto:")) continue;
         const path = href.toLowerCase();
         
-        const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info)/i.test(path);
+        const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path);
 
         // Erlaubnisliste statt Verbotsliste: schließt Asset-Dateien aus, erlaubt alles andere.
         // `!path.includes(".")` würde absolute URLs (https://domain.com/kat) fälschlich ausschließen.
@@ -1088,7 +1090,7 @@ async function learnCartFlow(
             path.includes("artnr=") || path.includes("artno=") ||
             path.includes("article_id=") || path.includes("articleid=");
 
-          const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info)/i.test(path);
+          const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path);
 
           if (isProductPattern && isNotNavigation) {
             const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
@@ -1185,7 +1187,7 @@ async function learnCartFlow(
         
         // Verhindert, dass wir aus Versehen eine Kategorie-Seite als Produkt-Detailseite interpretieren
         const path = href.toLowerCase();
-        if (path.includes("category") || path.includes("kategorie") || path.includes("search") || path.includes("suche")) continue;
+        if (/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path) || path.includes("sort=") || path.includes("page=") || path.includes("view=") || path.endsWith(".pdf")) continue;
         
         return href.startsWith("http") ? href : `https://${domainStr}${href}`;
       } catch { /* ungültiger Selektor */ }
@@ -1194,6 +1196,9 @@ async function learnCartFlow(
     // 2. Breitbandiger Fallback über alle Links der Seite natively im Browser (0 CDP Roundtrips) - Sliced auf 600 für max. Performance
     const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 600);
     for (const link of allLinks) {
+      if (link.closest("header, nav, footer, aside, #header, #footer, #nav, #navigation, .header, .footer, .nav, .navigation, .sidebar, #sidebar")) {
+        continue;
+      }
       const href = link.getAttribute("href");
       if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
       const path = href.toLowerCase();
@@ -1224,17 +1229,7 @@ async function learnCartFlow(
         /[a-f0-9]{32}/i.test(href);
 
       const isNotNavigation =
-        !path.includes("category") && !path.includes("kategorie") &&
-        !path.includes("search") && !path.includes("suche") &&
-        !path.includes("cart") && !path.includes("warenkorb") &&
-        !path.includes("checkout") && !path.includes("kasse") &&
-        !path.includes("account") && !path.includes("login") &&
-        !path.includes("impressum") && !path.includes("agb") &&
-        !path.includes("datenschutz") && !path.includes("contact") &&
-        !path.includes("kontakt") && !path.includes("about") &&
-        !path.includes("faq") && !path.includes("blog") &&
-        !path.includes("brand") && !path.includes("hersteller") &&
-        !path.includes("manufacturer") && !path.includes("filter") &&
+        !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path) &&
         !path.includes("sort=") && !path.includes("page=") &&
         !path.includes("view=") && !path.endsWith(".pdf");
         
@@ -1757,6 +1752,9 @@ async function executeDryRun(
       const foundDryProductUrl = await page.evaluate((domainStr) => {
         const allLinks = Array.from(document.querySelectorAll("a[href]"));
         for (const link of allLinks.slice(0, 600)) {
+          if (link.closest("header, nav, footer, aside, #header, #footer, #nav, #navigation, .header, .footer, .nav, .navigation, .sidebar, #sidebar")) {
+            continue;
+          }
           const href = link.getAttribute("href");
           if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
           const path = href.toLowerCase();
@@ -1776,17 +1774,7 @@ async function executeDryRun(
             /[a-f0-9]{32}/i.test(href);
 
           const isNotNavigation =
-            !path.includes("category") && !path.includes("kategorie") &&
-            !path.includes("search") && !path.includes("suche") &&
-            !path.includes("cart") && !path.includes("warenkorb") &&
-            !path.includes("checkout") && !path.includes("kasse") &&
-            !path.includes("account") && !path.includes("login") &&
-            !path.includes("impressum") && !path.includes("agb") &&
-            !path.includes("datenschutz") && !path.includes("contact") &&
-            !path.includes("kontakt") && !path.includes("about") &&
-            !path.includes("faq") && !path.includes("blog") &&
-            !path.includes("brand") && !path.includes("hersteller") &&
-            !path.includes("manufacturer") && !path.includes("filter") &&
+            !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path) &&
             !path.includes("sort=") && !path.includes("page=") &&
             !path.includes("view=") && !path.endsWith(".pdf");
             

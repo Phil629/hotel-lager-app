@@ -948,7 +948,42 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
       await patch('searching', `Öffne Produkt: ${item.product_name}...`, { items: updatedItems })
 
       try {
-        await executeSteps(supplierTabId, item_steps, itemCtx, patch, `Suche ${item.product_name}...`, payload)
+        const firstStep = item_steps[0]
+        let priceActual    = null
+        let priceDeltaPct  = null
+        let priceOk        = null
+
+        if (firstStep && firstStep.step === 'navigate') {
+          // Navigiere zum Produkt
+          await executeSteps(supplierTabId, [firstStep], itemCtx, patch, `Suche ${item.product_name}...`, payload)
+          
+          // Preise auslesen während wir auf der Produktseite sind
+          if (SEL.price) {
+            try {
+              const res = await domAction(supplierTabId, { command: 'GET_TEXT', selector: SEL.price, timeout: 6000 })
+              if (res.success && res.text) {
+                const m = res.text.replace(/\s/g, '').match(/\d{1,3}(?:[.,]\d{3})*[.,]\d{1,2}|\d+[.,]\d{1,2}/)
+                if (m) {
+                  priceActual = parseFloat(
+                    m[0].replace(/\.(\d{3})/g, '$1').replace(',', '.')
+                  )
+                }
+              }
+            } catch (_) {}
+          }
+
+          if (priceActual !== null && item.price_expected != null && item.price_expected > 0) {
+            priceDeltaPct = ((priceActual - item.price_expected) / item.price_expected) * 100
+            priceOk       = Math.abs(priceDeltaPct) <= THRESHOLD
+          }
+
+          // Restliche Schritte ausführen (Menge eintragen & in den Warenkorb)
+          const restSteps = item_steps.slice(1)
+          await executeSteps(supplierTabId, restSteps, itemCtx, patch, null, payload)
+        } else {
+          // Fallback: alle Schritte auf einmal
+          await executeSteps(supplierTabId, item_steps, itemCtx, patch, `Suche ${item.product_name}...`, payload)
+        }
 
         // Produkt-URL nach erfolgreichem Add-to-Cart in DB sichern
         if (item.product_id) {
@@ -970,7 +1005,13 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
           } catch (_) {}
         }
 
-        updatedItems[idx] = { ...item, status: 'ok' }
+        updatedItems[idx] = {
+          ...item,
+          price_actual:    priceActual,
+          price_delta_pct: priceDeltaPct !== null ? Math.round(priceDeltaPct * 100) / 100 : null,
+          price_ok:        priceOk,
+          status:          'ok'
+        }
       } catch (itemErr) {
         console.error(`[playbook] Artikel fehlgeschlagen: ${item.product_name}`, itemErr.message)
         updatedItems[idx] = { ...item, status: 'error' }
@@ -984,13 +1025,17 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
       await executeSteps(supplierTabId, checkout_steps, baseCtx, patch, 'Öffne Warenkorb...', payload)
     }
 
+    await patch('price_check', 'Preise werden abgeglichen...')
+
     await chrome.tabs.update(supplierTabId, { active: false })
     const finalTab  = await chrome.tabs.get(supplierTabId)
     const cartUrl   = finalTab.url ?? loginUrl
-    const hasWarning = updatedItems.some(i => i.status === 'error')
-    const maxDelta   = null
+    const hasError = updatedItems.some(i => i.status === 'error')
+    const hasWarning = updatedItems.some(i => i.price_ok === false)
+    const allDeltas  = updatedItems.map((i) => Math.abs(i.price_delta_pct ?? 0)).filter((d) => d > 0)
+    const maxDelta   = allDeltas.length > 0 ? Math.max(...allDeltas) : null
 
-    return { cartUrl, updatedItems, hasWarning, maxDelta }
+    return { cartUrl, updatedItems, hasWarning: hasWarning || hasError, maxDelta }
 
   } catch (err) {
     console.error('[playbook] Playbook-Ausführung fehlgeschlagen, Fallback auf Legacy-Pfad:', err.message)
