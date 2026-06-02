@@ -365,7 +365,10 @@ async function runLearningPipeline(
     logDojo("dry_run", "🧪 Dry-Run gestartet (Datacenter-Proxy, max. 30 Sek.)...")
     console.log(`[learning] ═══ Dry-Run Start: ${domain} ═══`)
 
-    const drySession = await createBrowserbaseSession(false)
+    // We use Residential Proxy (true) for the Dry-Run as well, because B2B portals 
+    // are highly protected and cheap Datacenter proxies will be instantly blocked by Cloudflare/WAFs, 
+    // leading to false-positive timeouts.
+    const drySession = await createBrowserbaseSession(true)
     currentSessionId = drySession.id
 
     logDojo("dry_run", `📡 Dry-Run Session — ID: ${drySession.id}`)
@@ -1264,22 +1267,14 @@ async function learnCartFlow(
         const isReadonly = await loc.evaluate(el => el.hasAttribute('readonly') || (el as any).readOnly).catch(() => false);
         if (isReadonly) {
           logDojo("info", `🔢 Mengenfeld ist schreibgeschützt (readonly). Verwende JS-Fallback…`)
-          await loc.evaluate((el, val) => {
-            (el as HTMLInputElement).value = val;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          }, "2")
+          await loc.evaluate(reactSafeSetValue, "2")
         } else {
           await loc.fill("2")
         }
         await page.waitForTimeout(300)
       } catch (e: any) {
         logDojo("warn", `Fehler beim Befüllen des Mengenfelds, versuche JS-Fallback: ${e.message}`)
-        await loc.evaluate((el, val) => {
-          (el as HTMLInputElement).value = val;
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-        }, "2").catch(() => {})
+        await loc.evaluate(reactSafeSetValue, "2").catch(() => {})
       }
     }
   }
