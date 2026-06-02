@@ -130,7 +130,24 @@ export default async function ({ page, context }) {
 
     await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 30000 })
 
-    if (SEL.login_username && SEL.login_password && username) {
+    const isAlreadyLoggedIn = await page.evaluate(() => {
+      const bodyText = document.body ? document.body.innerText.toLowerCase() : '';
+      const loggedInKeywords = [
+        'abmelden', 'ausloggen', 'abmeldung', 'logout', 'log out', 
+        'sign out', 'signout', 'deconnexion'
+      ];
+      const hasLoggedInKeyword = loggedInKeywords.some(kw => bodyText.includes(kw));
+      const hasPasswordInput = !!document.querySelector('input[type="password"]');
+      const hasLogoutLink = !!document.querySelector('a[href*="logout"], a[href*="abmelden"], a[href*="signout"]');
+      
+      return (!hasPasswordInput && hasLoggedInKeyword) || hasLogoutLink;
+    });
+
+    if (isAlreadyLoggedIn) {
+      console.log('[script] Sitzung bereits angemeldet (überspringe Login).')
+      await patchSession('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+      await page.waitForTimeout(1000)
+    } else if (SEL.login_username && SEL.login_password && username) {
       await withHeal(
         'login',
         (s, t) => page.fill(s, username, { timeout: t }),

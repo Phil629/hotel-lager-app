@@ -124,7 +124,12 @@ async function runAutomation(payload) {
 
     // ── Step 3: Login ───────────────────────────────────────────────────────
 
-    if (SEL.login_username && SEL.login_password && username) {
+    const loggedIn = await checkAlreadyLoggedIn(supplierTabId)
+    if (loggedIn) {
+      console.log('[sw] Already logged in. Skipping legacy login steps.')
+      await patch('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+      await sleep(1000)
+    } else if (SEL.login_username && SEL.login_password && username) {
       try {
         // Check if login field is visible
         const checkRes = await domAction(supplierTabId, { command: 'CHECK_EXISTS', selector: SEL.login_username, timeout: 2000 })
@@ -661,6 +666,30 @@ async function isAuthWall(tabId) {
   return passwordFieldExists.success && looksLikeLogin
 }
 
+async function checkAlreadyLoggedIn(tabId) {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const bodyText = document.body ? document.body.innerText.toLowerCase() : '';
+        const loggedInKeywords = [
+          'abmelden', 'ausloggen', 'abmeldung', 'logout', 'log out', 
+          'sign out', 'signout', 'deconnexion'
+        ];
+        const hasLoggedInKeyword = loggedInKeywords.some(kw => bodyText.includes(kw));
+        const hasPasswordInput = !!document.querySelector('input[type="password"]');
+        const hasLogoutLink = !!document.querySelector('a[href*="logout"], a[href*="abmelden"], a[href*="signout"]');
+        
+        return (!hasPasswordInput && hasLoggedInKeyword) || hasLogoutLink;
+      }
+    });
+    return !!result?.result;
+  } catch (err) {
+    console.warn('[sw] Error checking already logged in status:', err.message);
+    return false;
+  }
+}
+
 async function navigateAndReinject(tabId, url, timeout = 20_000) {
   await chrome.tabs.update(tabId, { url })
   await waitForTabLoad(tabId, timeout)
@@ -847,7 +876,12 @@ async function loadAndRunPlaybook(payload, supplierTabId, patch) {
 
   try {
     // Phase 1: Login
-    if (login_steps.length > 0) {
+    const loggedIn = await checkAlreadyLoggedIn(supplierTabId)
+    if (loggedIn) {
+      console.log('[playbook] Already logged in. Skipping playbook login steps.')
+      await patch('logging_in', 'Sitzung bereits angemeldet (überspringe Login)…')
+      await sleep(1000)
+    } else if (login_steps.length > 0) {
       await patch('logging_in', 'Melde an (Playbook)...')
       await executeSteps(supplierTabId, login_steps, baseCtx, patch, null)
       await sleep(500)
