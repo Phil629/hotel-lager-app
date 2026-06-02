@@ -1653,7 +1653,29 @@ async function executeStep(
       break
     case "fill":
       try {
-        await page.fill(ip(step.selector)!, ip(step.value), { timeout: t })
+        const selectorStr = ip(step.selector)!
+        const valueStr = ip(step.value)
+        const loc = page.locator(selectorStr).first()
+        const isReadonly = await loc.evaluate(el => el.hasAttribute('readonly') || (el as any).readOnly).catch(() => false);
+        if (isReadonly) {
+          console.log(`[dry-run] Feld ${selectorStr} ist schreibgeschützt (readonly). Verwende JS-Fallback…`)
+          await loc.evaluate((el, val) => {
+            (el as HTMLInputElement).value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }, valueStr)
+        } else {
+          try {
+            await page.fill(selectorStr, valueStr, { timeout: t })
+          } catch (err: any) {
+            console.log(`[dry-run] Standard fill fehlgeschlagen, versuche JS-Fallback für ${selectorStr}:`, err.message)
+            await loc.evaluate((el, val) => {
+              (el as HTMLInputElement).value = val;
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            }, valueStr)
+          }
+        }
       } catch (err) {
         if (step.optional) {
           console.log(`[dry-run] Optionaler Fill-Schritt fehlgeschlagen: ${step.selector}`)
