@@ -317,8 +317,9 @@ async function runLearningPipeline(
     logDojo("info", `🔴 Live-Browser: https://www.browserbase.com/sessions/${cartSession.id}`)
 
     const cartBrowser = await connectWithTimeout(cartSession.connectUrl)
-    let itemSteps:     PlaybookStep[] = []
-    let checkoutSteps: PlaybookStep[] = []
+    let itemSteps:      PlaybookStep[] = []
+    let checkoutSteps:  PlaybookStep[] = []
+    let testProductUrl: string | null = null
 
     try {
       const cartCtx  = cartBrowser.contexts()[0]
@@ -336,9 +337,10 @@ async function runLearningPipeline(
       const cookieStep2 = await dismissCookieBanner(cartPage, logDojo)
       if (cookieStep2) logDojo("info", "🍪 Cookie-Banner geschlossen (Phase 2).")
 
-      const result  = await learnCartFlow(cartPage, domain, testProduct, logDojo)
-      itemSteps     = result.item
-      checkoutSteps = result.checkout
+      const result   = await learnCartFlow(cartPage, domain, testProduct, logDojo)
+      itemSteps      = result.item
+      checkoutSteps  = result.checkout
+      testProductUrl = result.productUrl
       logDojo("success", `✅ Phase 2 abgeschlossen: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps.`)
       console.log(`[learning] Phase 2: ${itemSteps.length} item_steps, ${checkoutSteps.length} checkout_steps`)
     } finally {
@@ -384,7 +386,7 @@ async function runLearningPipeline(
       const dryPage = dryCtx.pages()[0] ?? await dryCtx.newPage()
 
       await Promise.race([
-        executeDryRun(dryPage, domain, candidatePlaybook, testProduct, logDojo),
+        executeDryRun(dryPage, domain, candidatePlaybook, testProduct, testProductUrl, logDojo),
         new Promise<never>((_, reject) =>
           setTimeout(
             () => reject(new Error(
@@ -862,7 +864,7 @@ async function learnCartFlow(
   domain:      string,
   testProduct: string,
   logDojo:     LogFn,
-): Promise<{ item: PlaybookStep[]; checkout: PlaybookStep[] }> {
+): Promise<{ item: PlaybookStep[]; checkout: PlaybookStep[]; productUrl: string | null }> {
   const itemSteps:     PlaybookStep[] = []
   const checkoutSteps: PlaybookStep[] = []
 
@@ -1279,17 +1281,18 @@ async function learnCartFlow(
     console.warn(`[learning] Weder Warenkorb noch Kassenseite erkannt: ${finalUrl}`)
   }
 
-  return { item: itemSteps, checkout: checkoutSteps }
+  return { item: itemSteps, checkout: checkoutSteps, productUrl: testProductUrl }
 }
 
 // ── Dry-Run: Playbook mechanisch abspielen ────────────────────────────────────
 
 async function executeDryRun(
-  page:        Page,
-  domain:      string,
-  playbook:    Playbook,
-  testProduct: string,
-  logDojo:     LogFn,
+  page:                 Page,
+  domain:               string,
+  playbook:             Playbook,
+  testProduct:          string,
+  testProductUrlPassed: string | null,
+  logDojo:              LogFn,
 ): Promise<void> {
   logDojo("dry_run", "🌐 Lade Homepage für Dry-Run...")
   await page.goto(`https://${domain}`, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS })
@@ -1297,61 +1300,65 @@ async function executeDryRun(
   await checkForCloudflare(page)
   await dismissCookieBanner(page, logDojo)
 
-  logDojo("dry_run", `Suche Test-Produkt-URL für "${testProduct}"...`)
-  let testProductUrl: string | null = null
-  const SEARCH_SELECTORS = [
-    'input[type="search"]', 'input[name="s"]', 'input[name="q"]',
-    'input[name="suche"]', 'input[name="search"]', 'input[name="keywords"]',
-  ]
-  for (const sel of SEARCH_SELECTORS) {
-    const loc = page.locator(sel).first()
-    if (!(await safeIsVisible(loc, 1500))) continue
-    await loc.fill(testProduct)
-    await page.keyboard.press("Enter")
-    await page.waitForLoadState("domcontentloaded", { timeout: 12_000 }).catch(() => {})
-    await smartWaitForLoad(page)
+  let testProductUrl = testProductUrlPassed
+  if (testProductUrl) {
+    logDojo("dry_run", `Nutze bereits gefundenes Produkt für Dry-Run: ${testProductUrl}`)
+  } else {
+    logDojo("dry_run", `Suche Test-Produkt-URL für "${testProduct}"...`)
+    const SEARCH_SELECTORS = [
+      'input[type="search"]', 'input[name="s"]', 'input[name="q"]',
+      'input[name="suche"]', 'input[name="search"]', 'input[name="keywords"]',
+    ]
+    for (const sel of SEARCH_SELECTORS) {
+      const loc = page.locator(sel).first()
+      if (!(await safeIsVisible(loc, 1500))) continue
+      await loc.fill(testProduct)
+      await page.keyboard.press("Enter")
+      await page.waitForLoadState("domcontentloaded", { timeout: 12_000 }).catch(() => {})
+      await smartWaitForLoad(page)
 
-    const foundDryProductUrl = await page.evaluate((domainStr) => {
-      const allLinks = Array.from(document.querySelectorAll("a[href]"));
-      for (const link of allLinks.slice(0, 600)) {
-        const href = link.getAttribute("href");
-        if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
-        const path = href.toLowerCase();
-        
-        const isProductPattern =
-          path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-          path.includes("/product/") || path.includes("/products/") || path.includes("/produkt/") || path.includes("/produkte/") ||
-          path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
-          /\/a-[a-z0-9]+/i.test(href) ||
-          /-\d+\.html$/i.test(href) ||
-          /[a-f0-9]{32}/i.test(href);
+      const foundDryProductUrl = await page.evaluate((domainStr) => {
+        const allLinks = Array.from(document.querySelectorAll("a[href]"));
+        for (const link of allLinks.slice(0, 600)) {
+          const href = link.getAttribute("href");
+          if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
+          const path = href.toLowerCase();
           
-        const isNotNavigation =
-          !path.includes("category") && !path.includes("kategorie") &&
-          !path.includes("search") && !path.includes("suche") &&
-          !path.includes("cart") && !path.includes("warenkorb") &&
-          !path.includes("checkout") && !path.includes("kasse") &&
-          !path.includes("account") && !path.includes("login") &&
-          !path.includes("impressum") && !path.includes("agb") &&
-          !path.includes("datenschutz") && !path.includes("contact") &&
-          !path.includes("kontakt") && !path.includes("about") &&
-          !path.includes("faq") && !path.includes("blog") &&
-          !path.includes("brand") && !path.includes("hersteller") &&
-          !path.includes("manufacturer") && !path.includes("filter") &&
-          !path.includes("sort=") && !path.includes("page=") &&
-          !path.includes("view=") && !path.endsWith(".pdf");
-          
-        if (isProductPattern && isNotNavigation) {
-          return href.startsWith("http") ? href : `https://${domainStr}${href}`;
+          const isProductPattern =
+            path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
+            path.includes("/product/") || path.includes("/products/") || path.includes("/produkt/") || path.includes("/produkte/") ||
+            path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
+            /\/a-[a-z0-9]+/i.test(href) ||
+            /-\d+\.html$/i.test(href) ||
+            /[a-f0-9]{32}/i.test(href);
+            
+          const isNotNavigation =
+            !path.includes("category") && !path.includes("kategorie") &&
+            !path.includes("search") && !path.includes("suche") &&
+            !path.includes("cart") && !path.includes("warenkorb") &&
+            !path.includes("checkout") && !path.includes("kasse") &&
+            !path.includes("account") && !path.includes("login") &&
+            !path.includes("impressum") && !path.includes("agb") &&
+            !path.includes("datenschutz") && !path.includes("contact") &&
+            !path.includes("kontakt") && !path.includes("about") &&
+            !path.includes("faq") && !path.includes("blog") &&
+            !path.includes("brand") && !path.includes("hersteller") &&
+            !path.includes("manufacturer") && !path.includes("filter") &&
+            !path.includes("sort=") && !path.includes("page=") &&
+            !path.includes("view=") && !path.endsWith(".pdf");
+            
+          if (isProductPattern && isNotNavigation) {
+            return href.startsWith("http") ? href : `https://${domainStr}${href}`;
+          }
         }
-      }
-      return null;
-    }, domain);
+        return null;
+      }, domain);
 
-    if (foundDryProductUrl) {
-      testProductUrl = foundDryProductUrl;
+      if (foundDryProductUrl) {
+        testProductUrl = foundDryProductUrl;
+      }
+      if (testProductUrl) break
     }
-    if (testProductUrl) break
   }
 
   if (!testProductUrl) {
