@@ -1080,6 +1080,13 @@ async function learnCartFlow(
 
   // ── 2f: "In den Warenkorb"-Button ────────────────────────────────────────
   const ADD_CART_SELECTORS = [
+    'form.add-cart-form button',
+    '.add-cart-form button',
+    'button.add-cart',
+    'button.btn-cart',
+    'button[class*="btn-cart" i]',
+    'button[class*="add-cart" i]',
+    'button[title*="Warenkorb" i]',
     'button[name="inInBasket"]',
     'input[name="inInBasket"]',
     'button[id*="add-to-cart" i]',
