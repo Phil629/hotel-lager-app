@@ -979,6 +979,8 @@ async function learnCartFlow(
       const isProductPattern =
         // Shopware 5: artikel-name-p-12345
         path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
+        // Universal SEO paths ending in .html (e.g. cent-online.de products)
+        path.endsWith(".html") ||
         // Generic paths
         path.includes("/product/") || path.includes("/products/") ||
         path.includes("/produkt/") || path.includes("/produkte/") ||
