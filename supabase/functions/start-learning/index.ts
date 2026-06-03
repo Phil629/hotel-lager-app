@@ -30,13 +30,47 @@ const CORS = {
 
 // ── Timeouts ──────────────────────────────────────────────────────────────────
 
-const GLOBAL_PIPELINE_TIMEOUT_MS = 140_000
+const GLOBAL_PIPELINE_TIMEOUT_MS = 350_000  // 350s — bewährt für schwere B2B-Shops
 const CDP_CONNECT_TIMEOUT_MS     =  15_000
-const PAGE_LOAD_MS               =  25_000  // Snappy B2B page load timeout
+const PAGE_LOAD_MS               =  30_000  // 30s — für schwere Hybris/Magento-Shops
 const NETWORK_SETTLE_MS          =   2_000  // Snappy DOM settle timeout
 const CLICK_MS                   =   5_000
 const FILL_MS                    =   4_000
-const DRY_RUN_TIMEOUT_MS         =  65_000
+const DRY_RUN_TIMEOUT_MS         =  90_000  // 90s — dry-run braucht volle Page-Loads
+
+// ── Shared URL Heuristics ──────────────────────────────────────────────────────
+
+/** Erkennt Produkt-URLs universell. Einzige Wahrheitsquelle im ganzen File. */
+function isProductUrl(href: string): boolean {
+  if (!href || href === '/' || href.startsWith('javascript:') || href.startsWith('#')) return false
+  const p = href.toLowerCase()
+  return (
+    // Shopware 5: /artikel-name-p-12345
+    p.includes("-p-") || p.includes("/p-") || p.includes("-p/") ||
+    // Generic: /product/, /produkt/, /artikel/, /item/, /detail/
+    /\/(product|produkt|artikel|item|detail|sku|items)\//.test(p) ||
+    // WooCommerce, Magento: /?product_id=, /products/slug
+    p.includes("/products/") ||
+    // SAP Hybris/Commerce: /name/p/ID oder /name/p/CODE-1234
+    /\/p\/[a-z0-9][a-z0-9_-]+/i.test(href) ||
+    // Hybris numeric: /name/12345/p
+    /\/\d{4,}\/p(?:[?&#/]|$)/i.test(href) ||
+    // OXID eShop
+    p.includes("cl=details") ||
+    // JTL Shop: artnr=, artno=
+    p.includes("artnr=") || p.includes("artno=") ||
+    // Gambio
+    p.includes("article_id=") || p.includes("articleid=") ||
+    // Shopware 5/JTL: slug-12345 oder slug-12345.html
+    /-\d+\.html$/i.test(href) || /-\d{4,}(?:\/|$)/.test(href) ||
+    // Magento: /a-category/a-product.html (mind. 2 Slashes + endet auf .html)
+    (p.endsWith(".html") && (p.match(/\//g) || []).length >= 2)
+  )
+}
+
+function isNavigationUrl(href: string): boolean {
+  return /(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(href)
+}
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
 
@@ -487,6 +521,14 @@ async function runLearningPipeline(
 
 /** Prepend www. to naked root domains to bypass proxy DNS issues and redirect cycles. */
 function getResilientStartUrl(domain: string): string {
+  // Shops that redirect to a subdomain or need a specific start path
+  const DOMAIN_START_OVERRIDES: Record<string, string> = {
+    'rajapack.de':                 'https://www.rajapack.de/',
+    'staples.de':                  'https://www.staples.de/',
+    'lusini.com':                  'https://www.lusini.com/',
+  }
+  if (DOMAIN_START_OVERRIDES[domain]) return DOMAIN_START_OVERRIDES[domain]
+
   const parts = domain.split(".");
   if (parts.length === 2 && !domain.startsWith("www.")) {
     return `https://www.${domain}`;
@@ -895,6 +937,86 @@ const reactSafeSetValue = (el: Element, val: string): void => {
   input.dispatchEvent(new Event('blur',   { bubbles: true, composed: true }))
 }
 
+
+async function discoverSearchInput(page: Page, logDojo: LogFn): Promise<string | null> {
+  const basicSelectors = [
+    'input[type="search"]', 'input[name="search"]', 'input[name="q"]', 'input[name="s"]',
+    'input[name="query"]', 'input[name="text"]', 'input[name="suche"]', 'input[name="keywords"]',
+    'input[placeholder*="suche" i]', 'input[placeholder*="search" i]',
+    'input[aria-label*="suche" i]', 'input[aria-label*="search" i]',
+    'input[id*="search" i]', '.search-input', '#search', '#searchInput'
+  ];
+  let selector = await page.evaluate((sels) => {
+    for (const s of sels) {
+      try {
+        const el = document.querySelector(s) as HTMLInputElement | null;
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0 && (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea')) return s;
+      } catch {}
+    }
+    return null;
+  }, basicSelectors);
+
+  if (selector) {
+    logDojo("info", `🔍 Direkt sichtbares Such-Input gefunden: ${selector}`);
+    return selector;
+  }
+
+  const toggleSelectors = [
+    '[data-action*="search" i]', '[aria-label*="search" i]', 'button[class*="search" i]', 'a[class*="search" i]', '[id*="search" i]',
+    'button[title*="suche" i]', 'a[href*="search" i]', '.aa-Input', 'input[class*="algolia"]', 'input[class*="amsearch"]'
+  ];
+  const toggleSelector = await page.evaluate((sels) => {
+    for (const s of sels) {
+      try {
+        const el = document.querySelector(s);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) return s;
+      } catch {}
+    }
+    return null;
+  }, toggleSelectors);
+
+  if (toggleSelector) {
+    logDojo("info", `🔍 Such-Toggle gefunden: ${toggleSelector} — klicke zum Öffnen`);
+    await page.click(toggleSelector, { timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+    
+    selector = await page.evaluate((sels) => {
+      for (const s of sels) {
+        try {
+          const el = document.querySelector(s) as HTMLInputElement | null;
+          if (!el) continue;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0 && (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea')) return s;
+        } catch {}
+      }
+      return null;
+    }, basicSelectors);
+
+    if (selector) {
+      logDojo("info", `✅ Echtes Input nach Toggle gefunden: ${selector}`);
+      return selector;
+    }
+  }
+
+  logDojo("info", `Kein Suchfeld über Toggle gefunden. Starte AI-Healing für Search...`);
+  const healed = await aiHealSelector(page, "search", "search input", logDojo);
+  if (healed) {
+    logDojo("success", `🤖 AI-Heal hat Suchfeld gefunden: ${healed}`);
+    return healed;
+  }
+  return null;
+}
+
 // ── Phase 2: Warenkorb-Flow lernen ────────────────────────────────────────────
 
 async function learnCartFlow(
@@ -906,58 +1028,15 @@ async function learnCartFlow(
   const itemSteps:     PlaybookStep[] = []
   const checkoutSteps: PlaybookStep[] = []
 
-  // ── 2a: Suchfeld finden ───────────────────────────────────────────────────
-  const SEARCH_SELECTORS = [
-    'input[type="search"]',
-    'input[name="search"]',
-    'input[name="s"]',
-    'input[name="q"]',
-    'input[name="query"]',
-    'input[name="suche"]',
-    'input[name="keywords"]',
-    'input[placeholder*="suche" i]',
-    'input[placeholder*="search" i]',
-    'input[aria-label*="suche" i]',
-    'input[aria-label*="search" i]',
-    "#search-query",
-    "#searchInput",
-    ".search-input",
-  ]
-
-  let searchSelector: string | null = null
-  const visibleSearchSelector = await page.evaluate((selectors) => {
-    for (const sel of selectors) {
-      try {
-        const el = document.querySelector(sel);
-        if (!el) continue;
-        const style = window.getComputedStyle(el);
-        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) continue;
-        return sel;
-      } catch { /* ungültiger Selektor */ }
-    }
-    return null;
-  }, SEARCH_SELECTORS)
-
-  if (visibleSearchSelector) {
-    const loc = page.locator(visibleSearchSelector).first()
-    const el = await loc.elementHandle()
-    if (el) {
-      searchSelector = await extractStableSelector(page, el) ?? visibleSearchSelector
-    }
-  }
+    // ── 2a: Suchfeld finden ───────────────────────────────────────────────────
+  let searchSelector = await discoverSearchInput(page, logDojo);
 
   if (!searchSelector) {
-    searchSelector = await aiHealSelector(page, "search", SEARCH_SELECTORS.join(", "), logDojo)
+    throw new Error(`Kein Suchfeld auf ${domain} gefunden — Cart-Flow kann nicht gelernt werden.`);
   }
 
-  if (!searchSelector) {
-    throw new Error(`Kein Suchfeld auf ${domain} gefunden — Cart-Flow kann nicht gelernt werden.`)
-  }
-
-  logDojo("info", `🔍 Suchfeld gefunden: ${searchSelector}`)
-  console.log(`[learning] Suchfeld: ${searchSelector}`)
+  logDojo("info", `🔍 Suchfeld gefunden: ${searchSelector}`);
+  console.log(`[learning] Suchfeld: ${searchSelector}`);
 
   // ── 2c: Produkt-Link in Suchergebnissen ───────────────────────────────────
   const PRODUCT_LINK_SELECTORS = [
@@ -981,67 +1060,52 @@ async function learnCartFlow(
   // ── 2b: Testprodukt suchen ────────────────────────────────────────────────
   let resolvedTestProduct = testProduct
   logDojo("info", `Starte automatische Testprodukt-Erkennung auf der Homepage…`)
-  const discoveredProductName = await page.evaluate(({ selectors, domainStr }) => {
-    // 1. Spezifische Produktselektoren
+  const potentialProducts = await page.evaluate(({ selectors }) => {
+    const results: { href: string | null; text: string | null; fromSelector: boolean }[] = [];
     for (const sel of selectors) {
       try {
         const el = document.querySelector(sel);
         if (!el) continue;
         const text = el.innerText || el.getAttribute("title");
-        if (text && text.trim().length > 3) return text.trim();
+        if (text && text.trim().length > 3) {
+           results.push({ href: null, text: text.trim(), fromSelector: true });
+        }
       } catch {}
     }
-    
-    // 2. Breitbandiger Scan über alle Links auf der Homepage
     const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 400);
     for (const link of allLinks) {
       const href = link.getAttribute("href");
       if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
-      const path = href.toLowerCase();
-      
-      const isProductPattern =
-        path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-        (path.endsWith(".html") && (/\d/.test(path.replace(/^https?:\/\/[^\/]+/, "")) || (path.replace(/^https?:\/\/[^\/]+/, "").match(/\//g) || []).length >= 2)) ||
-        path.includes("/product/") || path.includes("/products/") ||
-        path.includes("/produkt/") || path.includes("/produkte/") ||
-        path.includes("/artikel/") || path.includes("/item/") || path.includes("/detail/") ||
-        /\/a-[a-z0-9]+/i.test(href) ||
-        /-\d+\.html$/i.test(href) ||
-        /-\d{4,}(?:\/|$)/.test(href) ||
-        path.includes("cl=details") ||
-        path.includes("artnr=") || path.includes("artno=") ||
-        path.includes("article_id=") || path.includes("articleid=");
-
-      const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path);
-
-      if (isProductPattern && isNotNavigation) {
-        const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
-        if (text && text.trim().length > 3) return text.trim();
+      const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
+      if (text && text.trim().length > 3) {
+        results.push({ href, text: text.trim(), fromSelector: false });
       }
     }
+    return results;
+  }, { selectors: PRODUCT_LINK_SELECTORS });
+
+  const discoveredProductName = (() => {
+    for (const item of potentialProducts) {
+      if (item.fromSelector) return item.text;
+      if (item.href && isProductUrl(item.href) && !isNavigationUrl(item.href)) return item.text;
+    }
     return null;
-  }, { selectors: PRODUCT_LINK_SELECTORS, domainStr: domain })
+  })();
 
   let finalDiscoveredProductName = discoveredProductName
   if (!finalDiscoveredProductName) {
     logDojo("info", `Kein Produkt direkt auf der Homepage gefunden. Probiere Kategorie-Fallback…`)
     
     // 1. Finde Kategorie-Links auf der Homepage
-    const categoryUrls = await page.evaluate(() => {
+    const candidateCatLinks = await page.evaluate(() => {
       const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 400);
-      const urls = [];
+      const urls: string[] = [];
       for (const link of allLinks) {
         const href = link.getAttribute("href");
         if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("tel:") || href.startsWith("mailto:")) continue;
         const path = href.toLowerCase();
-        
-        const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path);
-
-        // Erlaubnisliste statt Verbotsliste: schließt Asset-Dateien aus, erlaubt alles andere.
-        // `!path.includes(".")` würde absolute URLs (https://domain.com/kat) fälschlich ausschließen.
         const isPage = !/\.(png|jpe?g|gif|svg|webp|ico|css|js|woff2?|ttf|pdf|zip|mp4|xml|json)(\?.*)?$/i.test(path);
-        
-        if (isNotNavigation && isPage) {
+        if (isPage) {
           try {
             const urlObj = new URL(href, window.location.origin);
             if (urlObj.origin === window.location.origin && !urls.includes(urlObj.href)) {
@@ -1053,6 +1117,8 @@ async function learnCartFlow(
       return urls;
     });
 
+    const categoryUrls = candidateCatLinks.filter(href => !isNavigationUrl(href));
+
     logDojo("info", `${categoryUrls.length} potenzielle Kategorie-Links auf der Homepage gefunden.`)
 
     // 2. Probiere die ersten 5 Kategorien aus, um ein Produkt zu finden
@@ -1061,50 +1127,48 @@ async function learnCartFlow(
       await page.goto(catUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {});
       await smartWaitForLoad(page);
       
-      const foundName = await page.evaluate(({ selectors }) => {
+      const potentialItems = await page.evaluate(({ selectors }) => {
+        const results: { href: string | null; text: string | null; fromSelector: boolean }[] = [];
         for (const sel of selectors) {
           try {
             const el = document.querySelector(sel);
             if (!el) continue;
             const text = el.innerText || el.getAttribute("title");
-            if (text && text.trim().length > 3) return text.trim();
+            if (text && text.trim().length > 3) results.push({ href: null, text: text.trim(), fromSelector: true });
           } catch {}
         }
-
         const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 400);
         for (const link of allLinks) {
           const href = link.getAttribute("href");
           if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
-          const path = href.toLowerCase();
-          
-          const isProductPattern =
-            path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-            path.endsWith(".html") ||
-            path.includes("/product/") || path.includes("/products/") ||
-            path.includes("/produkt/") || path.includes("/produkte/") ||
-            path.includes("/artikel/") || path.includes("/item/") || path.includes("/detail/") ||
-            /\/a-[a-z0-9]+/i.test(href) ||
-            /-\d+\.html$/i.test(href) ||
-            /-\d{4,}(?:\/|$)/.test(href) ||
-            path.includes("cl=details") ||
-            path.includes("artnr=") || path.includes("artno=") ||
-            path.includes("article_id=") || path.includes("articleid=");
+          const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
+          if (text && text.trim().length > 3) results.push({ href, text: text.trim(), fromSelector: false });
+        }
+        return results;
+      }, { selectors: PRODUCT_LINK_SELECTORS });
 
-          const isNotNavigation = !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path);
-
-          if (isProductPattern && isNotNavigation) {
-            const text = link.innerText || link.getAttribute("title") || link.querySelector("img")?.getAttribute("alt");
-            if (text && text.trim().length > 3) return text.trim();
-          }
+      const foundName = (() => {
+        for (const item of potentialItems) {
+          if (item.fromSelector) return item.text;
+          if (item.href && isProductUrl(item.href) && !isNavigationUrl(item.href)) return item.text;
         }
         return null;
-      }, { selectors: PRODUCT_LINK_SELECTORS });
+      })();
 
       if (foundName) {
         finalDiscoveredProductName = foundName;
         logDojo("info", `🎯 Testprodukt in Kategorie entdeckt: "${finalDiscoveredProductName}"`);
         break;
       }
+    }
+  }
+  // Blacklist: Suchfeld-Placeholder-Texte die kein Produktname sind
+  if (finalDiscoveredProductName) {
+    const rawClean = finalDiscoveredProductName.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim()
+    const PLACEHOLDER_BLACKLIST = /^(suchen|search|suche|finden|eingeben|artikel|produkt|produkt oder|nr\. finden|nr finden|suchbegriff|was suchen|looking for|find products|find a product)/i
+    if (PLACEHOLDER_BLACKLIST.test(rawClean) || rawClean.split(' ').length > 12) {
+      logDojo("info", `Entdeckter Text "${rawClean.substring(0,50)}" klingt nach Placeholder — nutze Standard: "${resolvedTestProduct}"`)
+      finalDiscoveredProductName = null
     }
   }
 
@@ -1137,7 +1201,43 @@ async function learnCartFlow(
     }
     logDojo("info", `🎯 Testprodukt dynamisch im Shop entdeckt und bereinigt: "${resolvedTestProduct}"`)
   } else {
-    logDojo("info", `Kein Testprodukt auf Homepage oder in Kategorien entdeckt, nutze Standard-Suchbegriff: "${resolvedTestProduct}"`)
+    logDojo("info", `Kein Testprodukt auf Homepage oder in Kategorien entdeckt. Frage KI nach einem generischen Suchbegriff...`)
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")
+    if (GEMINI_API_KEY) {
+      const textContent = await page.evaluate(() => document.body.innerText.substring(0, 15000)).catch(() => "")
+      if (textContent) {
+        try {
+          const geminiController = new AbortController()
+          const geminiTimeoutId = setTimeout(() => geminiController.abort(), 15000)
+          const geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: `Analysiere diesen Text einer B2B-Website und nenne EINEN einzigen, sehr generischen Suchbegriff (1-2 Worte, z.B. "Ordner", "Arbeitshandschuhe", "Kopierpapier", "Karton"), der mit hoher Wahrscheinlichkeit viele Standard-Produkte in diesem Shop liefert. Nenne keine Markennamen und keine Sale-Aktionsprodukte. Antworte NUR mit dem Suchbegriff, keine weiteren Worte.\n\nText: ${textContent}` }] }],
+                generationConfig: { temperature: 0.1 },
+              }),
+              signal: geminiController.signal,
+            }
+          ).finally(() => clearTimeout(geminiTimeoutId))
+          
+          if (geminiRes.ok) {
+             const geminiData = await geminiRes.json()
+             const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+             if (rawText && rawText.length > 2 && rawText.length < 30) {
+               resolvedTestProduct = rawText.replace(/['"]/g, '')
+               logDojo("success", `🤖 KI hat generischen Suchbegriff für diesen Shop gefunden: "${resolvedTestProduct}"`)
+             }
+          }
+        } catch (e) {
+          logDojo("warning", `KI Produkt-Vorschlag fehlgeschlagen: ${(e as Error).message}`)
+        }
+      }
+    }
+    if (!resolvedTestProduct || resolvedTestProduct === testProduct) {
+       logDojo("info", `Nutze finalen Fallback-Suchbegriff: "${resolvedTestProduct}"`)
+    }
   }
 
   // Zur Homepage zurückkehren, falls wir sie verlassen haben (z. B. durch Kategorie-Tiefenscan)
@@ -1154,18 +1254,20 @@ async function learnCartFlow(
   }
 
   logDojo("info", `Suche nach "${resolvedTestProduct}"...`)
+
+  
   try {
-    await page.fill(searchSelector, resolvedTestProduct, { timeout: 8000 })
-    await page.keyboard.press("Enter")
+    await page.fill(searchSelector, resolvedTestProduct, { timeout: 8000 });
+    await page.keyboard.press("Enter");
   } catch (err: any) {
-    logDojo("warning", `⚠️ Suche mit Selektor ${searchSelector} fehlgeschlagen: ${err.message}. Starte AI-Healing...`)
-    const healed = await aiHealSelector(page, "search", searchSelector, logDojo)
+    logDojo("warning", `⚠️ Suche mit Selektor ${searchSelector} fehlgeschlagen: ${err.message}. Starte AI-Healing...`);
+    const healed = await aiHealSelector(page, "search", searchSelector, logDojo);
     if (healed) {
-      searchSelector = healed
-      await page.fill(searchSelector, resolvedTestProduct, { timeout: 15000 })
-      await page.keyboard.press("Enter")
+      searchSelector = healed;
+      await page.fill(searchSelector, resolvedTestProduct, { timeout: 8000 });
+      await page.keyboard.press("Enter");
     } else {
-      throw err
+      throw err;
     }
   }
   await page.waitForTimeout(2500)
@@ -1174,8 +1276,8 @@ async function learnCartFlow(
   await checkForCloudflare(page)
 
   let testProductUrl: string | null = null
-  const visibleProductLink = await page.evaluate(({ selectors, domainStr }) => {
-    // 1. Spezifische Produktselektoren prüfen
+  const candidateLinks = await page.evaluate(({ selectors, domainStr }) => {
+    const results: { href: string; isSelector: boolean }[] = [];
     for (const sel of selectors) {
       try {
         const el = document.querySelector(sel);
@@ -1184,69 +1286,104 @@ async function learnCartFlow(
         if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
         const href = el.getAttribute("href");
         if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
-        
-        // Verhindert, dass wir aus Versehen eine Kategorie-Seite als Produkt-Detailseite interpretieren
-        const path = href.toLowerCase();
-        if (/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path) || path.includes("sort=") || path.includes("page=") || path.includes("view=") || path.endsWith(".pdf")) continue;
-        
-        return href.startsWith("http") ? href : `https://${domainStr}${href}`;
-      } catch { /* ungültiger Selektor */ }
+        results.push({ href: href.startsWith("http") ? href : `https://${domainStr}${href}`, isSelector: true });
+      } catch {}
     }
-    
-    // 2. Breitbandiger Fallback über alle Links der Seite natively im Browser (0 CDP Roundtrips) - Sliced auf 600 für max. Performance
     const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 600);
     for (const link of allLinks) {
-      if (link.closest("header, nav, footer, aside, #header, #footer, #nav, #navigation, .header, .footer, .nav, .navigation, .sidebar, #sidebar")) {
-        continue;
-      }
+      if (link.closest("header, nav, footer, aside, #header, #footer, #nav, #navigation, .header, .footer, .nav, .navigation, .sidebar, #sidebar")) continue;
       const href = link.getAttribute("href");
       if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
-      const path = href.toLowerCase();
-      
-      const isProductPattern =
-        // Shopware 5: artikel-name-p-12345
-        path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-        // Universal SEO paths ending in .html (e.g. cent-online.de products)
-        (path.endsWith(".html") && (/\d/.test(path.replace(/^https?:\/\/[^\/]+/, "")) || (path.replace(/^https?:\/\/[^\/]+/, "").match(/\//g) || []).length >= 2)) ||
-        // Generic paths
-        path.includes("/product/") || path.includes("/products/") ||
-        path.includes("/produkt/") || path.includes("/produkte/") ||
-        path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
-        path.includes("/detail/") ||
-        // Shopware 6: /a-UUID
-        /\/a-[a-z0-9]+/i.test(href) ||
-        // Magento / PrestaShop: slug-12345.html or -12345.html
-        /-\d+\.html$/i.test(href) ||
-        // Shopware 5 / JTL: slug-12345 (numeric ID suffix without .html)
-        /-\d{4,}(?:\/|$)/.test(href) ||
-        // OXID eShop
-        path.includes("cl=details") ||
-        // JTL Shop
-        path.includes("artnr=") || path.includes("artno=") ||
-        // Gambio
-        path.includes("article_id=") || path.includes("articleid=") ||
-        // UUID-based (some shops use MD5 or UUIDs as product IDs)
-        /[a-f0-9]{32}/i.test(href);
+      results.push({ href: href.startsWith("http") ? href : `https://${domainStr}${href}`, isSelector: false });
+    }
+    return results;
+  }, { selectors: PRODUCT_LINK_SELECTORS, domainStr: domain });
 
-      const isNotNavigation =
-        !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path) &&
-        !path.includes("sort=") && !path.includes("page=") &&
-        !path.includes("view=") && !path.endsWith(".pdf");
-        
-      if (isProductPattern && isNotNavigation) {
-        return href.startsWith("http") ? href : `https://${domainStr}${href}`;
+  const visibleProductLink = (() => {
+    for (const item of candidateLinks) {
+      if (item.isSelector) {
+        if (!isNavigationUrl(item.href)) return item.href;
+      } else {
+        if (isProductUrl(item.href) && !isNavigationUrl(item.href)) return item.href;
       }
     }
     return null;
-  }, { selectors: PRODUCT_LINK_SELECTORS, domainStr: domain })
+  })();
 
   if (visibleProductLink) {
     testProductUrl = visibleProductLink
   }
 
+  // ── Multi-Term Fallback: wenn Suche kein Produkt liefert, weitere Begriffe probieren ──
+  if (!testProductUrl) {
+    const FALLBACK_TERMS = ["Bürobedarf", "Schutzhandschuhe", "Karton", "Kugelschreiber", "Ordner", "Reinigung"]
+    logDojo("warning", `⚠️ Kein Produkt für "${resolvedTestProduct}" gefunden. Probiere Fallback-Suchbegriffe...`)
+
+    for (const fallbackTerm of FALLBACK_TERMS) {
+      logDojo("info", `🔄 Fallback-Suche: "${fallbackTerm}"`)
+      try {
+        // Zurück zur Homepage für saubere Suche
+        await page.goto(getResilientStartUrl(domain), { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS }).catch(() => {})
+        await smartWaitForLoad(page)
+        await dismissCookieBanner(page, logDojo)
+
+        // Suchfeld neu finden und füllen
+        const freshSelector = await page.evaluate((selectors: string[]) => {
+          for (const sel of selectors) {
+            try {
+              const el = document.querySelector(sel) as HTMLElement | null
+              if (!el) continue
+              const style = window.getComputedStyle(el)
+              if (style.display === "none" || style.visibility === "hidden") continue
+              const rect = el.getBoundingClientRect()
+              if (rect.width > 0 && rect.height > 0) return sel
+            } catch { /* skip */ }
+          }
+          return null
+        }, SEARCH_SELECTORS)
+
+        if (!freshSelector) continue
+
+        await page.fill(freshSelector, fallbackTerm, { timeout: 8000 }).catch(() => {})
+        await page.keyboard.press("Enter")
+        await page.waitForTimeout(2000)
+        await page.waitForLoadState("domcontentloaded", { timeout: 12_000 }).catch(() => {})
+        await smartWaitForLoad(page)
+
+        const candidateLinks2 = await page.evaluate(({ domainStr }) => {
+          const results: string[] = [];
+          const allLinks = Array.from(document.querySelectorAll("a[href]")).slice(0, 600);
+          for (const link of allLinks as HTMLAnchorElement[]) {
+            if (link.closest("header, nav, footer, aside")) continue;
+            const href = link.getAttribute("href");
+            if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
+            results.push(href.startsWith("http") ? href : `https://${domainStr}${href.startsWith("/") ? href : "/" + href}`);
+          }
+          return results;
+        }, { domainStr: domain });
+
+        const fallbackUrl = (() => {
+          for (const href of candidateLinks2) {
+            if (isProductUrl(href) && !isNavigationUrl(href)) return href;
+          }
+          return null;
+        })();
+
+        if (fallbackUrl) {
+          testProductUrl = fallbackUrl
+          resolvedTestProduct = fallbackTerm
+          logDojo("success", `✅ Fallback-Produkt gefunden mit "${fallbackTerm}": ${fallbackUrl}`)
+          break
+        }
+      } catch (e: any) {
+        logDojo("warning", `Fallback-Suche "${fallbackTerm}" fehlgeschlagen: ${e.message}`)
+      }
+    }
+  }
+
   if (!testProductUrl) {
     throw new Error(
-      `Keine Produkt-URL in Suchergebnissen für "${testProduct}" auf ${domain} gefunden.`
+      `Keine Produkt-URL gefunden für "${resolvedTestProduct}" oder Fallback-Begriffe auf ${domain}. Shop möglicherweise nicht kompatibel.`
     )
   }
 
@@ -1329,6 +1466,7 @@ async function learnCartFlow(
 
   // ── 2f: "In den Warenkorb"-Button ────────────────────────────────────────
   const ADD_CART_SELECTORS = [
+    // Shopware 5
     'form.add-cart-form button.add-cart',
     'form.add-cart-form button.btn-cart',
     '.add-cart-form button.add-cart',
@@ -1340,6 +1478,7 @@ async function learnCartFlow(
     'button[title*="Warenkorb" i]',
     'button[name="inInBasket"]',
     'input[name="inInBasket"]',
+    // Generic add-to-cart
     'button[id*="add-to-cart" i]',
     'button[id*="addtocart" i]',
     'button[id*="add_to_cart" i]',
@@ -1355,10 +1494,30 @@ async function learnCartFlow(
     'input[type="submit"][value*="cart" i]',
     'input[type="image"][src*="warenkorb" i]',
     "#product-addtocart-button",
+    // Universal form-submit fallback
     'form[action*="cart"] button[type="submit"]',
+    'form[action*="Cart"] button[type="submit"]',
     'form[action*="warenkorb"] button[type="submit"]',
+    'form[action*="AddToCart"] button[type="submit"]',
+    'form[action*="addToCart"] button[type="submit"]',
     '.add-to-cart button',
     '.addtocart button',
+    // SAP Hybris / Commerce (kaiserkraft.de, ratioform.de)
+    'button[data-request-type="AddToCartRequest"]',
+    '.js-add-to-cart',
+    '.btn--addtocart',
+    '[class*="addToCartButton"]',
+    'button[data-component*="AddToCart"]',
+    'button[class*="AddToCart"]',
+    // Jungheinrich Profishop
+    '.c-product-detail__add-to-cart button',
+    'button[data-gtm-id*="add_to_cart"]',
+    // Staples / modern B2B
+    '#addToCartButton',
+    '[data-testid*="add-to-cart"]',
+    '[data-testid*="addToCart"]',
+    'button[data-automation*="add-to-cart"]',
+    // Text-based last resort (evaluated below)
   ]
 
   let addCartSelector: string | null = null
@@ -1749,7 +1908,8 @@ async function executeDryRun(
       await page.waitForLoadState("domcontentloaded", { timeout: 12_000 }).catch(() => {})
       await smartWaitForLoad(page)
 
-      const foundDryProductUrl = await page.evaluate((domainStr) => {
+      const candidateLinks4 = await page.evaluate((domainStr) => {
+        const results: string[] = [];
         const allLinks = Array.from(document.querySelectorAll("a[href]"));
         for (const link of allLinks.slice(0, 600)) {
           if (link.closest("header, nav, footer, aside, #header, #footer, #nav, #navigation, .header, .footer, .nav, .navigation, .sidebar, #sidebar")) {
@@ -1757,33 +1917,17 @@ async function executeDryRun(
           }
           const href = link.getAttribute("href");
           if (!href || href === "/" || href.startsWith("#") || href.startsWith("javascript:")) continue;
-          const path = href.toLowerCase();
-          
-          const isProductPattern =
-            path.includes("-p-") || path.includes("/p-") || path.includes("-p/") ||
-            path.includes("/product/") || path.includes("/products/") ||
-            path.includes("/produkt/") || path.includes("/produkte/") ||
-            path.includes("/artikel/") || path.includes("/item/") || path.includes("/sku/") ||
-            path.includes("/detail/") ||
-            /\/a-[a-z0-9]+/i.test(href) ||
-            /-\d+\.html$/i.test(href) ||
-            /-\d{4,}(?:\/|$)/.test(href) ||
-            path.includes("cl=details") ||
-            path.includes("artnr=") || path.includes("artno=") ||
-            path.includes("article_id=") || path.includes("articleid=") ||
-            /[a-f0-9]{32}/i.test(href);
+          results.push(href.startsWith("http") ? href : `https://${domainStr}${href}`);
+        }
+        return results;
+      }, domain);
 
-          const isNotNavigation =
-            !/(category|kategorie|search|suche|cart|warenkorb|checkout|kasse|account|login|impressum|agb|terms|conditions|tos|datenschutz|privacy|cookie|contact|kontakt|about|unternehmen|ueber-uns|ueberuns|company|nachhaltigkeit|sustainability|karriere|career|jobs|stellen|faq|hilfe|help|service|support|presse|press|news|blog|magazin|widerruf|refund|refunds|versand|shipping|delivery|zahlungs|payment|payments|retoure|returns|return|rueckgab|sitemap|info|konto|bestellungen|orders|kundenbereich|customer|wishlist|merkzettel|newsletter|register|registrierung|logout|abmelden|filter|brand|manufacturer|hersteller)/i.test(path) &&
-            !path.includes("sort=") && !path.includes("page=") &&
-            !path.includes("view=") && !path.endsWith(".pdf");
-            
-          if (isProductPattern && isNotNavigation) {
-            return href.startsWith("http") ? href : `https://${domainStr}${href}`;
-          }
+      const foundDryProductUrl = (() => {
+        for (const href of candidateLinks4) {
+          if (isProductUrl(href) && !isNavigationUrl(href)) return href;
         }
         return null;
-      }, domain);
+      })();
 
       if (foundDryProductUrl) {
         testProductUrl = foundDryProductUrl;
@@ -2590,31 +2734,6 @@ async function stopBrowserbaseSession(sessionId: string): Promise<void> {
   }
 }
 
-async function triggerDryRunInvocation(domain: string, testProduct: string): Promise<void> {
-  const functionUrl = `${SUPABASE_URL}/functions/v1/start-learning`
-  console.log(`[learning] Triggere Dry-Run für ${domain} via: ${functionUrl}`)
-  
-  try {
-    await Promise.race([
-      fetch(functionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
-        },
-        body: JSON.stringify({
-          domain,
-          test_product: testProduct,
-          phase: "dry_run",
-        }),
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000))
-    ])
-    console.log(`[learning] Dry-Run Invocation erfolgreich getriggert für ${domain}`)
-  } catch (err) {
-    console.warn(`[learning] Dry-Run Trigger completed or timed out (expected for loopback async triggers):`, err.message)
-  }
-}
 
 // ── Response Helper ───────────────────────────────────────────────────────────
 
