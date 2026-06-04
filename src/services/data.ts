@@ -36,6 +36,8 @@ const toSupabaseSupplier = (s: Supplier) => {
         customer_number: s.customerNumber?.trim() || null,
         payment_method: s.paymentMethod?.trim() || null,
         default_category: s.defaultCategory?.trim() || null,
+        email_subject_template: s.emailSubjectTemplate?.trim() || null,
+        email_body_template: s.emailBodyTemplate?.trim() || null,
         selectors: s.selectors || {}
     };
     if (s.company_id !== undefined) payload.company_id = s.company_id;
