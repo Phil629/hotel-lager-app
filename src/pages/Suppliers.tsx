@@ -150,6 +150,8 @@ export const Suppliers: React.FC = () => {
                 url: formData.url,
                 notes: formData.notes || [],
                 documents: formData.documents || [],
+                emailSubjectTemplate: formData.emailSubjectTemplate,
+                emailBodyTemplate: formData.emailBodyTemplate,
                 loginUrl: formData.loginUrl,
                 loginUsername: formData.loginUsername,
                 loginPassword: formData.loginPassword,
