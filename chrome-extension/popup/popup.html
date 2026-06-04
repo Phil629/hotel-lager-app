@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>B2B Checkout Autopilot</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 300px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      color: #1e293b;
+      background: #f8fafc;
+    }
+
+    .header {
+      background: #1e40af;
+      color: #fff;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header h1 { font-size: 14px; font-weight: 700; line-height: 1.2; }
+    .header p  { font-size: 11px; opacity: 0.75; margin-top: 2px; }
+
+    .body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    .status-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #475569;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .dot-idle    { background: #94a3b8; }
+    .dot-active  { background: #f59e0b; animation: pulse 1.2s infinite; }
+    .dot-ready   { background: #22c55e; }
+    .dot-error   { background: #ef4444; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    .label      { font-weight: 600; color: #0f172a; margin-bottom: 6px; font-size: 12px; }
+    .message    { color: #475569; font-size: 12px; line-height: 1.5; }
+    .supplier   { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+
+    .btn {
+      width: 100%;
+      padding: 9px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn:hover   { opacity: .85; }
+    .btn-primary { background: #1e40af; color: #fff; }
+    .btn-danger  { background: #fee2e2; color: #b91c1c; }
+    .btn-warning { background: #fef3c7; color: #92400e; }
+
+    /* Feedback Modal */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .modal-box {
+      background: #fff;
+      border-radius: 10px;
+      width: 272px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      overflow: hidden;
+    }
+    .modal-title {
+      padding: 14px 16px 10px;
+      font-size: 13px; font-weight: 700; color: #0f172a;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .modal-body  { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+    .modal-footer { padding: 10px 16px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid #e2e8f0; }
+
+    .radio-option {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 8px 10px; border-radius: 6px; cursor: pointer;
+      border: 1px solid #e2e8f0; transition: background .1s;
+    }
+    .radio-option:hover           { background: #f1f5f9; }
+    .radio-option input[type=radio] { margin-top: 2px; flex-shrink: 0; accent-color: #1e40af; }
+    .radio-option .option-label   { font-size: 12px; font-weight: 600; color: #0f172a; }
+    .radio-option .option-desc    { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+    .feedback-result {
+      padding: 12px 16px 14px;
+      font-size: 12px; text-align: center; color: #16a34a; font-weight: 600;
+    }
+
+    .footer {
+      padding: 10px 16px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 11px;
+      color: #94a3b8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>B2B Checkout Autopilot</h1>
+      <p>Hotel Inventory Extension</p>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="status-card" id="statusCard">
+      <div class="status-row">
+        <div class="status-dot dot-idle" id="statusDot"></div>
+        <span id="statusLabel">Bereit</span>
+      </div>
+      <div class="message" id="statusMessage" style="margin-top: 8px; display:none;"></div>
+      <div class="supplier" id="supplierInfo" style="display:none;"></div>
+    </div>
+
+    <button class="btn btn-primary" id="btnOpenTab" style="display:none;">
+      Tab öffnen →
+    </button>
+    <button class="btn btn-warning" id="btnReport" style="display:none;">
+      Bestellung fehlgeschlagen?
+    </button>
+    <button class="btn btn-danger" id="btnCancel" style="display:none;">
+      Automatisierung abbrechen
+    </button>
+  </div>
+
+  <!-- Feedback Modal (hidden by default) -->
+  <div class="modal-overlay" id="feedbackModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title">Was ist passiert?</div>
+      <div class="modal-body" id="feedbackBody">
+        <label class="radio-option">
+          <input type="radio" name="feedbackReason" value="automation_error" checked>
+          <div>
+            <div class="option-label">Automation hatte einen Fehler</div>
+            <div class="option-desc">Ein Klick ging ins Leere oder die Seite wurde nicht erkannt.</div>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="feedbackReason" value="stock_issue">
+          <div>
+            <div class="option-label">Produkt war vergriffen / nicht lieferbar</div>
+            <div class="option-desc">Kein technisches Problem — nur vorübergehend nicht verfügbar.</div>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="feedbackReason" value="support_needed">
+          <div>
+            <div class="option-label">Sonstiges — Support benötigt</div>
+            <div class="option-desc">Ein Support-Ticket wird erstellt.</div>
+          </div>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="btnFeedbackCancel" style="width:auto; padding: 7px 14px;">Abbrechen</button>
+        <button class="btn btn-primary" id="btnFeedbackConfirm" style="width:auto; padding: 7px 14px;">Senden</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Nur für autorisierte Nutzer
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Hotel Inventory – B2B Checkout Autopilot",
+  "short_name": "Checkout Autopilot",
+  "version": "1.0.0",
+  "description": "Automatisches Befüllen von B2B-Warenkörben direkt im Browser.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.netlify.app/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1:*/*"
+      ],
+      "js": ["content-scripts/webapp-bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "B2B Checkout Autopilot"
+  }
+}

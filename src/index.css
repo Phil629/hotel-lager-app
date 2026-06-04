@@ -21,3 +21,68 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+/* ── Row Exit Animation System ─────────────────────────────────────────────── */
+
+/*
+ * Phase 1 — "row-pending": 700ms debounce window.
+ * Signals "this row qualifies for removal" without removing it yet.
+ * If the user reverts the stock value, the class is removed and nothing happens.
+ */
+.row-pending {
+  background-color: #f0fdf4 !important;
+  transition: background-color 0.2s ease !important;
+}
+.products-table tbody tr.row-pending td:first-child {
+  box-shadow: inset 4px 0 0 0 #22c55e !important;
+  transition: box-shadow 0.2s ease !important;
+}
+
+/*
+ * Phase 2a — "row-exiting" on a <tr>:
+ * - Content fades + slides right over 700ms.
+ * - visibility: collapse at the end removes the row from table layout.
+ * - td padding is collapsed in parallel via CSS transition-delay so the
+ *   space shrinks as the content disappears (no jarring layout snap).
+ */
+@keyframes rowExitTr {
+  0%   { opacity: 1; transform: translateX(0);    background-color: #dcfce7; visibility: visible; }
+  25%  { opacity: 1; transform: translateX(0);    background-color: #dcfce7; visibility: visible; }
+  78%  { opacity: 0; transform: translateX(48px); background-color: #dcfce7; visibility: visible; }
+  100% { opacity: 0; transform: translateX(48px); background-color: transparent; visibility: collapse; }
+}
+
+.products-table tbody tr.row-exiting {
+  animation: rowExitTr 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+/* Collapse the vertical space by animating td padding with a delay.
+   The transition starts at 45% of the 700ms animation (≈315ms),
+   at the point where the content is already fading. */
+.products-table tbody tr.row-exiting td {
+  border-color: transparent !important;
+  transition:
+    padding-top    0.28s ease 0.32s,
+    padding-bottom 0.28s ease 0.32s;
+  padding-top:    0 !important;
+  padding-bottom: 0 !important;
+}
+
+/*
+ * Phase 2b — "row-exiting" on a flex <div> (Mobile cards):
+ * Full collapse: opacity + slide + max-height + padding animate together.
+ * overflow: hidden is required for max-height to clip the card.
+ */
+@keyframes rowExitDiv {
+  0%   { opacity: 1; transform: translateX(0);    max-height: 600px; padding: 24px; margin-bottom: 16px; background-color: #dcfce7; }
+  22%  { opacity: 1; transform: translateX(0);    max-height: 600px; padding: 24px; margin-bottom: 16px; background-color: #dcfce7; }
+  70%  { opacity: 0; transform: translateX(48px); max-height: 600px; padding: 24px; margin-bottom: 16px; background-color: #dcfce7; }
+  100% { opacity: 0; transform: translateX(48px); max-height: 0;     padding: 0;    margin-bottom: 0;    background-color: transparent; }
+}
+
+div.row-exiting {
+  animation: rowExitDiv 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+  overflow: hidden;
+}

@@ -4,12 +4,13 @@ import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
-import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Settings, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap } from 'lucide-react';
+import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database } from 'lucide-react';
 import { usePermissions } from '../hooks/usePermissions';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
+import { CheckoutButton } from '../components/CheckoutButton';
 import QRCode from "react-qr-code";
 import { useSearchParams } from 'react-router-dom';
 
@@ -109,13 +110,25 @@ export const Products: React.FC = () => {
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
-    const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
-    const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>({});
+    const [selectedCategory, setSelectedCategory] = useState("all");
+    const [groupBy, setGroupBy] = useState<'supplier' | 'category'>('supplier');
+    const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>(() => {
+        try {
+            const saved = localStorage.getItem('products_expandedSuppliers');
+            if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return {};
+    });
     const [expandedProductsLimit, setExpandedProductsLimit] = useState<Record<string, boolean>>({});
-    // O5: war `prev[id] === false ? true : false` — undefined !== false führte zu falschem Init-Wert
-    const toggleSupplier = (id: string) => setExpandedSuppliers(prev => ({ ...prev, [id]: !prev[id] }));
+    
+    const toggleSupplier = (id: string) => setExpandedSuppliers(prev => {
+        const isCurrentlyExpanded = prev[id] !== false; // default is true
+        const next = { ...prev, [id]: !isCurrentlyExpanded };
+        localStorage.setItem('products_expandedSuppliers', JSON.stringify(next));
+        return next;
+    });
     const toggleProductLimit = (id: string) => setExpandedProductsLimit(prev => ({...prev, [id]: !prev[id]}));
 
 
@@ -124,6 +137,10 @@ export const Products: React.FC = () => {
     const [isStockUpdateModalOpen, setIsStockUpdateModalOpen] = useState(false);
     const [stockUpdateProduct, setStockUpdateProduct] = useState<Product | null>(null);
     const [stockUpdateValue, setStockUpdateValue] = useState<number>(0);
+
+    const [pendingIds, setPendingIds]   = useState<ReadonlySet<string>>(new Set());
+    const [exitingIds, setExitingIds]   = useState<ReadonlySet<string>>(new Set());
+    const exitTimers = useRef<Record<string, { phase1?: ReturnType<typeof setTimeout>; phase2?: ReturnType<typeof setTimeout> }>>({});
 
     const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'stock' | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
     const [searchParams] = useSearchParams();
@@ -155,6 +172,10 @@ export const Products: React.FC = () => {
         return () => {
             window.removeEventListener('resize', handleResize);
             if (rtDebounce.current) clearTimeout(rtDebounce.current);
+            Object.values(exitTimers.current).forEach(t => {
+                if (t.phase1) clearTimeout(t.phase1);
+                if (t.phase2) clearTimeout(t.phase2);
+            });
             if (channel && supabaseClient) {
                 supabaseClient.removeChannel(channel);
             }
@@ -290,6 +311,34 @@ export const Products: React.FC = () => {
             // deduct for the time between the last deduction and this manual correction.
             lastConsumptionDate: product.consumptionAmount ? new Date().toISOString() : product.lastConsumptionDate,
         };
+
+        const isNowLowStock = Number(updatedProduct.minStock) > 0 && newStock <= Number(updatedProduct.minStock);
+        
+        if (showLowStockOnly) {
+            if (!isNowLowStock) {
+                if (!pendingIds.has(product.id) && !exitingIds.has(product.id)) {
+                    setPendingIds(prev => new Set([...prev, product.id]));
+                    const phase1 = setTimeout(() => {
+                        setPendingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+                        setExitingIds(prev => new Set([...prev, product.id]));
+                        const phase2 = setTimeout(() => {
+                            setExitingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+                            delete exitTimers.current[product.id];
+                        }, 750);
+                        exitTimers.current[product.id] = { ...exitTimers.current[product.id], phase2 };
+                    }, 2500);
+                    exitTimers.current[product.id] = { phase1 };
+                }
+            } else {
+                const timers = exitTimers.current[product.id];
+                if (timers?.phase1) clearTimeout(timers.phase1);
+                if (timers?.phase2) clearTimeout(timers.phase2);
+                delete exitTimers.current[product.id];
+                setPendingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+                setExitingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+            }
+        }
+
         setProducts(products.map(p => p.id === product.id ? updatedProduct : p));
         await DataService.updateProduct(updatedProduct);
     };
@@ -409,21 +458,27 @@ export const Products: React.FC = () => {
         const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
         
         let subject = supplier?.emailSubjectTemplate || mainProduct.emailOrderSubject || `Bestellung: {product_name}`;
-        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nEinkauf`;
+        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie:\n{PRODUKTE}\n\nMit freundlichen Grüßen\nEinkauf`;
 
-        if (cart.length === 1) {
-            const listBodyInfo = `- ${cart[0].quantity}x ${mainProduct.name} ${mainProduct.unit ? `(${mainProduct.unit})` : ''}`;
-            subject = subject.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
-            body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
-            body = body.replace(/{PRODUKTE}|{produkte}/gi, listBodyInfo);
+        const listSubjectInfo = cart.length === 1 ? mainProduct.name : `${cart.length} Produkte`;
+        subject = subject.replace(/{product_name}/g, listSubjectInfo);
+        
+        const listBodyInfo = cart.map(c => `- ${c.quantity}x ${c.product.name} ${c.product.unit ? `(${c.product.unit})` : ''}`.trim()).join('\n');
+        
+        if (body.includes('{PRODUKTE}')) {
+            body = body.replace(/{PRODUKTE}/g, listBodyInfo);
+        } else if (body.includes('{product_name}')) {
+            // Fallback for old templates
+            if (cart.length === 1) {
+                body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
+            } else {
+                body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, '\n' + listBodyInfo);
+            }
         } else {
-            const listSubjectInfo = cart.length + " Produkte";
-            const listBodyInfo = '\n' + cart.map(c => `- ${c.quantity}x ${c.product.name} ${c.product.unit ? `(${c.product.unit})` : ''}`).join('\n');
-            
-            subject = subject.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listSubjectInfo);
-            body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listBodyInfo);
-            body = body.replace(/{PRODUKTE}|{produkte}/gi, listBodyInfo);
+            // Append if no placeholder found
+            body = body + `\n\n${listBodyInfo}`;
         }
+        
         return { subject, body };
     };
 
@@ -597,9 +652,11 @@ export const Products: React.FC = () => {
     };
 
     const filteredProducts = useMemo(() => products.filter(p => {
+        if (pendingIds.has(p.id) || exitingIds.has(p.id)) return true;
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesLowStock = showLowStockOnly ? (Number(p.minStock) > 0 && Number(p.stock) <= Number(p.minStock)) : true;
-        return matchesSearch && matchesLowStock;
+        const matchesCategory = selectedCategory === 'all' ? true : (p.category || 'Ohne Kategorie') === selectedCategory;
+        return matchesSearch && matchesLowStock && matchesCategory;
     }).sort((a, b) => {
         if (!sortConfig.key) return 0;
 
@@ -616,7 +673,7 @@ export const Products: React.FC = () => {
         }
 
         return 0;
-    }), [products, searchTerm, showLowStockOnly, sortConfig]);
+    }), [products, searchTerm, showLowStockOnly, selectedCategory, sortConfig, pendingIds, exitingIds]);
 
     const totalValue = useMemo(
         () => products.reduce((sum, p) => sum + (p.stock * (p.price || 0)), 0),
@@ -706,7 +763,7 @@ export const Products: React.FC = () => {
 
             {/* Search & Filters */}
             <div style={{ display: 'flex', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', flex: '1 1 300px' }}>
+                <div style={{ position: 'relative', flex: '1 1 200px' }}>
                     <Search size={22} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input
                         type="text"
@@ -728,10 +785,28 @@ export const Products: React.FC = () => {
                         onBlur={e => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = '0 1px 2px 0 rgb(0 0 0 / 0.05)'; }}
                     />
                 </div>
+                <select 
+                    value={selectedCategory} 
+                    onChange={e => setSelectedCategory(e.target.value)}
+                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '52px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', outline: 'none' }}
+                >
+                    <option value="all">Alle Kategorien</option>
+                    {Array.from(new Set(products.map(p => p.category || 'Ohne Kategorie'))).sort().map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                </select>
+                <select
+                    value={groupBy}
+                    onChange={e => setGroupBy(e.target.value as 'supplier' | 'category')}
+                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '52px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', outline: 'none' }}
+                >
+                    <option value="supplier">Gruppieren: Lieferant</option>
+                    <option value="category">Gruppieren: Kategorie</option>
+                </select>
                 <button
                     onClick={() => setShowLowStockOnly(!showLowStockOnly)}
                     className={showLowStockOnly ? 'btn btn-danger' : 'btn btn-ghost'}
-                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '100%', minHeight: '46px' }}
+                    style={{ borderRadius: 'var(--radius-full)', padding: '0 20px', height: '52px', minHeight: '52px' }}
                 >
                     <AlertTriangle size={16} />
                     {showLowStockOnly ? 'Filter aufheben' : 'Kritischer Bestand'}
@@ -759,27 +834,38 @@ export const Products: React.FC = () => {
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        {Array.from(new Set(filteredProducts.map(p => p.supplierId || 'unsorted'))).map(supplierId => {
-                            const supProds = filteredProducts.filter(p => (p.supplierId || 'unsorted') === supplierId);
-                            const isUnsorted = supplierId === 'unsorted';
-                            const supplier = isUnsorted ? undefined : suppliers.find(s => s.id === supplierId);
-                            const supplierName = supplier?.name || "Ohne Lieferant (Unkategorisiert)";
+                        {Array.from(new Set(filteredProducts.map(p => groupBy === 'supplier' ? (p.supplierId || 'unsorted') : (p.category || 'Ohne Kategorie')))).sort((a, b) => {
+                            if (groupBy === 'supplier') {
+                                const nameA = a === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === a)?.name || 'ZZZ_Unkategorisiert');
+                                const nameB = b === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === b)?.name || 'ZZZ_Unkategorisiert');
+                                return nameA.localeCompare(nameB);
+                            } else {
+                                const nameA = a === 'Ohne Kategorie' ? 'ZZZ_Ohne Kategorie' : a;
+                                const nameB = b === 'Ohne Kategorie' ? 'ZZZ_Ohne Kategorie' : b;
+                                return nameA.localeCompare(nameB);
+                            }
+                        }).map(groupKey => {
+                            const groupProds = filteredProducts.filter(p => groupBy === 'supplier' ? (p.supplierId || 'unsorted') === groupKey : (p.category || 'Ohne Kategorie') === groupKey);
+                            const groupName = groupBy === 'supplier' 
+                                ? (groupKey === 'unsorted' ? 'Ohne Lieferant (Unkategorisiert)' : (suppliers.find(s => s.id === groupKey)?.name || "Ohne Lieferant (Unkategorisiert)"))
+                                : groupKey;
                             
-                            const isExpanded = expandedSuppliers[supplierId] !== false; // default true
-                            const showAll = expandedProductsLimit[supplierId] === true || showLowStockOnly || searchTerm.trim() !== ""; // auto-expand if filtering
-                            const visibleProds = showAll ? supProds : supProds.slice(0, 5);
-                            const hasMore = supProds.length > 5;
+                            const isExpanded = expandedSuppliers[groupKey] !== false; // default true
+                            const showAll = expandedProductsLimit[groupKey] === true || showLowStockOnly || searchTerm.trim() !== "" || selectedCategory !== 'all'; // auto-expand if filtering
+                            const visibleProds = showAll ? groupProds : groupProds.slice(0, 5);
+                            const hasMore = groupProds.length > 5;
+                            const GroupIcon = groupBy === 'supplier' ? Building2 : Database;
 
                             return (
-                                <div key={supplierId} style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border)' }}>
+                                <div key={groupKey} style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border)' }}>
                                     <div 
-                                        onClick={() => toggleSupplier(supplierId)}
+                                        onClick={() => toggleSupplier(groupKey)}
                                         style={{ padding: '16px 24px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTopLeftRadius: 'calc(var(--radius-xl) - 1px)', borderTopRightRadius: 'calc(var(--radius-xl) - 1px)' }}
                                     >
                                         <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700 }}>
-                                            <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><Building2 size={18} /></div>
-                                            {supplierName}
-                                            <span className="badge badge-neutral">{supProds.length} Produkte</span>
+                                            <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><GroupIcon size={18} /></div>
+                                            {groupName}
+                                            <span className="badge badge-neutral">{groupProds.length} Produkte</span>
                                         </h2>
                                         <button style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer' }}>
                                             <ChevronDown style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', color: '#64748b' }} />
@@ -791,7 +877,7 @@ export const Products: React.FC = () => {
                                             {isMobile ? (
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', padding: '16px', backgroundColor: 'var(--color-background)' }}>
                                                     {visibleProds.map(product => (
-                                                        <div key={product.id} style={{
+                                                        <div key={product.id} className={`${exitingIds.has(product.id) ? 'row-exiting' : ''} ${pendingIds.has(product.id) ? 'row-pending' : ''}`} style={{
                                                             backgroundColor: 'var(--color-surface-elevated)',
                                                             borderRadius: 'var(--radius-xl)',
                                                             padding: 'var(--spacing-lg)',
@@ -912,12 +998,11 @@ export const Products: React.FC = () => {
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {visibleProds.map((product, index) => {
-                                                            const isLastRows = index >= visibleProds.length - 2 && visibleProds.length > 3;
+                                                        {visibleProds.map((product) => {
                                                             const openOrder = orders.find(o => o.productName === product.name && o.status === 'open');
                                                             const isLowStock = Number(product.minStock) > 0 && Number(product.stock) <= Number(product.minStock);
                                                             return (
-                                                                <tr key={product.id} className={isLowStock && !openOrder ? 'row-low-stock' : ''}>
+                                                                <tr key={product.id} className={`${isLowStock && !openOrder ? 'row-low-stock' : ''} ${exitingIds.has(product.id) ? 'row-exiting' : ''} ${pendingIds.has(product.id) ? 'row-pending' : ''}`}>
                                                                     <td>
                                                                         {product.image ? (
                                                                             <img src={product.image} alt={product.name} style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
@@ -1001,20 +1086,12 @@ export const Products: React.FC = () => {
                                                                             <ShoppingCart size={15} /> Bestellen
                                                                         </button>
                                                                     </td>
-                                                                    <td style={{ textAlign: 'right', position: 'relative' }}>
-                                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                                                                            <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} className="btn btn-ghost btn-icon"><Edit2 size={15} /></button>
-                                                                            <button onClick={() => setOpenSettingsId(openSettingsId === product.id ? null : product.id)} className="btn btn-ghost btn-icon"><Settings size={15} /></button>
+                                                                    <td style={{ textAlign: 'right' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                                                                            <button onClick={() => { const links = getIoTLink(product); if (links) { setShowIoTLink(links); } }} className="btn btn-ghost btn-icon" title="IoT Setup / QR"><Wifi size={15} /></button>
+                                                                            <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} className="btn btn-ghost btn-icon" title="Bearbeiten"><Edit2 size={15} /></button>
+                                                                            <button onClick={() => handleDeleteClick(product.id)} className="btn btn-ghost btn-icon" style={{ color: '#ef4444' }} title="Löschen"><Trash2 size={15} /></button>
                                                                         </div>
-                                                                        {openSettingsId === product.id && (
-                                                                            <>
-                                                                                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }} onClick={() => setOpenSettingsId(null)} />
-                                                                                <div style={{ position: 'absolute', right: '16px', ...(isLastRows ? { bottom: '100%', marginBottom: '8px' } : { top: '100%', marginTop: '8px' }), backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--color-border)', zIndex: 20, minWidth: '180px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                                                                                    <button onClick={() => { const links = getIoTLink(product); if (links) { setShowIoTLink(links); setOpenSettingsId(null); } }} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', borderBottom: '1px solid var(--color-border)', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'var(--color-text-main)', fontSize: '14px', fontWeight: 500 }}><Wifi size={16} /> IoT Setup / QR</button>
-                                                                                    <button onClick={() => handleDeleteClick(product.id)} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', border: 'none', backgroundColor: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#ef4444', fontSize: '14px', fontWeight: 500 }}><Trash2 size={16} /> Produkt löschen</button>
-                                                                                </div>
-                                                                            </>
-                                                                        )}
                                                                     </td>
                                                                 </tr>
                                                             );
@@ -1026,11 +1103,11 @@ export const Products: React.FC = () => {
                                             {hasMore && (
                                                 <div style={{ borderTop: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-elevated)', padding: '4px 0' }}>
                                                     <button
-                                                        onClick={() => toggleProductLimit(supplierId)}
+                                                        onClick={() => toggleProductLimit(groupKey)}
                                                         className="btn btn-ghost"
                                                         style={{ width: '100%', borderRadius: 0, border: 'none', justifyContent: 'center', color: 'var(--color-primary)' }}
                                                     >
-                                                        {showAll ? <><ChevronDown style={{ transform: 'rotate(180deg)' }} size={15} /> Einklappen</> : <><ChevronDown size={15} /> Alle {supProds.length} Produkte anzeigen</>}
+                                                        {showAll ? <><ChevronDown style={{ transform: 'rotate(180deg)' }} size={15} /> Einklappen</> : <><ChevronDown size={15} /> Alle {groupProds.length} Produkte anzeigen</>}
                                                     </button>
                                                 </div>
                                             )}
@@ -1743,6 +1820,32 @@ export const Products: React.FC = () => {
 
                                 {/* Order Methods Wrapper */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                    {selectedProductForOrder.supplierId && (
+                                        <div style={{
+                                            backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                                            padding: 'var(--spacing-md)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '2px solid var(--color-primary)',
+                                            order: -2
+                                        }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                KI-Checkout Autopilot:
+                                            </label>
+                                            <CheckoutButton 
+                                                supplierId={selectedProductForOrder.supplierId}
+                                                supplierName={suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.name || 'Lieferant'}
+                                                items={orderCart.map(c => ({
+                                                    product_id: c.product.id,
+                                                    product_name: c.product.name,
+                                                    quantity: c.quantity,
+                                                    unit: c.product.unit,
+                                                    price_expected: c.product.price || undefined,
+                                                    url: c.product.orderUrl || undefined
+                                                }))}
+                                            />
+                                        </div>
+                                    )}
+
                                     {(selectedProductForOrder.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.url) && (
                                         <div style={{
                                             backgroundColor: (getEffectiveOrderMethod(selectedProductForOrder) === 'link' || getEffectiveOrderMethod(selectedProductForOrder) === 'webshop') ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',

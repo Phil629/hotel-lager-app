@@ -38,7 +38,7 @@ const toSupabaseSupplier = (s: Supplier) => {
         default_category: s.defaultCategory?.trim() || null,
         email_subject_template: s.emailSubjectTemplate?.trim() || null,
         email_body_template: s.emailBodyTemplate?.trim() || null,
-        documents: s.documents ? JSON.stringify(s.documents) : null
+        selectors: s.selectors || {}
     };
     if (s.company_id !== undefined) payload.company_id = s.company_id;
     if (s.user_id !== undefined) payload.user_id = s.user_id;
@@ -69,7 +69,8 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     ignoreOrderProposals: s.ignore_order_proposals,
     customerNumber: s.customer_number,
     paymentMethod: s.payment_method,
-    defaultCategory: s.default_category
+    defaultCategory: s.default_category,
+    selectors: s.selectors || {}
 });
 
 const toSupabaseProduct = (p: Product) => {
@@ -347,6 +348,22 @@ export const DataService = {
             loginPassword: data.login_password,
         };
     },
+
+    async triggerAutomatedCheckout(supplierId: string, items: { product_id?: string; product_name: string; quantity: number; unit?: string; price_expected?: number }[]) {
+        const supabase = getSupabaseClient();
+        if (!supabase) throw new Error("Supabase client not found");
+        
+        const { data, error } = await supabase.functions.invoke('trigger-checkout', {
+            body: {
+                supplier_id: supplierId,
+                items: items
+            }
+        });
+        
+        if (error) throw error;
+        return data;
+    },
+
     async saveSupplierCredentials(supplierId: string, credentials: { loginUrl?: string; loginUsername?: string; loginPassword?: string }): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;

@@ -96,10 +96,10 @@ export const Suppliers: React.FC = () => {
             setEditingSupplier(supplier);
             setFormData(supplier);
             setSelectedProductIds(products.filter(p => p.supplierId === supplier.id).map(p => p.id));
-            // Load encrypted credentials only for admin/owner
+            // Fetch credentials (only works for admins/owners, backend will reject otherwise)
             if (userRole === 'owner' || userRole === 'admin' || canSeePasswords) {
                 try {
-                    const creds = await DataService.getSupplierCredentials(supplier.id);
+                    const creds = await DataService.getSupplierCredentials(supplier.id!);
                     if (creds) {
                         setFormData(prev => ({
                             ...prev,
@@ -108,8 +108,8 @@ export const Suppliers: React.FC = () => {
                             loginPassword: creds.loginPassword,
                         }));
                     }
-                } catch {
-                    // Credentials not available — silently ignore
+                } catch (e: any) {
+                    console.error("Fehler beim Laden der Credentials:", e);
                 }
             }
         } else {
@@ -150,11 +150,9 @@ export const Suppliers: React.FC = () => {
                 url: formData.url,
                 notes: formData.notes || [],
                 documents: formData.documents || [],
-                emailSubjectTemplate: formData.emailSubjectTemplate,
-                emailBodyTemplate: formData.emailBodyTemplate,
-                loginUrl: formData.loginUrl,
-                loginUsername: formData.loginUsername,
-                loginPassword: formData.loginPassword,
+                loginUrl: undefined,
+                loginUsername: undefined,
+                loginPassword: undefined,
                 preferredOrderMethod: formData.preferredOrderMethod,
                 orderEmail: formData.orderEmail,
                 orderPhone: formData.orderPhone,
@@ -163,6 +161,9 @@ export const Suppliers: React.FC = () => {
                 customerNumber: formData.customerNumber,
                 paymentMethod: formData.paymentMethod,
                 defaultCategory: formData.defaultCategory || undefined,
+                emailSubjectTemplate: formData.emailSubjectTemplate,
+                emailBodyTemplate: formData.emailBodyTemplate,
+                selectors: formData.selectors,
             } as Supplier;
             
             payloadDebug = JSON.stringify(supplierToSave);
@@ -219,6 +220,30 @@ export const Suppliers: React.FC = () => {
         } catch (error) {
             console.error(error);
             setNotification({ message: 'Fehler beim Löschen.', type: 'error' });
+        }
+    };
+
+    const handleApplyEmailToAllProducts = async () => {
+        if (!editingSupplier) return;
+        setIsSubmitting(true);
+        try {
+            const supplierProducts = products.filter(p => p.supplierId === editingSupplier.id);
+            const updates = supplierProducts.map(p => {
+                return DataService.updateProduct({
+                    ...p,
+                    emailOrderAddress: formData.orderEmail || formData.email,
+                    emailOrderSubject: formData.emailSubjectTemplate,
+                    emailOrderBody: formData.emailBodyTemplate,
+                });
+            });
+            await Promise.all(updates);
+            setNotification({ message: 'E-Mail-Vorlage für alle zugewiesenen Produkte übernommen!', type: 'success' });
+            await loadData();
+        } catch (error) {
+            console.error(error);
+            setNotification({ message: 'Fehler beim Übernehmen der E-Mail-Vorlage.', type: 'error' });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -442,19 +467,43 @@ export const Suppliers: React.FC = () => {
                                 </div>
 
                                 {/* Section: E-Mail Vorlage */}
-                                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
-                                    <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>E-Mail Vorlage</p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                        <div className="form-group">
-                                            <label className="form-label">Standard Betreff</label>
-                                            <input type="text" value={formData.emailSubjectTemplate || ''} onChange={e => setFormData({ ...formData, emailSubjectTemplate: e.target.value })} className="input-field" placeholder="Bestellung: {product_name}" />
+                                {(!formData.preferredOrderMethod || formData.preferredOrderMethod === 'email') && (
+                                    <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                                            <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>E-Mail Bestellung - Vorlage</p>
+                                            {editingSupplier && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={handleApplyEmailToAllProducts}
+                                                    className="btn btn-primary btn-sm"
+                                                >
+                                                    Für alle Produkte übernehmen
+                                                </button>
+                                            )}
                                         </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Standard Nachrichtentext</label>
-                                            <textarea value={formData.emailBodyTemplate || ''} onChange={e => setFormData({ ...formData, emailBodyTemplate: e.target.value })} rows={4} className="input-field" placeholder="Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nEinkauf" />
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                            <div className="form-group">
+                                                <label className="form-label">Bestell-E-Mail (falls abweichend von Stammdaten)</label>
+                                                <input type="email" value={formData.orderEmail || ''} onChange={e => setFormData({ ...formData, orderEmail: e.target.value })} className="input-field" placeholder="bestellungen@lieferant.de" />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Betreff (Standard)</label>
+                                                <input type="text" value={formData.emailSubjectTemplate || ''} onChange={e => setFormData({ ...formData, emailSubjectTemplate: e.target.value })} className="input-field" placeholder="Bestellung" />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Nachrichtentext / Grundgerüst</label>
+                                                <textarea 
+                                                    value={formData.emailBodyTemplate || ''} 
+                                                    onChange={e => setFormData({ ...formData, emailBodyTemplate: e.target.value })} 
+                                                    className="input-field" 
+                                                    rows={5} 
+                                                    placeholder="Sehr geehrte Damen und Herren,&#10;&#10;bitte liefern Sie:&#10;{PRODUKTE}&#10;&#10;Mit freundlichen Grüßen" 
+                                                />
+                                                <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>Tipp: Nutze den Platzhalter <strong style={{color: 'var(--color-primary)'}}>&#123;PRODUKTE&#125;</strong> in deinem Text, damit die Artikel aus dem Warenkorb automatisch dort eingefügt werden.</p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {/* Autopilot exclude */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--color-warning-bg)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid #fcd34d' }}>
@@ -472,6 +521,24 @@ export const Suppliers: React.FC = () => {
                                     </p>
                                     <div style={{ backgroundColor: 'var(--color-warning-bg)', border: '1px solid #fcd34d', borderRadius: 'var(--radius-md)', padding: '10px var(--spacing-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', color: '#92400e' }}>
                                         ⚠️ Passwörter werden verschlüsselt gespeichert und sind nur für Inhaber und Administratoren sichtbar.
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--color-surface-elevated)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginBottom: 'var(--spacing-md)' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            id="loginRequired" 
+                                            checked={!!(formData.selectors?.login_required)} 
+                                            onChange={e => setFormData({ 
+                                                ...formData, 
+                                                selectors: { 
+                                                    ...(formData.selectors || {}), 
+                                                    login_required: e.target.checked 
+                                                } 
+                                            })} 
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }} 
+                                        />
+                                        <label htmlFor="loginRequired" style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-main)', cursor: 'pointer' }}>
+                                            Anmeldung im Webshop ist zwingend erforderlich (andernfalls wird der Login übersprungen)
+                                        </label>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
                                         <div className="form-group">

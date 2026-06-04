@@ -1,16 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
-import { Users, Ticket, CheckCircle, ShieldAlert, Ban, TrendingUp, UserCheck, AlertTriangle, Bug } from 'lucide-react';
+import {
+    Users, Ticket, CheckCircle, ShieldAlert, Ban, TrendingUp, UserCheck,
+    AlertTriangle, Activity, RefreshCw, Edit2, Info, AlertCircle, Zap, Terminal,
+} from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 
-interface ErrorLog {
-    id: string;
-    company_id: string | null;
-    user_id: string | null;
-    message: string;
-    context: any;
-    created_at: string;
-}
+// ── Interfaces ────────────────────────────────────────────────────────────────
 
 interface AdminProfile {
     id: string;
@@ -32,6 +28,20 @@ interface SupportTicket {
     created_at: string;
 }
 
+interface ShopPlaybook {
+    domain: string;
+    automation_status: 'none' | 'learning_auth' | 'learning_cart' | 'verified' | 'failed';
+    playbook: object | null;
+    playbook_previous: object | null;
+    playbook_version: number;
+    last_learning_run: string | null;
+    learning_error: string | null;
+    learning_logs: LogEntry[];
+    updated_at: string;
+    // Aggregiert aus suppliers
+    total_complaints: number;
+}
+
 interface ConfirmState {
     message: string;
     confirmLabel: string;
@@ -39,19 +49,116 @@ interface ConfirmState {
     onConfirm: () => Promise<void>;
 }
 
+interface EditModalState {
+    domain: string;
+    playbookJson: string;
+}
+
+interface ErrorModalState {
+    domain: string;
+    error: string;
+}
+
+interface LogEntry {
+    timestamp: string;
+    level: string;
+    message: string;
+}
+
+interface LiveTerminalData {
+    status: string;
+    logs: LogEntry[];
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+    verified:      { label: 'AKTIV',      color: '#16a34a', bg: '#dcfce7' },
+    learning_auth: { label: 'LERNT',      color: '#d97706', bg: '#fef3c7' },
+    learning_cart: { label: 'LERNT',      color: '#d97706', bg: '#fef3c7' },
+    failed:        { label: 'FEHLER',     color: '#dc2626', bg: '#fee2e2' },
+    none:          { label: 'AUSSTEHEND', color: '#6b7280', bg: '#f3f4f6' },
+};
+
+function getStatusBadge(status: string, complaints: number) {
+    if (complaints > 0 && status === 'verified') {
+        return { label: 'BESCHWERDEN', color: '#c2410c', bg: '#ffedd5' };
+    }
+    return STATUS_BADGE[status] ?? STATUS_BADGE.none;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export const Admin = () => {
-    const [activeTab, setActiveTab] = useState<'users' | 'tickets' | 'errors'>('users');
-    const [profiles, setProfiles] = useState<AdminProfile[]>([]);
-    const [tickets, setTickets] = useState<SupportTicket[]>([]);
-    const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<'users' | 'tickets' | 'shops'>('users');
+    const [profiles, setProfiles]   = useState<AdminProfile[]>([]);
+    const [tickets, setTickets]     = useState<SupportTicket[]>([]);
+    const [shops, setShops]         = useState<ShopPlaybook[]>([]);
+    const [loading, setLoading]     = useState(true);
     const [notification, setNotification] = useState<{ message: string; type: NotificationType } | null>(null);
-    const [mrr, setMrr] = useState(0);
-    const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+    const [mrr, setMrr]             = useState(0);
+    const [confirm, setConfirm]     = useState<ConfirmState | null>(null);
+    const [editModal, setEditModal] = useState<EditModalState | null>(null);
+    const [errorModal, setErrorModal] = useState<ErrorModalState | null>(null);
+    const [terminalDomain, setTerminalDomain] = useState<string | null>(null);
+    const [liveTerminalData, setLiveTerminalData] = useState<LiveTerminalData | null>(null);
+    const terminalScrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         fetchAdminData();
     }, [activeTab]);
+
+    // ── Live-Terminal: Realtime-Subscription auf shop_playbooks ──────────────
+    useEffect(() => {
+        if (!terminalDomain || !supabase) {
+            setLiveTerminalData(null);
+            return;
+        }
+        const client = supabase;
+
+        // Fetch latest state immediately to avoid race conditions/stale list data
+        const fetchLatestTerminalData = async () => {
+            try {
+                const { data, error } = await client
+                    .from('shop_playbooks')
+                    .select('automation_status, learning_logs')
+                    .eq('domain', terminalDomain)
+                    .single();
+                if (!error && data) {
+                    setLiveTerminalData({
+                        status: data.automation_status,
+                        logs: (data.learning_logs || []) as LogEntry[],
+                    });
+                }
+            } catch (err) {
+                console.error('[admin] Fehler beim Laden der Live-Logs:', err);
+            }
+        };
+        void fetchLatestTerminalData();
+
+        const channel = client
+            .channel(`dojo-terminal-${terminalDomain}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'shop_playbooks',
+                filter: `domain=eq.${terminalDomain}`,
+            }, (payload: any) => {
+                setLiveTerminalData({
+                    status: payload.new.automation_status,
+                    logs: (payload.new.learning_logs || []) as LogEntry[],
+                });
+            })
+            .subscribe();
+        return () => { void client.removeChannel(channel); };
+    }, [terminalDomain]);
+
+    // ── Auto-Scroll: immer zur neuesten Log-Zeile scrollen ──────────────────
+    useEffect(() => {
+        if (terminalScrollRef.current) {
+            terminalScrollRef.current.scrollTop = terminalScrollRef.current.scrollHeight;
+        }
+    }, [liveTerminalData?.logs.length]);
 
     const fetchAdminData = async () => {
         if (!supabase) return;
@@ -62,7 +169,6 @@ export const Admin = () => {
                 if (error) throw error;
 
                 const { data: subs } = await supabase.from('subscriptions').select('*');
-
                 const merged: AdminProfile[] = (data || []).map(p => {
                     const s = subs?.find((x: any) => x.user_id === p.id);
                     return { ...p, plan: s?.plan || 'free', subscription_id: s?.id };
@@ -76,14 +182,37 @@ export const Admin = () => {
                 });
                 setMrr(totalMrr);
                 setProfiles(merged);
-            } else if (activeTab === 'errors') {
-                const { data, error } = await supabase.from('error_logs').select('*').order('created_at', { ascending: false }).limit(50);
-                if (error) throw error;
-                setErrorLogs(data || []);
-            } else {
+
+            } else if (activeTab === 'tickets') {
                 const { data, error } = await supabase.from('support_tickets').select('*').order('created_at', { ascending: false });
                 if (error) throw error;
                 setTickets(data || []);
+
+            } else {
+                // ── Shops tab: join shop_playbooks with aggregated complaints ──
+                const { data: playbooksData, error: pbError } = await supabase
+                    .from('shop_playbooks')
+                    .select('*')
+                    .order('updated_at', { ascending: false });
+                if (pbError) throw pbError;
+
+                const { data: complaintsData } = await supabase
+                    .from('suppliers')
+                    .select('playbook_domain, unsuccessful_clicks')
+                    .not('playbook_domain', 'is', null);
+
+                const complaintsByDomain: Record<string, number> = {};
+                (complaintsData || []).forEach((s: any) => {
+                    if (s.playbook_domain) {
+                        complaintsByDomain[s.playbook_domain] =
+                            (complaintsByDomain[s.playbook_domain] || 0) + (s.unsuccessful_clicks || 0);
+                    }
+                });
+
+                setShops((playbooksData || []).map((p: any) => ({
+                    ...p,
+                    total_complaints: complaintsByDomain[p.domain] || 0,
+                })));
             }
         } catch (err: any) {
             setNotification({ message: 'Ladefehler: ' + (err.message || 'Unbekannt'), type: 'error' });
@@ -91,6 +220,8 @@ export const Admin = () => {
             setLoading(false);
         }
     };
+
+    // ── Users tab actions ─────────────────────────────────────────────────────
 
     const toggleRole = (id: string, currentRole: string) => {
         const newRole = currentRole === 'admin' ? 'user' : 'admin';
@@ -134,9 +265,7 @@ export const Admin = () => {
     const updateNote = async (id: string, note: string) => {
         if (!supabase) return;
         const { error } = await supabase.from('profiles').update({ admin_notes: note }).eq('id', id);
-        if (error) {
-            setNotification({ message: 'Notiz konnte nicht gespeichert werden.', type: 'error' });
-        }
+        if (error) setNotification({ message: 'Notiz konnte nicht gespeichert werden.', type: 'error' });
     };
 
     const updatePlan = async (userId: string, newPlan: string) => {
@@ -162,8 +291,191 @@ export const Admin = () => {
         }
     };
 
+    // ── Shops tab actions ─────────────────────────────────────────────────────
+
+    const triggerLearning = async (domain: string) => {
+        if (!supabase) return;
+
+        // Open the terminal modal immediately with fresh visual starting logs
+        setLiveTerminalData({
+            status: 'learning_auth',
+            logs: [{
+                timestamp: new Date().toISOString(),
+                level: 'info',
+                message: `🚀 Starte Dojo v2 für ${domain}...`
+            }]
+        });
+        setTerminalDomain(domain);
+
+        try {
+            // Set status to learning_auth immediately and clear previous logs and errors in the database
+            await supabase.from('shop_playbooks')
+                .update({ 
+                    automation_status: 'learning_auth', 
+                    learning_error: null,
+                    learning_logs: []
+                })
+                .eq('domain', domain);
+
+            // Reset complaints for this domain so the trigger counter resets
+            await supabase.from('suppliers')
+                .update({ unsuccessful_clicks: 0 })
+                .eq('playbook_domain', domain);
+
+            // Call the cloud-worker Edge Function
+            const { data: { session } } = await supabase.auth.getSession();
+            const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-learning`;
+            const res = await fetch(fnUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({ domain }),
+            });
+
+            if (!res.ok) {
+                const errText = await res.text().catch(() => 'Unbekannt');
+                // Edge Function existiert noch nicht → trotzdem OK, Status wurde gesetzt
+                console.warn('[admin] start-learning Edge Function nicht erreichbar:', errText);
+                setNotification({ message: `Status auf "Lernt" gesetzt. Edge Function antwortet noch nicht (${res.status}).`, type: 'success' });
+            } else {
+                setNotification({ message: `Lernprozess für ${domain} erfolgreich gestartet.`, type: 'success' });
+            }
+
+            fetchAdminData();
+        } catch (err: any) {
+            setNotification({ message: 'Fehler: ' + err.message, type: 'error' });
+        }
+    };
+
+    const openEditModal = (shop: ShopPlaybook) => {
+        setEditModal({
+            domain: shop.domain,
+            playbookJson: shop.playbook
+                ? JSON.stringify(shop.playbook, null, 2)
+                : JSON.stringify({ login_steps: [], item_steps: [], checkout_steps: [] }, null, 2),
+        });
+    };
+
+    const savePlaybook = async () => {
+        if (!supabase || !editModal) return;
+        try {
+            const parsed = JSON.parse(editModal.playbookJson);
+            const current = shops.find(s => s.domain === editModal.domain);
+            const { error } = await supabase.from('shop_playbooks').update({
+                playbook_previous: current?.playbook ?? null,
+                playbook:          parsed,
+                playbook_version:  (current?.playbook_version ?? 0) + 1,
+                automation_status: 'verified',
+                learning_error:    null,
+            }).eq('domain', editModal.domain);
+            if (error) throw error;
+            setNotification({ message: `Playbook für ${editModal.domain} gespeichert und als verified markiert.`, type: 'success' });
+            setEditModal(null);
+            fetchAdminData();
+        } catch (err: any) {
+            setNotification({ message: 'Fehler: ' + (err.message || 'Ungültiges JSON?'), type: 'error' });
+        }
+    };
+
+    const rollbackPlaybook = async (domain: string) => {
+        if (!supabase) return;
+        const shop = shops.find(s => s.domain === domain);
+        if (!shop?.playbook_previous) {
+            setNotification({ message: 'Kein vorheriges Playbook vorhanden.', type: 'error' });
+            return;
+        }
+        setConfirm({
+            message: `Playbook für ${domain} auf Version ${(shop.playbook_version ?? 1) - 1} zurücksetzen?`,
+            confirmLabel: 'Ja, zurücksetzen',
+            variant: 'danger',
+            onConfirm: async () => {
+                if (!supabase) return;
+                const { error } = await supabase.from('shop_playbooks').update({
+                    playbook:         shop.playbook_previous,
+                    playbook_previous: null,
+                    playbook_version: Math.max(1, (shop.playbook_version ?? 1) - 1),
+                    automation_status: 'verified',
+                }).eq('domain', domain);
+                if (error) {
+                    setNotification({ message: 'Rollback fehlgeschlagen: ' + error.message, type: 'error' });
+                } else {
+                    setNotification({ message: `Rollback für ${domain} erfolgreich.`, type: 'success' });
+                    fetchAdminData();
+                }
+            },
+        });
+    };
+
+    const openTerminal = (shop: ShopPlaybook) => {
+        setLiveTerminalData({
+            status: shop.automation_status,
+            logs: shop.learning_logs || [],
+        });
+        setTerminalDomain(shop.domain);
+    };
+
+    // ── Terminal-Helpers ──────────────────────────────────────────────────────
+
+    const getTerminalPhase = (status: string, logs: LogEntry[]): number => {
+        if (status === 'verified') return 4;
+        if (logs.some(l => l.level === 'dry_run')) return 3;
+        if (status === 'learning_cart') return 2;
+        if (status === 'learning_auth') return 1;
+        return 0;
+    };
+
+    const getLogColor = (level: string): string => {
+        switch (level) {
+            case 'success': return '#4ade80';
+            case 'error':   return '#f87171';
+            case 'warning': return '#fbbf24';
+            case 'dry_run': return '#c084fc';
+            case 'info':    return '#60a5fa';
+            default:        return '#94a3b8';
+        }
+    };
+
+    const getLogLevelLabel = (level: string): string => {
+        switch (level) {
+            case 'success': return 'OK';
+            case 'error':   return 'ERR';
+            case 'warning': return 'WARN';
+            case 'dry_run': return 'DRY';
+            case 'info':    return 'INFO';
+            default:        return level.toUpperCase().substring(0, 4);
+        }
+    };
+
+    const getLatestSessionId = (logs: LogEntry[]): string | null => {
+        for (let i = logs.length - 1; i >= 0; i--) {
+            const msg = logs[i].message;
+            const match = msg.match(/ID:\s*([a-f0-9\-]+)/i);
+            if (match && match[1]) {
+                const id = match[1].trim();
+                if (id.length > 10) return id;
+            }
+        }
+        return null;
+    };
+
+    // ── Shops metrics ─────────────────────────────────────────────────────────
+
+    const learningShops  = shops.filter(s => s.automation_status === 'learning_auth' || s.automation_status === 'learning_cart');
+    const verifiedShops  = shops.filter(s => s.automation_status === 'verified');
+    const problematicShops = shops.filter(s => s.automation_status === 'failed' || s.total_complaints > 0);
+
+    // ── Render ────────────────────────────────────────────────────────────────
+
     return (
         <div style={{ paddingBottom: '40px' }}>
+            <style>{`
+                @keyframes dojo-pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+                @keyframes dojo-blink { 0%,49%{opacity:1;} 50%,100%{opacity:0;} }
+                @keyframes dojo-spin  { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+            `}</style>
+
             {notification && (
                 <Notification
                     message={notification.message}
@@ -198,6 +510,322 @@ export const Admin = () => {
                 </div>
             )}
 
+            {/* Playbook Edit Modal */}
+            {editModal && (
+                <div className="modal-overlay" onClick={() => setEditModal(null)}>
+                    <div className="modal-box" style={{ maxWidth: '720px', width: '95vw' }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Edit2 size={18} />
+                                <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Playbook bearbeiten: {editModal.domain}</h3>
+                            </div>
+                        </div>
+                        <div className="modal-body">
+                            <p style={{ marginBottom: '8px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                                Struktur: <code>{'{"login_steps":[...], "item_steps":[...], "checkout_steps":[...]}'}</code>
+                            </p>
+                            <textarea
+                                value={editModal.playbookJson}
+                                onChange={e => setEditModal(prev => prev ? { ...prev, playbookJson: e.target.value } : null)}
+                                className="input-field"
+                                style={{ fontFamily: 'monospace', fontSize: '12px', height: '400px', resize: 'vertical' }}
+                                spellCheck={false}
+                            />
+                        </div>
+                        <div className="modal-footer">
+                            {shops.find(s => s.domain === editModal.domain)?.playbook_previous && (
+                                <button className="btn btn-ghost" onClick={() => { setEditModal(null); rollbackPlaybook(editModal.domain); }}>
+                                    Rollback
+                                </button>
+                            )}
+                            <button className="btn btn-ghost" onClick={() => setEditModal(null)}>Abbrechen</button>
+                            <button className="btn btn-primary" onClick={savePlaybook}>
+                                <CheckCircle size={16} /> Speichern & als Verified markieren
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Log Modal */}
+            {errorModal && (
+                <div className="modal-overlay" onClick={() => setErrorModal(null)}>
+                    <div className="modal-box" style={{ maxWidth: '640px', width: '95vw' }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <AlertCircle size={18} color="var(--color-danger)" />
+                                <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Fehlerprotokoll: {errorModal.domain}</h3>
+                            </div>
+                        </div>
+                        <div className="modal-body">
+                            <pre style={{
+                                backgroundColor: 'var(--color-surface-elevated)',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '16px',
+                                fontSize: '12px',
+                                fontFamily: 'monospace',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-all',
+                                maxHeight: '400px',
+                                overflowY: 'auto',
+                                color: 'var(--color-danger)',
+                            }}>
+                                {errorModal.error}
+                            </pre>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-ghost" onClick={() => setErrorModal(null)}>Schließen</button>
+                            <button className="btn btn-primary" onClick={() => { setErrorModal(null); triggerLearning(errorModal.domain); }}>
+                                <RefreshCw size={16} /> Neu lernen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Live-Terminal Modal ──────────────────────────────────────── */}
+            {terminalDomain && (
+                <div
+                    onClick={() => setTerminalDomain(null)}
+                    style={{
+                        position: 'fixed', inset: 0,
+                        background: 'rgba(0,0,0,0.88)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        zIndex: 1000,
+                    }}
+                >
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            width: 'min(780px, 95vw)',
+                            maxHeight: '85vh',
+                            display: 'flex', flexDirection: 'column',
+                            background: '#0f172a',
+                            border: '1px solid rgba(148,163,184,0.12)',
+                            borderRadius: '12px',
+                            boxShadow: '0 25px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(148,163,184,0.05)',
+                            overflow: 'hidden',
+                        }}
+                    >
+                        {/* Terminal Header */}
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 18px',
+                            background: '#1e293b',
+                            borderBottom: '1px solid rgba(148,163,184,0.1)',
+                            flexShrink: 0,
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {/* macOS-style window dots */}
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ef4444' }} />
+                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#f59e0b' }} />
+                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#22c55e' }} />
+                                </div>
+                                <span style={{ color: '#94a3b8', fontSize: '11px', fontFamily: 'monospace', marginLeft: '6px' }}>
+                                    DOJO TERMINAL
+                                </span>
+                                <span style={{
+                                    color: '#e2e8f0', fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                                    background: 'rgba(148,163,184,0.1)', padding: '2px 8px', borderRadius: '4px',
+                                }}>
+                                    {terminalDomain}
+                                </span>
+                                {liveTerminalData && ['learning_auth','learning_cart'].includes(liveTerminalData.status) && (
+                                    <span style={{
+                                        width: 7, height: 7, borderRadius: '50%',
+                                        background: '#f59e0b', display: 'inline-block',
+                                        animation: 'dojo-pulse 1.2s ease-in-out infinite',
+                                    }} />
+                                )}
+                                {(() => {
+                                    const sessionId = getLatestSessionId(liveTerminalData?.logs || []);
+                                    if (!sessionId) return null;
+                                    return (
+                                        <a
+                                            href={`https://www.browserbase.com/sessions/${sessionId}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                background: 'rgba(239, 68, 68, 0.12)',
+                                                border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                color: '#f87171',
+                                                padding: '3px 10px',
+                                                borderRadius: '6px',
+                                                fontSize: '11px',
+                                                fontWeight: 600,
+                                                textDecoration: 'none',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s',
+                                                marginLeft: '8px'
+                                            }}
+                                            onMouseOver={e => {
+                                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                                e.currentTarget.style.borderColor = '#f87171';
+                                            }}
+                                            onMouseOut={e => {
+                                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)';
+                                                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                                            }}
+                                        >
+                                            <span style={{
+                                                width: 6,
+                                                height: 6,
+                                                borderRadius: '50%',
+                                                background: '#ef4444',
+                                                animation: 'dojo-pulse 1s ease-in-out infinite',
+                                                display: 'inline-block'
+                                            }} />
+                                            Live-Browser ansehen (VNC)
+                                        </a>
+                                    );
+                                })()}
+                            </div>
+                            <button
+                                onClick={() => setTerminalDomain(null)}
+                                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px', lineHeight: 1, fontSize: '16px' }}
+                            >✕</button>
+                        </div>
+
+                        {/* Progress Stepper */}
+                        {(() => {
+                            const currentPhase = getTerminalPhase(
+                                liveTerminalData?.status ?? '',
+                                liveTerminalData?.logs ?? [],
+                            );
+                            const isFailed = liveTerminalData?.status === 'failed';
+                            const steps = [
+                                { label: 'Phase 1', sub: 'Login' },
+                                { label: 'Phase 2', sub: 'Warenkorb' },
+                                { label: 'Dry-Run', sub: 'Testen' },
+                                { label: 'Verifiziert', sub: 'Fertig' },
+                            ];
+                            return (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    padding: '14px 24px', gap: 0,
+                                    background: 'rgba(15,23,42,0.9)',
+                                    borderBottom: '1px solid rgba(148,163,184,0.08)',
+                                    flexShrink: 0,
+                                }}>
+                                    {steps.map((s, i) => {
+                                        const stepNum = i + 1;
+                                        const isDone   = currentPhase > stepNum || (!isFailed && currentPhase === 4 && stepNum <= 4);
+                                        const isActive = currentPhase === stepNum && liveTerminalData?.status !== 'verified';
+                                        const hasFailed = isFailed && currentPhase === stepNum;
+                                        const dotColor = hasFailed ? '#f87171' : isDone ? '#4ade80' : isActive ? '#f59e0b' : '#334155';
+                                        const textColor = isDone || isActive ? '#e2e8f0' : '#475569';
+                                        return (
+                                            <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', minWidth: '72px' }}>
+                                                    <div style={{
+                                                        width: 28, height: 28, borderRadius: '50%',
+                                                        background: dotColor,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        fontSize: '11px', fontWeight: 700, color: '#0f172a',
+                                                        animation: isActive ? 'dojo-pulse 1.5s ease-in-out infinite' : 'none',
+                                                        transition: 'background 0.4s',
+                                                    }}>
+                                                        {hasFailed ? '✕' : isDone ? '✓' : stepNum}
+                                                    </div>
+                                                    <div style={{ fontSize: '10px', fontWeight: 600, color: textColor, whiteSpace: 'nowrap' }}>{s.label}</div>
+                                                    <div style={{ fontSize: '9px', color: '#334155', whiteSpace: 'nowrap' }}>{s.sub}</div>
+                                                </div>
+                                                {i < steps.length - 1 && (
+                                                    <div style={{
+                                                        height: 2, width: 32, marginBottom: 18,
+                                                        background: currentPhase > stepNum ? '#4ade80' : 'rgba(148,163,184,0.15)',
+                                                        transition: 'background 0.4s',
+                                                    }} />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+
+                        {/* Log Area */}
+                        <div
+                            ref={terminalScrollRef}
+                            style={{
+                                flex: 1,
+                                overflowY: 'auto',
+                                padding: '12px 18px 16px',
+                                fontFamily: "'Courier New', Courier, monospace",
+                                fontSize: '12px',
+                                lineHeight: 1.7,
+                                minHeight: '260px',
+                            }}
+                        >
+                            {(!liveTerminalData || liveTerminalData.logs.length === 0) ? (
+                                <div style={{ color: '#475569', fontSize: '12px', padding: '20px 0' }}>
+                                    {liveTerminalData ? 'Noch keine Log-Einträge für diesen Lernlauf.' : 'Lade Logs...'}
+                                </div>
+                            ) : liveTerminalData.logs.map((log, i) => {
+                                const color = getLogColor(log.level);
+                                const t = new Date(log.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                return (
+                                    <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '1px' }}>
+                                        <span style={{ color: '#334155', flexShrink: 0, userSelect: 'none' }}>{t}</span>
+                                        <span style={{
+                                            color, fontWeight: 700, flexShrink: 0, minWidth: '36px',
+                                            fontSize: '10px', letterSpacing: '0.05em', marginTop: '1px',
+                                        }}>
+                                            {getLogLevelLabel(log.level)}
+                                        </span>
+                                        <span style={{ color: log.level === 'error' ? '#fca5a5' : log.level === 'success' ? '#86efac' : '#cbd5e1', wordBreak: 'break-word' }}>
+                                            {log.message}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                            {/* Blinking cursor when active */}
+                            {liveTerminalData && ['learning_auth','learning_cart'].includes(liveTerminalData.status) && (
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '2px' }}>
+                                    <span style={{ color: '#334155', userSelect: 'none', visibility: 'hidden' }}>00:00:00</span>
+                                    <span style={{ color: '#4ade80', animation: 'dojo-blink 1s step-end infinite', fontWeight: 700 }}>▌</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{
+                            display: 'flex', justifyContent: 'flex-end', gap: '8px',
+                            padding: '10px 18px',
+                            background: 'rgba(30,41,59,0.6)',
+                            borderTop: '1px solid rgba(148,163,184,0.08)',
+                            flexShrink: 0,
+                        }}>
+                            {liveTerminalData?.status === 'failed' && (
+                                <button
+                                    className="btn btn-primary"
+                                    style={{ padding: '7px 14px', fontSize: '12px' }}
+                                    onClick={() => { if (terminalDomain) triggerLearning(terminalDomain); }}
+                                >
+                                    <RefreshCw size={13} /> Neu lernen
+                                </button>
+                            )}
+                            <button
+                                style={{
+                                    background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.15)',
+                                    color: '#94a3b8', borderRadius: '6px', padding: '7px 14px',
+                                    cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                                }}
+                                onClick={() => setTerminalDomain(null)}
+                            >
+                                Schließen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Page Header */}
             <div className="page-header" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div>
                     <h2 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -226,6 +854,7 @@ export const Admin = () => {
                 </div>
             </div>
 
+            {/* Tab Navigation */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: 'var(--spacing-lg)' }}>
                 <button
                     onClick={() => setActiveTab('users')}
@@ -242,27 +871,31 @@ export const Admin = () => {
                     Support-Anfragen
                 </button>
                 <button
-                    onClick={() => setActiveTab('errors')}
-                    style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: activeTab === 'errors' ? '#be123c' : 'var(--color-surface)', color: activeTab === 'errors' ? 'white' : 'var(--color-text-main)', fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-xs)' }}
+                    onClick={() => setActiveTab('shops')}
+                    style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: activeTab === 'shops' ? '#be123c' : 'var(--color-surface)', color: activeTab === 'shops' ? 'white' : 'var(--color-text-main)', fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-xs)', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
-                    <Bug size={18} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
-                    Letzte Fehlermeldungen
+                    <Activity size={18} />
+                    Webshop-Automatisierung
+                    {problematicShops.length > 0 && (
+                        <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', borderRadius: '10px', padding: '1px 7px', fontSize: '11px', fontWeight: 700 }}>
+                            {problematicShops.length}
+                        </span>
+                    )}
                 </button>
             </div>
 
+            {/* Tab Content */}
             {loading ? (
-                <div>Lade Daten...</div>
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Lade Daten...</div>
             ) : activeTab === 'users' ? (
                 <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))' }}>
                     {profiles.map(p => (
                         <div key={p.id} style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: '20px', border: p.is_banned ? `2px solid var(--color-danger)` : '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative' }}>
-
                             {p.is_banned && (
                                 <div style={{ position: 'absolute', top: 12, right: 12, backgroundColor: 'var(--color-danger-bg)', color: 'var(--color-danger)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Ban size={12} /> GESPERRT
                                 </div>
                             )}
-
                             <div>
                                 <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--color-text-main)', paddingRight: '80px', wordBreak: 'break-all' }}>{p.email}</h3>
                                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
@@ -274,7 +907,6 @@ export const Admin = () => {
                                     </p>
                                 )}
                             </div>
-
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                 <select
                                     value={p.plan || 'free'}
@@ -286,12 +918,10 @@ export const Admin = () => {
                                     <option value="standard">Standard (29€)</option>
                                     <option value="pro">Pro (39€)</option>
                                 </select>
-
                                 <span style={{ backgroundColor: p.role === 'admin' ? '#be123c' : 'var(--color-border)', color: p.role === 'admin' ? 'white' : 'var(--color-text-muted)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', fontSize: '13px', fontWeight: 600 }}>
                                     {(p.role || 'user').toUpperCase()}
                                 </span>
                             </div>
-
                             <div style={{ marginTop: '8px' }}>
                                 <label className="form-label">Interne Notizen:</label>
                                 <textarea
@@ -302,12 +932,10 @@ export const Admin = () => {
                                     style={{ height: '60px', resize: 'none', fontSize: 'var(--font-size-sm)' }}
                                 />
                             </div>
-
                             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
                                 <button onClick={() => toggleRole(p.id, p.role)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline', fontSize: '13px', padding: 0 }}>
                                     Admin-Rechte {p.role === 'admin' ? 'entziehen' : 'geben'}
                                 </button>
-
                                 <button onClick={() => toggleBan(p.id, p.is_banned)} style={{ background: 'none', border: 'none', color: p.is_banned ? 'var(--color-success)' : 'var(--color-danger)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Ban size={14} /> {p.is_banned ? 'Entsperren' : 'Sperren'}
                                 </button>
@@ -320,34 +948,8 @@ export const Admin = () => {
                         </div>
                     )}
                 </div>
-            ) : activeTab === 'errors' ? (
-                <div className="card" style={{ padding: 'var(--spacing-lg)' }}>
-                    {errorLogs.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>Keine Fehlermeldungen vorhanden.</div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                            {errorLogs.map(log => (
-                                <div key={log.id} style={{ border: '1px solid var(--color-danger)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                                    <div style={{ padding: '12px 16px', backgroundColor: 'var(--color-danger-bg)', borderBottom: '1px solid var(--color-danger)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <strong style={{ color: 'var(--color-danger)' }}>{new Date(log.created_at).toLocaleString('de-DE')}</strong>
-                                        {log.company_id && (
-                                            <span style={{ fontSize: '11px', backgroundColor: 'white', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-danger)' }}>
-                                                Company: {log.company_id}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div style={{ padding: '16px', color: 'var(--color-text-main)' }}>
-                                        <div style={{ fontWeight: 600, marginBottom: '8px' }}>{log.message}</div>
-                                        <pre style={{ margin: 0, padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-sm)', fontSize: '12px', overflowX: 'auto', border: '1px solid var(--color-border)' }}>
-                                            {JSON.stringify(log.context, null, 2)}
-                                        </pre>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            ) : (
+
+            ) : activeTab === 'tickets' ? (
                 <div className="card" style={{ padding: 'var(--spacing-lg)' }}>
                     {tickets.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>Keine Support-Tickets vorhanden.</div>
@@ -373,6 +975,120 @@ export const Admin = () => {
                             ))}
                         </div>
                     )}
+                </div>
+
+            ) : (
+                /* ── Shops Tab ────────────────────────────────────────────── */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
+
+                    {/* Metrics Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+                        {[
+                            { icon: <Zap size={18} />, label: 'SHOPS GESAMT', value: shops.length, color: 'var(--color-text-main)' },
+                            {
+                                icon: <Activity size={18} style={{ color: '#d97706' }} />,
+                                label: 'AM LERNEN',
+                                value: learningShops.length,
+                                color: '#d97706',
+                                pulse: learningShops.length > 0,
+                            },
+                            { icon: <CheckCircle size={18} style={{ color: '#16a34a' }} />, label: 'VERIFIZIERT', value: verifiedShops.length, color: '#16a34a' },
+                            { icon: <AlertCircle size={18} style={{ color: '#dc2626' }} />, label: 'PROBLEME', value: problematicShops.length, color: '#dc2626' },
+                        ].map((m, i) => (
+                            <div key={i} style={{ backgroundColor: 'var(--color-surface)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                                <div style={{ color: 'var(--color-text-muted)', fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {m.icon} {m.label}
+                                </div>
+                                <div style={{ fontSize: '28px', fontWeight: 700, color: m.color, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {m.value}
+                                    {(m as any).pulse && m.value > 0 && (
+                                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'inline-block', animation: 'pulse 1.2s infinite' }} />
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Shops Table */}
+                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                        {shops.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>
+                                Noch keine Shops in der Datenbank. Sobald ein Lieferant mit "webshop"-Methode angelegt wird, erscheint er hier.
+                            </div>
+                        ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                <thead>
+                                    <tr style={{ backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)' }}>
+                                        {['Lieferant (Domain)', 'Status', 'Kunden-Tickets', 'Letzter Prüflauf', 'Version', 'Aktionen'].map(h => (
+                                            <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {shops.map(shop => {
+                                        const badge = getStatusBadge(shop.automation_status, shop.total_complaints);
+                                        return (
+                                            <tr key={shop.domain} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                                <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--color-text-main)' }}>
+                                                    {shop.domain}
+                                                </td>
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <span style={{ backgroundColor: badge.bg, color: badge.color, padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>
+                                                        {badge.label}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '12px 16px', color: shop.total_complaints > 0 ? '#dc2626' : 'var(--color-text-muted)' }}>
+                                                    {shop.total_complaints > 0 ? `${shop.total_complaints}x gemeldet` : '—'}
+                                                </td>
+                                                <td style={{ padding: '12px 16px', color: 'var(--color-text-muted)', fontSize: '12px' }}>
+                                                    {shop.last_learning_run
+                                                        ? new Date(shop.last_learning_run).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                                        : '—'}
+                                                </td>
+                                                <td style={{ padding: '12px 16px', color: 'var(--color-text-muted)', fontSize: '12px' }}>
+                                                    {shop.playbook ? `v${shop.playbook_version}` : '—'}
+                                                </td>
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                                        <button
+                                                            title="Lernprozess neu starten"
+                                                            onClick={() => triggerLearning(shop.domain)}
+                                                            style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}
+                                                        >
+                                                            <RefreshCw size={14} />
+                                                        </button>
+                                                        <button
+                                                            title="Live-Terminal öffnen"
+                                                            onClick={() => openTerminal(shop)}
+                                                            style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}
+                                                        >
+                                                            <Terminal size={14} />
+                                                        </button>
+                                                        <button
+                                                            title="Playbook bearbeiten"
+                                                            onClick={() => openEditModal(shop)}
+                                                            style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}
+                                                        >
+                                                            <Edit2 size={14} />
+                                                        </button>
+                                                        {shop.learning_error && (
+                                                            <button
+                                                                title="Fehlerprotokoll anzeigen"
+                                                                onClick={() => setErrorModal({ domain: shop.domain, error: shop.learning_error! })}
+                                                                style={{ background: 'none', border: '1px solid #fca5a5', borderRadius: 'var(--radius-sm)', padding: '5px 8px', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}
+                                                            >
+                                                                <Info size={14} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
