@@ -1704,7 +1704,10 @@ export const Orders: React.FC = () => {
                                         }}
                                     >
                                         <option value="">Alle Kategorien</option>
-                                        {Array.from(new Set(products.map(p => p.category).filter(Boolean))).map(cat => (
+                                        {Array.from(new Set(products.map(p => {
+                                            const s = suppliers.find(sup => sup.id === p.supplierId);
+                                            return p.category || s?.defaultCategory;
+                                        }).filter(Boolean))).map(cat => (
                                             <option key={cat} value={cat}>{cat}</option>
                                         ))}
                                     </select>
@@ -1715,7 +1718,9 @@ export const Orders: React.FC = () => {
                                         {(() => {
                                             const filteredProducts = products.filter(p => {
                                                 const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-                                                const matchesCategory = filterCategory ? p.category === filterCategory : true;
+                                                const s = suppliers.find(sup => sup.id === p.supplierId);
+                                                const effectiveCategory = p.category || s?.defaultCategory || '';
+                                                const matchesCategory = filterCategory ? effectiveCategory === filterCategory : true;
                                                 return matchesSearch && matchesCategory;
                                             });
                                             if (filteredProducts.length === 0 && !filterCategory) return <div style={{ padding: '16px', color: 'var(--color-text-muted)', textAlign: 'center' }}>Keine Produkte gefunden.</div>;
