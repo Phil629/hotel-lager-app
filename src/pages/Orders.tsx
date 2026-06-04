@@ -9,7 +9,6 @@ import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import { CheckoutButton } from '../components/CheckoutButton';
-import QRCode from "react-qr-code";
 
 // ── KI-Log ───────────────────────────────────────────────────────────────────
 

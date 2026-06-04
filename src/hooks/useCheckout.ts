@@ -290,7 +290,6 @@ export function useCheckout({
         .from('checkout_sessions')
         .update({ status: 'expired', status_message: 'Vom Nutzer abgebrochen.' })
         .eq('id', session.id)
-        .catch(() => {})
     }
     if (channelRef.current && supabase) {
       supabase.removeChannel(channelRef.current)
