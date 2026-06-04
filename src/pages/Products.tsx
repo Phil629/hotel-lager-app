@@ -463,7 +463,7 @@ export const Products: React.FC = () => {
         const listSubjectInfo = cart.length === 1 ? mainProduct.name : `${cart.length} Produkte`;
         subject = subject.replace(/{product_name}/g, listSubjectInfo);
         
-        const listBodyInfo = cart.map(c => `- ${c.quantity}x ${c.product.name} ${c.product.unit ? `(${c.product.unit})` : ''}`.trim()).join('\n');
+        const listBodyInfo = cart.map(c => `- ${c.quantity}x ${c.product.name}`).join('\n');
         
         if (body.includes('{PRODUKTE}')) {
             body = body.replace(/{PRODUKTE}/g, listBodyInfo);

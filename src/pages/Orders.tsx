@@ -296,14 +296,14 @@ export const Orders: React.FC = () => {
         let subject = mainProduct.emailOrderSubject || supplier?.emailSubjectTemplate || `Bestellung: {product_name}`;
         let body = mainProduct.emailOrderBody || supplier?.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nEinkauf`;
 
-        const productList = cart.map(c => `- ${c.quantity}x ${c.product.name}${c.product.unit ? ' (' + c.product.unit + ')' : ''}`).join('\n');
+        const productList = cart.map(c => `- ${c.quantity}x ${c.product.name}`).join('\n');
 
         if (cart.length === 1) {
             subject = subject.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
-            body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '').replace(/{PRODUKTE}/g, `- ${cart[0].quantity}x ${mainProduct.name} (${mainProduct.unit || ''})`);
+            body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '').replace(/{PRODUKTE}/g, `- ${cart[0].quantity}x ${mainProduct.name}`);
         } else {
             const listSubjectInfo = cart.length + " Produkte";
-            const listBodyInfo = '\n' + cart.map(c => `- ${c.quantity}x ${c.product.name} (${c.product.unit || ''})`).join('\n');
+            const listBodyInfo = '\n' + cart.map(c => `- ${c.quantity}x ${c.product.name}`).join('\n');
 
             subject = subject.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listSubjectInfo);
             body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listBodyInfo).replace(/{PRODUKTE}/g, listBodyInfo);
@@ -1718,7 +1718,7 @@ export const Orders: React.FC = () => {
                                                 const matchesCategory = filterCategory ? p.category === filterCategory : true;
                                                 return matchesSearch && matchesCategory;
                                             });
-                                            if (filteredProducts.length === 0) return <div style={{ padding: '16px', color: 'var(--color-text-muted)', textAlign: 'center' }}>Keine Produkte gefunden.</div>;
+                                            if (filteredProducts.length === 0 && !filterCategory) return <div style={{ padding: '16px', color: 'var(--color-text-muted)', textAlign: 'center' }}>Keine Produkte gefunden.</div>;
                                             
                                             // Group by supplier
                                             const grouped: Record<string, Product[]> = {};
@@ -1727,6 +1727,20 @@ export const Orders: React.FC = () => {
                                                 if (!grouped[sId]) grouped[sId] = [];
                                                 grouped[sId].push(p);
                                             });
+
+                                            // Also add empty suppliers that match the category filter, so the user can quickly create new products under them
+                                            if (filterCategory) {
+                                                suppliers.forEach(s => {
+                                                    if (s.defaultCategory === filterCategory) {
+                                                        if (!grouped[s.id]) {
+                                                            grouped[s.id] = [];
+                                                        }
+                                                    }
+                                                });
+                                            }
+
+                                            // If after that there is still nothing to show
+                                            if (Object.keys(grouped).length === 0) return <div style={{ padding: '16px', color: 'var(--color-text-muted)', textAlign: 'center' }}>Keine Produkte gefunden.</div>;
 
                                             const isSearchingOrFiltering = searchTerm !== '' || filterCategory !== '';
 
