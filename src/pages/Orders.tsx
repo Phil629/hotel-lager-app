@@ -1482,7 +1482,15 @@ export const Orders: React.FC = () => {
                             
                             // Calculate supplier properties for styling
                             const hasDefect = supplierOrders.some(o => o.hasDefect && !o.defectResolved);
-                            const isDelayed = supplierOrders.some(o => o.expectedDeliveryDate && new Date(o.expectedDeliveryDate).setHours(0,0,0,0) < new Date().setHours(0,0,0,0));
+                            const isDelayed = supplierOrders.some(o => {
+                                const now = new Date();
+                                if (o.expectedDeliveryDate) {
+                                    return new Date(o.expectedDeliveryDate).setHours(0,0,0,0) < now.setHours(0,0,0,0);
+                                }
+                                const orderDate = new Date(o.date);
+                                const daysDiff = Math.floor((now.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
+                                return daysDiff > 14;
+                            });
                             const supplierDeliveryDate = supplierOrders.map(o => o.expectedDeliveryDate).find(d => !!d);
                             
                             const supplierBgColor = hasDefect ? '#fff3e0' : isDelayed ? '#ffebee' : '#f8fafc';
