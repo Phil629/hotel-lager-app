@@ -35,7 +35,10 @@ const toSupabaseSupplier = (s: Supplier) => {
         ignore_order_proposals: s.ignoreOrderProposals,
         customer_number: s.customerNumber?.trim() || null,
         payment_method: s.paymentMethod?.trim() || null,
-        default_category: s.defaultCategory?.trim() || null
+        default_category: s.defaultCategory?.trim() || null,
+        email_subject_template: s.emailSubjectTemplate?.trim() || null,
+        email_body_template: s.emailBodyTemplate?.trim() || null,
+        documents: s.documents ? JSON.stringify(s.documents) : null
     };
     if (s.company_id !== undefined) payload.company_id = s.company_id;
     if (s.user_id !== undefined) payload.user_id = s.user_id;
@@ -69,32 +72,37 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     defaultCategory: s.default_category
 });
 
-const toSupabaseProduct = (p: Product) => ({
-    id: p.id,
-    name: p.name,
-    category: p.category,
-    stock: p.stock,
-    min_stock: p.minStock,
-    price: p.price,
-    product_number: p.productNumber,
-    standard_order_quantity: p.standardOrderQuantity,
-    ignore_order_proposals: p.ignoreOrderProposals,
-    unit: p.unit,
-    image: p.image,
-    auto_order: p.autoOrder,
-    supplier_id: p.supplierId,
-    email_order_address: p.emailOrderAddress,
-    email_order_subject: p.emailOrderSubject,
-    email_order_body: p.emailOrderBody,
-    order_url: p.orderUrl,
-    supplier_phone: p.supplierPhone,
-    notes: p.notes ? JSON.stringify(p.notes) : null,
-    preferred_order_method: p.preferredOrderMethod || null,
-    consumption_amount: p.consumptionAmount,
-    consumption_period: p.consumptionPeriod,
-    last_consumption_date: p.lastConsumptionDate,
-    last_counted_at: p.lastCountedAt
-});
+const toSupabaseProduct = (p: Product) => {
+    const payload: any = {
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        stock: p.stock,
+        min_stock: p.minStock,
+        price: p.price,
+        product_number: p.productNumber,
+        standard_order_quantity: p.standardOrderQuantity,
+        ignore_order_proposals: p.ignoreOrderProposals,
+        unit: p.unit,
+        image: p.image,
+        auto_order: p.autoOrder,
+        supplier_id: p.supplierId,
+        email_order_address: p.emailOrderAddress,
+        email_order_subject: p.emailOrderSubject,
+        email_order_body: p.emailOrderBody,
+        order_url: p.orderUrl,
+        supplier_phone: p.supplierPhone,
+        notes: p.notes ? JSON.stringify(p.notes) : null,
+        preferred_order_method: p.preferredOrderMethod || null,
+        consumption_amount: p.consumptionAmount,
+        consumption_period: p.consumptionPeriod,
+        last_consumption_date: p.lastConsumptionDate,
+        last_counted_at: p.lastCountedAt
+    };
+    if (p.company_id !== undefined) payload.company_id = p.company_id;
+    if (p.user_id !== undefined) payload.user_id = p.user_id;
+    return payload;
+};
 
 const fromSupabaseProduct = (p: any): Product => ({
     id: p.id,
