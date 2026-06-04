@@ -138,6 +138,11 @@ export const Products: React.FC = () => {
     const [stockUpdateProduct, setStockUpdateProduct] = useState<Product | null>(null);
     const [stockUpdateValue, setStockUpdateValue] = useState<number>(0);
 
+    // Quick Add Multiple Products
+    const [quickAddSupplierId, setQuickAddSupplierId] = useState<string | null>(null);
+    const [quickAddText, setQuickAddText] = useState('');
+    const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
+
     const [pendingIds, setPendingIds]   = useState<ReadonlySet<string>>(new Set());
     const [exitingIds, setExitingIds]   = useState<ReadonlySet<string>>(new Set());
     const exitTimers = useRef<Record<string, { phase1?: ReturnType<typeof setTimeout>; phase2?: ReturnType<typeof setTimeout> }>>({});
@@ -866,6 +871,20 @@ export const Products: React.FC = () => {
                                             <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><GroupIcon size={18} /></div>
                                             {groupName}
                                             <span className="badge badge-neutral">{groupProds.length} Produkte</span>
+                                            {groupBy === 'supplier' && groupKey !== 'unsorted' && (
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setQuickAddSupplierId(groupKey);
+                                                        setQuickAddText('');
+                                                        setIsQuickAddModalOpen(true);
+                                                    }}
+                                                    className="btn btn-primary"
+                                                    style={{ marginLeft: '12px', padding: '4px 10px', minHeight: 'auto', borderRadius: 'var(--radius-full)', fontSize: '12px', fontWeight: 700, gap: '4px' }}
+                                                >
+                                                    <Plus size={14} strokeWidth={3} /> Schnell Hinzufügen
+                                                </button>
+                                            )}
                                         </h2>
                                         <button style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer' }}>
                                             <ChevronDown style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', color: '#64748b' }} />
@@ -2358,6 +2377,77 @@ export const Products: React.FC = () => {
                     />
                 )
             }
+
+            {isQuickAddModalOpen && quickAddSupplierId && (
+                <div className="modal-overlay" onClick={() => setIsQuickAddModalOpen(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <h2>Mehrere Produkte anlegen</h2>
+                            <button onClick={() => setIsQuickAddModalOpen(false)} className="btn btn-ghost btn-icon">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="modal-body" style={{ padding: 'var(--spacing-xl)' }}>
+                            <div style={{ backgroundColor: '#f0f9ff', color: '#0369a1', padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)' }}>
+                                <strong>Tipp:</strong> Kopiere einfach die Produkte aus einer Rechnung oder E-Mail und füge sie hier ein (ein Produkt pro Zeile).
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Produktnamen (pro Zeile eins)</label>
+                                <textarea
+                                    value={quickAddText}
+                                    onChange={(e) => setQuickAddText(e.target.value)}
+                                    placeholder="Cola 0.5L&#10;Fanta 0.5L&#10;Sprite 0.5L"
+                                    rows={8}
+                                    className="input-field"
+                                    style={{ fontFamily: 'inherit' }}
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button onClick={() => setIsQuickAddModalOpen(false)} className="btn btn-ghost" disabled={isLoading}>Abbrechen</button>
+                            <button 
+                                onClick={async () => {
+                                    const lines = quickAddText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                                    if (lines.length === 0) return;
+                                    
+                                    setIsLoading(true);
+                                    const supplier = suppliers.find(s => s.id === quickAddSupplierId);
+                                    
+                                    try {
+                                        for (const name of lines) {
+                                            const newProd: Product = {
+                                                id: generateId(),
+                                                name: name,
+                                                category: supplier?.defaultCategory || 'Ohne Kategorie',
+                                                stock: 0,
+                                                price: 0,
+                                                minStock: 0,
+                                                unit: 'Stück',
+                                                supplierId: quickAddSupplierId,
+                                                autoOrder: false,
+                                                notes: []
+                                            };
+                                            await DataService.saveProduct(newProd);
+                                        }
+                                        await loadProducts();
+                                        setNotification({ message: `${lines.length} Produkte erfolgreich angelegt!`, type: 'success' });
+                                        setIsQuickAddModalOpen(false);
+                                    } catch (err) {
+                                        setNotification({ message: 'Fehler beim Anlegen der Produkte.', type: 'error' });
+                                    } finally {
+                                        setIsLoading(false);
+                                    }
+                                }}
+                                className="btn btn-primary"
+                                disabled={isLoading || quickAddText.trim().length === 0}
+                            >
+                                {isLoading ? 'Speichert...' : `${quickAddText.split('\n').map(l => l.trim()).filter(l => l.length > 0).length} Produkte anlegen`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };
