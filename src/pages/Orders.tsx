@@ -1706,7 +1706,8 @@ export const Orders: React.FC = () => {
                                         <option value="">Alle Kategorien</option>
                                         {Array.from(new Set(products.map(p => {
                                             const s = suppliers.find(sup => sup.id === p.supplierId);
-                                            return p.category || s?.defaultCategory;
+                                            const isPlaceholder = !p.category || p.category === 'Ohne Kategorie' || p.category === 'Sonstiges';
+                                            return (isPlaceholder ? s?.defaultCategory : p.category) || '';
                                         }).filter(Boolean))).map(cat => (
                                             <option key={cat} value={cat}>{cat}</option>
                                         ))}
@@ -1719,7 +1720,8 @@ export const Orders: React.FC = () => {
                                             const filteredProducts = products.filter(p => {
                                                 const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
                                                 const s = suppliers.find(sup => sup.id === p.supplierId);
-                                                const effectiveCategory = p.category || s?.defaultCategory || '';
+                                                const isPlaceholder = !p.category || p.category === 'Ohne Kategorie' || p.category === 'Sonstiges';
+                                                const effectiveCategory = isPlaceholder ? (s?.defaultCategory || '') : p.category;
                                                 const matchesCategory = filterCategory ? effectiveCategory === filterCategory : true;
                                                 return matchesSearch && matchesCategory;
                                             });

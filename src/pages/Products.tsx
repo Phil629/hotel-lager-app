@@ -661,7 +661,8 @@ export const Products: React.FC = () => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesLowStock = showLowStockOnly ? (Number(p.minStock) > 0 && Number(p.stock) <= Number(p.minStock)) : true;
         const s = suppliers.find(sup => sup.id === p.supplierId);
-        const effectiveCategory = p.category || s?.defaultCategory || 'Ohne Kategorie';
+        const isPlaceholder = !p.category || p.category === 'Ohne Kategorie' || p.category === 'Sonstiges';
+        const effectiveCategory = (isPlaceholder ? (s?.defaultCategory || 'Ohne Kategorie') : p.category) || 'Ohne Kategorie';
         const matchesCategory = selectedCategory === 'all' ? true : effectiveCategory === selectedCategory;
         return matchesSearch && matchesLowStock && matchesCategory;
     }).sort((a, b) => {
@@ -800,7 +801,8 @@ export const Products: React.FC = () => {
                     <option value="all">Alle Kategorien</option>
                     {Array.from(new Set(products.map(p => {
                         const s = suppliers.find(sup => sup.id === p.supplierId);
-                        return p.category || s?.defaultCategory || 'Ohne Kategorie';
+                        const isPlaceholder = !p.category || p.category === 'Ohne Kategorie' || p.category === 'Sonstiges';
+                        return (isPlaceholder ? (s?.defaultCategory || 'Ohne Kategorie') : p.category) || 'Ohne Kategorie';
                     }))).sort().map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                     ))}
@@ -847,7 +849,8 @@ export const Products: React.FC = () => {
                         {Array.from(new Set(filteredProducts.map(p => {
                             if (groupBy === 'supplier') return p.supplierId || 'unsorted';
                             const s = suppliers.find(sup => sup.id === p.supplierId);
-                            return p.category || s?.defaultCategory || 'Ohne Kategorie';
+                            const isPlaceholder = !p.category || p.category === 'Ohne Kategorie' || p.category === 'Sonstiges';
+                            return (isPlaceholder ? (s?.defaultCategory || 'Ohne Kategorie') : p.category) || 'Ohne Kategorie';
                         }))).sort((a, b) => {
                             if (groupBy === 'supplier') {
                                 const nameA = a === 'unsorted' ? 'ZZZ_Unkategorisiert' : (suppliers.find(s => s.id === a)?.name || 'ZZZ_Unkategorisiert');
@@ -862,7 +865,8 @@ export const Products: React.FC = () => {
                             const groupProds = filteredProducts.filter(p => {
                                 if (groupBy === 'supplier') return (p.supplierId || 'unsorted') === groupKey;
                                 const s = suppliers.find(sup => sup.id === p.supplierId);
-                                return (p.category || s?.defaultCategory || 'Ohne Kategorie') === groupKey;
+                                const isPlaceholder = !p.category || p.category === 'Ohne Kategorie' || p.category === 'Sonstiges';
+                                return ((isPlaceholder ? (s?.defaultCategory || 'Ohne Kategorie') : p.category) || 'Ohne Kategorie') === groupKey;
                             });
                             const groupName = groupBy === 'supplier' 
                                 ? (groupKey === 'unsorted' ? 'Ohne Lieferant (Unkategorisiert)' : (suppliers.find(s => s.id === groupKey)?.name || "Ohne Lieferant (Unkategorisiert)"))
