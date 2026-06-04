@@ -457,8 +457,8 @@ export const Products: React.FC = () => {
         const mainProduct = cart[0].product;
         const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
         
-        let subject = supplier?.emailSubjectTemplate || mainProduct.emailOrderSubject || `Bestellung: {product_name}`;
-        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie:\n{PRODUKTE}\n\nMit freundlichen Grüßen\nEinkauf`;
+        let subject = mainProduct.emailOrderSubject || supplier?.emailSubjectTemplate || `Bestellung: {product_name}`;
+        let body = mainProduct.emailOrderBody || supplier?.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie:\n{PRODUKTE}\n\nMit freundlichen Grüßen\nEinkauf`;
 
         const listSubjectInfo = cart.length === 1 ? mainProduct.name : `${cart.length} Produkte`;
         subject = subject.replace(/{product_name}/g, listSubjectInfo);

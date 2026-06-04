@@ -28,6 +28,7 @@ export const Suppliers: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [overwriteProducts, setOverwriteProducts] = useState(false);
 
     useEffect(() => {
         const supabaseClient = getSupabaseClient();
@@ -116,6 +117,7 @@ export const Suppliers: React.FC = () => {
             setEditingSupplier(null);
             setFormData({ name: '', contactName: '', email: '', phone: '', url: '', notes: [], documents: [], preferredOrderMethod: 'email' });
             setSelectedProductIds([]);
+            setOverwriteProducts(false);
         }
         setIsModalOpen(true);
     };
@@ -196,6 +198,22 @@ export const Suppliers: React.FC = () => {
                  await Promise.all(productUpdates);
             }
 
+            // Overwrite existing product templates if checkbox is checked
+            if (overwriteProducts) {
+                const supplierProducts = products.filter(p => p.supplierId === targetSupplierId);
+                const overwriteUpdates = supplierProducts.map(p => {
+                    return DataService.updateProduct({
+                        ...p,
+                        emailOrderAddress: undefined,
+                        emailOrderSubject: undefined,
+                        emailOrderBody: undefined,
+                    });
+                });
+                if (overwriteUpdates.length > 0) {
+                    await Promise.all(overwriteUpdates);
+                }
+            }
+
             setNotification({
                 message: editingSupplier ? 'Lieferant aktualisiert!' : 'Lieferant erstellt!',
                 type: 'success'
@@ -220,30 +238,6 @@ export const Suppliers: React.FC = () => {
         } catch (error) {
             console.error(error);
             setNotification({ message: 'Fehler beim Löschen.', type: 'error' });
-        }
-    };
-
-    const handleApplyEmailToAllProducts = async () => {
-        if (!editingSupplier) return;
-        setIsSubmitting(true);
-        try {
-            const supplierProducts = products.filter(p => p.supplierId === editingSupplier.id);
-            const updates = supplierProducts.map(p => {
-                return DataService.updateProduct({
-                    ...p,
-                    emailOrderAddress: formData.orderEmail || formData.email,
-                    emailOrderSubject: formData.emailSubjectTemplate,
-                    emailOrderBody: formData.emailBodyTemplate,
-                });
-            });
-            await Promise.all(updates);
-            setNotification({ message: 'E-Mail-Vorlage für alle zugewiesenen Produkte übernommen!', type: 'success' });
-            await loadData();
-        } catch (error) {
-            console.error(error);
-            setNotification({ message: 'Fehler beim Übernehmen der E-Mail-Vorlage.', type: 'error' });
-        } finally {
-            setIsSubmitting(false);
         }
     };
 
@@ -471,15 +465,6 @@ export const Suppliers: React.FC = () => {
                                     <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
                                             <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>E-Mail Bestellung - Vorlage</p>
-                                            {editingSupplier && (
-                                                <button 
-                                                    type="button" 
-                                                    onClick={handleApplyEmailToAllProducts}
-                                                    className="btn btn-primary btn-sm"
-                                                >
-                                                    Für alle Produkte übernehmen
-                                                </button>
-                                            )}
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                                             <div className="form-group">
@@ -501,6 +486,22 @@ export const Suppliers: React.FC = () => {
                                                 />
                                                 <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>Tipp: Nutze den Platzhalter <strong style={{color: 'var(--color-primary)'}}>&#123;PRODUKTE&#125;</strong> in deinem Text, damit die Artikel aus dem Warenkorb automatisch dort eingefügt werden.</p>
                                             </div>
+                                            {editingSupplier && (
+                                                <div className="form-group" style={{ marginTop: 'var(--spacing-sm)' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)', cursor: 'pointer' }}>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={overwriteProducts} 
+                                                            onChange={e => setOverwriteProducts(e.target.checked)} 
+                                                            style={{ width: '16px', height: '16px' }} 
+                                                        />
+                                                        Diese Vorlage auch bei bestehenden Produkten anwenden (überschreibt individuelle Produkt-Vorlagen)
+                                                    </label>
+                                                    <p style={{ margin: '4px 0 0 24px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                                                        Hinweis: Diese Vorlage gilt automatisch als Standard für alle künftigen Produkte.
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}

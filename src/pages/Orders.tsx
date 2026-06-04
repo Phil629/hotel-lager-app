@@ -293,8 +293,8 @@ export const Orders: React.FC = () => {
         const mainProduct = cart[0].product;
         const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
         
-        let subject = supplier?.emailSubjectTemplate || mainProduct.emailOrderSubject || `Bestellung: {product_name}`;
-        let body = supplier?.emailBodyTemplate || mainProduct.emailOrderBody || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nEinkauf`;
+        let subject = mainProduct.emailOrderSubject || supplier?.emailSubjectTemplate || `Bestellung: {product_name}`;
+        let body = mainProduct.emailOrderBody || supplier?.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nEinkauf`;
 
         const productList = cart.map(c => `- ${c.quantity}x ${c.product.name}${c.product.unit ? ' (' + c.product.unit + ')' : ''}`).join('\n');
 
