@@ -299,7 +299,6 @@ export const Orders: React.FC = () => {
         const productList = cart.map(c => `- ${c.quantity}x ${c.product.name}${c.product.unit ? ' (' + c.product.unit + ')' : ''}`).join('\n');
 
         if (cart.length === 1) {
-            const listBodyInfo = `${cart[0].quantity}x ${mainProduct.name} (${mainProduct.unit || ''})`;
             subject = subject.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
             body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '').replace(/{PRODUKTE}/g, `- ${cart[0].quantity}x ${mainProduct.name} (${mainProduct.unit || ''})`);
         } else {
