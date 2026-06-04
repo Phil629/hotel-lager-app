@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 
 interface ProtectedRouteProps {
@@ -16,8 +16,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     requiredRole,
     userRole,
 }) => {
+    const location = useLocation();
+
     if (!session) {
-        return <Navigate to="/auth" replace />;
+        return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
     }
 
     if (requiredRole && userRole !== requiredRole) {

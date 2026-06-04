@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { Layout } from './components/Layout';
 import { Products } from './pages/Products';
@@ -16,6 +16,12 @@ import { UpdatePassword } from './pages/UpdatePassword';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { supabase } from './services/supabase';
 import { StorageService } from './services/storage';
+
+const AuthRedirect = () => {
+  const location = useLocation();
+  const from = location.state?.from || '/products';
+  return <Navigate to={from} replace />;
+};
 
 function App() {
   useLayoutEffect(() => {
@@ -146,42 +152,44 @@ function App() {
 
   return (
     <Router>
-      {!session ? (
-        <Routes>
-          <Route path="/auth" element={<Auth onAuthSuccess={() => {}} />} />
-          <Route path="*" element={<Navigate to="/auth" replace />} />
-        </Routes>
-      ) : needsSetup ? (
-        <Routes>
-          <Route path="/setup" element={<Setup onSetupComplete={() => setNeedsSetup(false)} />} />
-          <Route path="*" element={<Navigate to="/setup" replace />} />
-        </Routes>
-      ) : (
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Navigate to="/products" replace />} />
-            <Route path="/products"   element={<ProtectedRoute session={session}><Products /></ProtectedRoute>} />
-            <Route path="/orders"     element={<ProtectedRoute session={session}><Orders /></ProtectedRoute>} />
-            <Route path="/suppliers"  element={<ProtectedRoute session={session}><Suppliers /></ProtectedRoute>} />
-            <Route path="/inventory"  element={<ProtectedRoute session={session}><Inventory /></ProtectedRoute>} />
-            <Route path="/pricing"     element={<ProtectedRoute session={session}><Pricing /></ProtectedRoute>} />
-            <Route path="/consumption" element={<ProtectedRoute session={session}><Consumption /></ProtectedRoute>} />
-            <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
-            {/* K2: Admin-Route nur für phdehos@gmail.com */}
-            <Route path="/admin" element={
-              session?.user?.email?.toLowerCase() === 'phdehos@gmail.com' ? (
-                <ProtectedRoute session={session}>
-                  <Admin />
-                </ProtectedRoute>
-              ) : (
-                <Navigate to="/products" replace />
-              )
-            } />
-            <Route path="/settings"   element={<ProtectedRoute session={session}><Settings /></ProtectedRoute>} />
-            <Route path="*" element={<Navigate to="/products" replace />} />
-          </Routes>
-        </Layout>
-      )}
+      <Routes>
+        {/* Public Route */}
+        <Route path="/auth" element={!session ? <Auth onAuthSuccess={() => {}} /> : <AuthRedirect />} />
+        
+        {/* Setup Route */}
+        <Route path="/setup" element={session && needsSetup ? <Setup onSetupComplete={() => setNeedsSetup(false)} /> : <Navigate to="/products" replace />} />
+        
+        {/* Protected App Routes */}
+        <Route path="/*" element={
+          <ProtectedRoute session={session}>
+            {needsSetup ? (
+              <Navigate to="/setup" replace />
+            ) : (
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<Navigate to="/products" replace />} />
+                  <Route path="/products"   element={<Products />} />
+                  <Route path="/orders"     element={<Orders />} />
+                  <Route path="/suppliers"  element={<Suppliers />} />
+                  <Route path="/inventory"  element={<Inventory />} />
+                  <Route path="/pricing"    element={<Pricing />} />
+                  <Route path="/consumption" element={<Consumption />} />
+                  <Route path="/statistics" element={<Navigate to="/pricing" replace />} />
+                  <Route path="/admin" element={
+                    session?.user?.email?.toLowerCase() === 'phdehos@gmail.com' ? (
+                      <Admin />
+                    ) : (
+                      <Navigate to="/products" replace />
+                    )
+                  } />
+                  <Route path="/settings"   element={<Settings />} />
+                  <Route path="*" element={<Navigate to="/products" replace />} />
+                </Routes>
+              </Layout>
+            )}
+          </ProtectedRoute>
+        } />
+      </Routes>
     </Router>
   );
 }
