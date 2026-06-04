@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle, AlertTriangle, X, Info } from 'lucide-react';
+import { CheckCircle, AlertTriangle, X, Info, Copy } from 'lucide-react';
 
 export type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
@@ -24,19 +24,33 @@ export const Notification: React.FC<NotificationProps> = ({
     onClose,
 }) => {
     const [isExiting, setIsExiting] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const dismiss = () => {
         setIsExiting(true);
         setTimeout(onClose, 280);
     };
 
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(message);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+        }
+    };
+
     useEffect(() => {
+        // Errors do not auto-dismiss
+        if (type === 'error') return;
+        
         const t = setTimeout(() => {
             setIsExiting(true);
             setTimeout(onClose, 280);
         }, duration);
         return () => clearTimeout(t);
-    }, [duration, onClose]);
+    }, [duration, onClose, type]);
 
     const { icon: Icon, accent, bg, color, label } = CONFIG[type];
 
@@ -96,14 +110,26 @@ export const Notification: React.FC<NotificationProps> = ({
                 </div>
             </div>
 
-            {/* Close button */}
-            <button
-                onClick={dismiss}
-                className="toast-close"
-                style={{ marginRight: '4px', marginTop: '2px' }}
-            >
-                <X size={15} />
-            </button>
+            {/* Close & Copy buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginRight: '4px', marginTop: '2px' }}>
+                <button
+                    onClick={dismiss}
+                    className="toast-close"
+                    title="Schließen"
+                >
+                    <X size={15} />
+                </button>
+                {type === 'error' && (
+                    <button
+                        onClick={handleCopy}
+                        className="toast-close"
+                        title="Fehler kopieren"
+                        style={{ color: copied ? 'var(--color-success)' : 'inherit' }}
+                    >
+                        {copied ? <CheckCircle size={15} /> : <Copy size={15} />}
+                    </button>
+                )}
+            </div>
         </div>
     );
 };

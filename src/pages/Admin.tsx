@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Users, Ticket, CheckCircle, ShieldAlert, Ban, TrendingUp, UserCheck, AlertTriangle } from 'lucide-react';
+import { Users, Ticket, CheckCircle, ShieldAlert, Ban, TrendingUp, UserCheck, AlertTriangle, Bug } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
+
+interface ErrorLog {
+    id: string;
+    company_id: string | null;
+    user_id: string | null;
+    message: string;
+    context: any;
+    created_at: string;
+}
 
 interface AdminProfile {
     id: string;
@@ -31,9 +40,10 @@ interface ConfirmState {
 }
 
 export const Admin = () => {
-    const [activeTab, setActiveTab] = useState<'users' | 'tickets'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'tickets' | 'errors'>('users');
     const [profiles, setProfiles] = useState<AdminProfile[]>([]);
     const [tickets, setTickets] = useState<SupportTicket[]>([]);
+    const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [notification, setNotification] = useState<{ message: string; type: NotificationType } | null>(null);
     const [mrr, setMrr] = useState(0);
@@ -66,6 +76,10 @@ export const Admin = () => {
                 });
                 setMrr(totalMrr);
                 setProfiles(merged);
+            } else if (activeTab === 'errors') {
+                const { data, error } = await supabase.from('error_logs').select('*').order('created_at', { ascending: false }).limit(50);
+                if (error) throw error;
+                setErrorLogs(data || []);
             } else {
                 const { data, error } = await supabase.from('support_tickets').select('*').order('created_at', { ascending: false });
                 if (error) throw error;
@@ -227,6 +241,13 @@ export const Admin = () => {
                     <Ticket size={18} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                     Support-Anfragen
                 </button>
+                <button
+                    onClick={() => setActiveTab('errors')}
+                    style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none', backgroundColor: activeTab === 'errors' ? '#be123c' : 'var(--color-surface)', color: activeTab === 'errors' ? 'white' : 'var(--color-text-main)', fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-xs)' }}
+                >
+                    <Bug size={18} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
+                    Letzte Fehlermeldungen
+                </button>
             </div>
 
             {loading ? (
@@ -296,6 +317,33 @@ export const Admin = () => {
                     {profiles.length === 0 && (
                         <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>
                             Keine Profile gefunden. Prüfe die Datenbankverbindung und deine Admin-Rolle.
+                        </div>
+                    )}
+                </div>
+            ) : activeTab === 'errors' ? (
+                <div className="card" style={{ padding: 'var(--spacing-lg)' }}>
+                    {errorLogs.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>Keine Fehlermeldungen vorhanden.</div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                            {errorLogs.map(log => (
+                                <div key={log.id} style={{ border: '1px solid var(--color-danger)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                                    <div style={{ padding: '12px 16px', backgroundColor: 'var(--color-danger-bg)', borderBottom: '1px solid var(--color-danger)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <strong style={{ color: 'var(--color-danger)' }}>{new Date(log.created_at).toLocaleString('de-DE')}</strong>
+                                        {log.company_id && (
+                                            <span style={{ fontSize: '11px', backgroundColor: 'white', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-danger)' }}>
+                                                Company: {log.company_id}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ padding: '16px', color: 'var(--color-text-main)' }}>
+                                        <div style={{ fontWeight: 600, marginBottom: '8px' }}>{log.message}</div>
+                                        <pre style={{ margin: 0, padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-sm)', fontSize: '12px', overflowX: 'auto', border: '1px solid var(--color-border)' }}>
+                                            {JSON.stringify(log.context, null, 2)}
+                                        </pre>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>

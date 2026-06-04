@@ -347,7 +347,6 @@ export const DataService = {
             loginPassword: data.login_password,
         };
     },
-
     async saveSupplierCredentials(supplierId: string, credentials: { loginUrl?: string; loginUsername?: string; loginPassword?: string }): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;
@@ -358,6 +357,27 @@ export const DataService = {
             p_password: credentials.loginPassword || null,
         });
         if (error) throw error;
+    },
+
+    async logError(message: string, context?: any): Promise<void> {
+        try {
+            const supabase = getSupabaseClient();
+            if (!supabase) return;
+            const { data: { user } } = await supabase.auth.getUser();
+            let companyId = null;
+            if (user) {
+                const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
+                companyId = profile?.company_id;
+            }
+            supabase.from('error_logs').insert({
+                message,
+                context: context || {},
+                user_id: user?.id || null,
+                company_id: companyId
+            }).then(); // fire and forget
+        } catch (e) {
+            console.error('Failed to log error:', e);
+        }
     },
 
     getCompanySettings: async () => {
