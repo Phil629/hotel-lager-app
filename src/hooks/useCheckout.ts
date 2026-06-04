@@ -154,7 +154,7 @@ export function useCheckout({
             errorMessage:      (row.error_message as string) ?? null,
           })
 
-          if ['ready', 'error', 'expired'].includes(row.status as string) {
+          if (['ready', 'error', 'expired'].includes(row.status as string)) {
             setIsActive(false)
           }
         }
