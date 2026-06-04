@@ -884,6 +884,8 @@ export const Products: React.FC = () => {
                                             <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><GroupIcon size={18} /></div>
                                             {groupName}
                                             <span className="badge badge-neutral">{groupProds.length} Produkte</span>
+                                        </h2>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                             {groupBy === 'supplier' && groupKey !== 'unsorted' && (
                                                 <button 
                                                     onClick={(e) => {
@@ -892,16 +894,18 @@ export const Products: React.FC = () => {
                                                         setQuickAddText('');
                                                         setIsQuickAddModalOpen(true);
                                                     }}
-                                                    className="btn btn-primary"
-                                                    style={{ marginLeft: '12px', padding: '4px 10px', minHeight: 'auto', borderRadius: 'var(--radius-full)', fontSize: '12px', fontWeight: 700, gap: '4px' }}
+                                                    className="btn btn-ghost"
+                                                    style={{ padding: '6px 12px', minHeight: 'auto', borderRadius: 'var(--radius-full)', fontSize: '13px', fontWeight: 600, gap: '6px', border: '1px solid var(--color-border)', color: 'var(--color-text-main)', backgroundColor: 'var(--color-surface)' }}
+                                                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'var(--color-surface)'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}
                                                 >
-                                                    <Plus size={14} strokeWidth={3} /> Schnell Hinzufügen
+                                                    <Plus size={14} strokeWidth={2.5} /> Schnell hinzufügen
                                                 </button>
                                             )}
-                                        </h2>
-                                        <button style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer' }}>
-                                            <ChevronDown style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', color: '#64748b' }} />
-                                        </button>
+                                            <button style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer', padding: 0 }}>
+                                                <ChevronDown style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', color: '#64748b' }} />
+                                            </button>
+                                        </div>
                                     </div>
                                     
                                     {isExpanded && (
@@ -2394,30 +2398,37 @@ export const Products: React.FC = () => {
             {isQuickAddModalOpen && quickAddSupplierId && (
                 <div className="modal-overlay" onClick={() => setIsQuickAddModalOpen(false)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-                        <div className="modal-header">
-                            <h2>Mehrere Produkte anlegen</h2>
-                            <button onClick={() => setIsQuickAddModalOpen(false)} className="btn btn-ghost btn-icon">
+                        <div className="modal-header" style={{ padding: '24px 24px 16px 24px', borderBottom: '1px solid var(--color-border)' }}>
+                            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Plus size={22} color="var(--color-primary)" />
+                                Mehrere Produkte anlegen
+                            </h2>
+                            <button onClick={() => setIsQuickAddModalOpen(false)} className="btn btn-ghost btn-icon" style={{ padding: '8px' }}>
                                 <X size={20} />
                             </button>
                         </div>
-                        <div className="modal-body" style={{ padding: 'var(--spacing-xl)' }}>
-                            <div style={{ backgroundColor: '#f0f9ff', color: '#0369a1', padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)' }}>
-                                <strong>Tipp:</strong> Kopiere einfach die Produkte aus einer Rechnung oder E-Mail und füge sie hier ein (ein Produkt pro Zeile).
+                        <div className="modal-body" style={{ padding: '24px', backgroundColor: '#f8fafc' }}>
+                            <div style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '16px', borderRadius: 'var(--radius-lg)', marginBottom: '24px', fontSize: '14px', border: '1px solid #bfdbfe', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                                <div style={{ marginTop: '2px' }}><Plus size={18} /></div>
+                                <div>
+                                    <strong style={{ display: 'block', marginBottom: '4px' }}>Tipp für schnelles Anlegen:</strong> 
+                                    Kopiere einfach die Produkte aus einer Rechnung, PDF oder E-Mail und füge sie hier ein (genau ein Produkt pro Zeile).
+                                </div>
                             </div>
-                            <div className="form-group">
-                                <label className="form-label">Produktnamen (pro Zeile eins)</label>
+                            <div className="form-group" style={{ margin: 0 }}>
+                                <label className="form-label" style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '8px' }}>Produktnamen eingeben:</label>
                                 <textarea
                                     value={quickAddText}
                                     onChange={(e) => setQuickAddText(e.target.value)}
                                     placeholder="Cola 0.5L&#10;Fanta 0.5L&#10;Sprite 0.5L"
                                     rows={8}
                                     className="input-field"
-                                    style={{ fontFamily: 'inherit' }}
+                                    style={{ fontFamily: 'inherit', padding: '16px', fontSize: '15px', lineHeight: '1.6', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--color-surface)', border: '1px solid #cbd5e1', boxShadow: 'inset 0 2px 4px 0 rgb(0 0 0 / 0.02)', resize: 'vertical' }}
                                     autoFocus
                                 />
                             </div>
                         </div>
-                        <div className="modal-footer">
+                        <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
                             <button onClick={() => setIsQuickAddModalOpen(false)} className="btn btn-ghost" disabled={isLoading}>Abbrechen</button>
                             <button 
                                 onClick={async () => {
