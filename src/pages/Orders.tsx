@@ -112,8 +112,10 @@ export const Orders: React.FC = () => {
     const [defectModalOrder, setDefectModalOrder] = useState<Order | null>(null);
     const [defectModalOrderOptions, setDefectModalOrderOptions] = useState<Order[] | null>(null);
     const [defectNotes, setDefectNotes] = useState('');
+    const [modalDefectResolved, setModalDefectResolved] = useState(false);
     const [defectAdjustStock, setDefectAdjustStock] = useState(false);
     const [defectUsableQty, setDefectUsableQty] = useState<number | ''>('');
+    const [resolveDefectPromptOrder, setResolveDefectPromptOrder] = useState<Order | null>(null);
     const [deliveryDateModalOrder, setDeliveryDateModalOrder] = useState<Order | null>(null);
     const [deliveryDateModalOrders, setDeliveryDateModalOrders] = useState<Order[] | null>(null);
     const [deliveryDate, setDeliveryDate] = useState('');
@@ -416,11 +418,15 @@ export const Orders: React.FC = () => {
         }
     };
 
-    const toggleOrderStatus = async (id: string) => {
+    const toggleOrderStatus = async (id: string, bypassDefectPrompt = false) => {
         const order = orders.find(o => o.id === id);
         if (!order) return;
         try {
             if (order.status === 'open') {
+                if (order.hasDefect && !order.defectResolved && !bypassDefectPrompt) {
+                    setResolveDefectPromptOrder(order);
+                    return;
+                }
                 // mark_order_received: atomically sets status + received_at + updates product stock
                 await DataService.markOrderReceived(id);
             } else {
@@ -467,14 +473,17 @@ export const Orders: React.FC = () => {
             setDefectModalOrderOptions(target);
             setDefectModalOrder({ id: 'ALL', productName: 'Alle Produkte der Lieferung', quantity: 0 } as any);
             setDefectNotes('');
+            setModalDefectResolved(false);
         } else if (Array.isArray(target) && target.length === 1) {
             setDefectModalOrderOptions(null);
             setDefectModalOrder(target[0]);
             setDefectNotes(target[0].defectNotes || '');
+            setModalDefectResolved(target[0].defectResolved || false);
         } else if (!Array.isArray(target)) {
             setDefectModalOrderOptions(null);
             setDefectModalOrder(target);
             setDefectNotes(target.defectNotes || '');
+            setModalDefectResolved(target.defectResolved || false);
         }
     };
 
@@ -498,6 +507,7 @@ export const Orders: React.FC = () => {
                     await DataService.updateOrder({
                         ...order,
                         hasDefect: true,
+                        defectResolved: modalDefectResolved,
                         defectNotes: defectNotes.trim(),
                         defectReportedAt: new Date().toISOString(),
                     });
@@ -511,6 +521,7 @@ export const Orders: React.FC = () => {
                 await DataService.updateOrder({
                     ...defectModalOrder,
                     hasDefect: true,
+                    defectResolved: modalDefectResolved,
                     defectNotes: defectNotes.trim(),
                     defectReportedAt: new Date().toISOString(),
                     ...statusPatch,
@@ -1182,7 +1193,17 @@ export const Orders: React.FC = () => {
 
                                 {!order.defectResolved && (
                                     <>
-                                        <div style={{ marginTop: '8px' }}>{order.defectNotes}</div>
+                                        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <div style={{ whiteSpace: 'pre-wrap' }}>{order.defectNotes}</div>
+                                            <button 
+                                                onClick={() => openDefectModal(order)}
+                                                className="btn btn-ghost"
+                                                style={{ padding: '4px 8px', height: 'auto', minHeight: 'auto', color: '#64748b' }}
+                                                title="Mangel bearbeiten"
+                                            >
+                                                <Edit2 size={14} />
+                                            </button>
+                                        </div>
                                         {order.defectReportedAt && (
                                             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '4px' }}>
                                                 Gemeldet am: {new Date(order.defectReportedAt).toLocaleDateString('de-DE')}
@@ -1385,7 +1406,7 @@ export const Orders: React.FC = () => {
                         </button>
                     )}
 
-                    <button onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary">
+                    <button onClick={() => { setIsCreateModalOpen(true); setFilterCategory(''); setSearchTerm(''); }} className="btn btn-primary">
                         <Plus size={18} /> Neue Bestellung
                     </button>
 
@@ -1634,7 +1655,7 @@ export const Orders: React.FC = () => {
                     <div className="modal-box" style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
                         <div className="modal-header">
                             <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Neue Bestellung</h3>
-                            <button onClick={() => setIsCreateModalOpen(false)} className="btn btn-ghost btn-icon">
+                            <button onClick={() => { setIsCreateModalOpen(false); setFilterCategory(''); setSearchTerm(''); }} className="btn btn-ghost btn-icon">
                                 <X size={20} />
                             </button>
                         </div>
@@ -2413,7 +2434,7 @@ export const Orders: React.FC = () => {
                         )}
                         </div>{/* modal-body */}
                         <div className="modal-footer">
-                            <button onClick={() => setIsCreateModalOpen(false)} className="btn btn-ghost">Abbrechen</button>
+                            <button onClick={() => { setIsCreateModalOpen(false); setFilterCategory(''); setSearchTerm(''); }} className="btn btn-ghost">Abbrechen</button>
                             <button onClick={handleCreateOrder} className="btn btn-primary">Bestellung anlegen</button>
                         </div>
                     </div>
@@ -2533,6 +2554,15 @@ export const Orders: React.FC = () => {
                                         resize: 'vertical'
                                     }}
                                 />
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 'var(--spacing-sm)', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={modalDefectResolved}
+                                        onChange={e => setModalDefectResolved(e.target.checked)}
+                                        style={{ width: '16px', height: '16px' }}
+                                    />
+                                    <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mangel ist erledigt</span>
+                                </label>
                             </div>
                             {/* Stock adjustment section — hidden for "ALL" grouped orders */}
                             {defectModalOrder.id !== 'ALL' && (() => {
@@ -2835,32 +2865,52 @@ export const Orders: React.FC = () => {
                                                 <AlertTriangle size={16} />
                                                 Dieser Bestellung ist ein Mangel zugeordnet.
                                             </div>
-                                            <button
-                                                onClick={() => {
-                                                    setEditingOrder({
-                                                        ...editingOrder,
-                                                        hasDefect: false,
-                                                        defectNotes: null as unknown as string,
-                                                        defectReportedAt: null as unknown as string,
-                                                        defectResolved: null as unknown as boolean
-                                                    });
-                                                }}
-                                                style={{
-                                                    padding: '6px 12px',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid currentColor',
-                                                    backgroundColor: 'transparent',
-                                                    color: '#d32f2f',
-                                                    cursor: 'pointer',
-                                                    fontSize: 'var(--font-size-sm)',
-                                                    fontWeight: 500,
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '4px'
-                                                }}
-                                            >
-                                                <X size={14} /> Mangel entfernen
-                                            </button>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button
+                                                    onClick={() => openDefectModal(editingOrder)}
+                                                    style={{
+                                                        padding: '6px 12px',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        border: '1px solid currentColor',
+                                                        backgroundColor: 'transparent',
+                                                        color: '#1976d2',
+                                                        cursor: 'pointer',
+                                                        fontSize: 'var(--font-size-sm)',
+                                                        fontWeight: 500,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px'
+                                                    }}
+                                                >
+                                                    <Edit2 size={14} /> Bearbeiten
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingOrder({
+                                                            ...editingOrder,
+                                                            hasDefect: false,
+                                                            defectNotes: null as unknown as string,
+                                                            defectReportedAt: null as unknown as string,
+                                                            defectResolved: null as unknown as boolean
+                                                        });
+                                                    }}
+                                                    style={{
+                                                        padding: '6px 12px',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        border: '1px solid currentColor',
+                                                        backgroundColor: 'transparent',
+                                                        color: '#d32f2f',
+                                                        cursor: 'pointer',
+                                                        fontSize: 'var(--font-size-sm)',
+                                                        fontWeight: 500,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px'
+                                                    }}
+                                                >
+                                                    <X size={14} /> Mangel entfernen
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -2961,8 +3011,52 @@ export const Orders: React.FC = () => {
             }
 
             {
+                resolveDefectPromptOrder && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: 'var(--spacing-md)' }}>
+                        <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' }}>
+                            <div style={{ padding: 'var(--spacing-lg) var(--spacing-xl)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderTopLeftRadius: 'var(--radius-xl)', borderTopRightRadius: 'var(--radius-xl)' }}>
+                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', color: '#ff9800' }}>
+                                    <AlertTriangle size={20} />
+                                    Unbearbeiteter Mangel
+                                </h3>
+                                <button onClick={() => setResolveDefectPromptOrder(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={20} color="#64748b" /></button>
+                            </div>
+                            <div style={{ padding: 'var(--spacing-xl)' }}>
+                                <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)', lineHeight: 1.5 }}>
+                                    Die Bestellung für <strong>{resolveDefectPromptOrder.productName}</strong> hat einen gemeldeten Mangel, der noch nicht als erledigt markiert wurde.
+                                </p>
+                                <p style={{ margin: '0 0 var(--spacing-lg) 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                                    Möchten Sie den Mangel ansehen und ggf. den Lagerbestand anpassen, bevor Sie die Lieferung abschließen?
+                                </p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <button
+                                        onClick={() => {
+                                            openDefectModal(resolveDefectPromptOrder);
+                                            setResolveDefectPromptOrder(null);
+                                        }}
+                                        className="btn btn-warning"
+                                        style={{ width: '100%', justifyContent: 'center' }}
+                                    >
+                                        Mangel ansehen & bearbeiten
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            toggleOrderStatus(resolveDefectPromptOrder.id, true);
+                                            setResolveDefectPromptOrder(null);
+                                        }}
+                                        className="btn btn-ghost"
+                                        style={{ width: '100%', justifyContent: 'center', color: '#64748b' }}
+                                    >
+                                        Ignorieren & trotzdem als erhalten markieren
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
 
-
+            {
                 isProposalModalOpen && (
                     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: 'var(--spacing-md)' }}>
                         <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' }}>

@@ -884,10 +884,21 @@ export const Products: React.FC = () => {
                                         onClick={() => toggleSupplier(groupKey)}
                                         style={{ padding: '16px 24px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTopLeftRadius: 'calc(var(--radius-xl) - 1px)', borderTopRightRadius: 'calc(var(--radius-xl) - 1px)' }}
                                     >
-                                        <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700 }}>
+                                        <h2 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700, flexWrap: 'wrap' }}>
                                             <div style={{ backgroundColor: '#e2e8f0', padding: '6px', borderRadius: '8px', display: 'flex' }}><GroupIcon size={18} /></div>
                                             {groupName}
                                             <span className="badge badge-neutral">{groupProds.length} Produkte</span>
+                                            {groupBy === 'supplier' && (() => {
+                                                const s = suppliers.find(sup => sup.id === groupKey);
+                                                if (s?.notes) {
+                                                    return (s.notes.filter(n => n.showOnOpenOrders) || []).map(n => (
+                                                        <div key={n.id} style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', fontWeight: 600 }}>
+                                                            {n.text}
+                                                        </div>
+                                                    ));
+                                                }
+                                                return null;
+                                            })()}
                                         </h2>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                             {groupBy === 'supplier' && groupKey !== 'unsorted' && (
@@ -1059,6 +1070,7 @@ export const Products: React.FC = () => {
                                                                         </div>
                                                                         
                                                                         {(() => {
+                                                                            if (groupBy === 'supplier') return null;
                                                                             const _supp = suppliers.find(s => s.id === product.supplierId);
                                                                             if (_supp?.notes) {
                                                                                 return (_supp.notes.filter(n => n.showOnOpenOrders) || []).map(n => (
