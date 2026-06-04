@@ -114,10 +114,21 @@ export const Products: React.FC = () => {
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [groupBy, setGroupBy] = useState<'supplier' | 'category'>('supplier');
-    const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>({});
+    const [expandedSuppliers, setExpandedSuppliers] = useState<Record<string, boolean>>(() => {
+        try {
+            const saved = localStorage.getItem('products_expandedSuppliers');
+            if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return {};
+    });
     const [expandedProductsLimit, setExpandedProductsLimit] = useState<Record<string, boolean>>({});
-    // O5: war `prev[id] === false ? true : false` — undefined !== false führte zu falschem Init-Wert
-    const toggleSupplier = (id: string) => setExpandedSuppliers(prev => ({ ...prev, [id]: !prev[id] }));
+    
+    const toggleSupplier = (id: string) => setExpandedSuppliers(prev => {
+        const isCurrentlyExpanded = prev[id] !== false; // default is true
+        const next = { ...prev, [id]: !isCurrentlyExpanded };
+        localStorage.setItem('products_expandedSuppliers', JSON.stringify(next));
+        return next;
+    });
     const toggleProductLimit = (id: string) => setExpandedProductsLimit(prev => ({...prev, [id]: !prev[id]}));
 
 
@@ -126,6 +137,10 @@ export const Products: React.FC = () => {
     const [isStockUpdateModalOpen, setIsStockUpdateModalOpen] = useState(false);
     const [stockUpdateProduct, setStockUpdateProduct] = useState<Product | null>(null);
     const [stockUpdateValue, setStockUpdateValue] = useState<number>(0);
+
+    const [pendingIds, setPendingIds]   = useState<ReadonlySet<string>>(new Set());
+    const [exitingIds, setExitingIds]   = useState<ReadonlySet<string>>(new Set());
+    const exitTimers = useRef<Record<string, { phase1?: ReturnType<typeof setTimeout>; phase2?: ReturnType<typeof setTimeout> }>>({});
 
     const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'stock' | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
     const [searchParams] = useSearchParams();
@@ -157,6 +172,10 @@ export const Products: React.FC = () => {
         return () => {
             window.removeEventListener('resize', handleResize);
             if (rtDebounce.current) clearTimeout(rtDebounce.current);
+            Object.values(exitTimers.current).forEach(t => {
+                if (t.phase1) clearTimeout(t.phase1);
+                if (t.phase2) clearTimeout(t.phase2);
+            });
             if (channel && supabaseClient) {
                 supabaseClient.removeChannel(channel);
             }
@@ -292,6 +311,34 @@ export const Products: React.FC = () => {
             // deduct for the time between the last deduction and this manual correction.
             lastConsumptionDate: product.consumptionAmount ? new Date().toISOString() : product.lastConsumptionDate,
         };
+
+        const isNowLowStock = Number(updatedProduct.minStock) > 0 && newStock <= Number(updatedProduct.minStock);
+        
+        if (showLowStockOnly) {
+            if (!isNowLowStock) {
+                if (!pendingIds.has(product.id) && !exitingIds.has(product.id)) {
+                    setPendingIds(prev => new Set([...prev, product.id]));
+                    const phase1 = setTimeout(() => {
+                        setPendingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+                        setExitingIds(prev => new Set([...prev, product.id]));
+                        const phase2 = setTimeout(() => {
+                            setExitingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+                            delete exitTimers.current[product.id];
+                        }, 750);
+                        exitTimers.current[product.id] = { ...exitTimers.current[product.id], phase2 };
+                    }, 2500);
+                    exitTimers.current[product.id] = { phase1 };
+                }
+            } else {
+                const timers = exitTimers.current[product.id];
+                if (timers?.phase1) clearTimeout(timers.phase1);
+                if (timers?.phase2) clearTimeout(timers.phase2);
+                delete exitTimers.current[product.id];
+                setPendingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+                setExitingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+            }
+        }
+
         setProducts(products.map(p => p.id === product.id ? updatedProduct : p));
         await DataService.updateProduct(updatedProduct);
     };
@@ -605,6 +652,7 @@ export const Products: React.FC = () => {
     };
 
     const filteredProducts = useMemo(() => products.filter(p => {
+        if (pendingIds.has(p.id) || exitingIds.has(p.id)) return true;
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesLowStock = showLowStockOnly ? (Number(p.minStock) > 0 && Number(p.stock) <= Number(p.minStock)) : true;
         const matchesCategory = selectedCategory === 'all' ? true : (p.category || 'Ohne Kategorie') === selectedCategory;
@@ -625,7 +673,7 @@ export const Products: React.FC = () => {
         }
 
         return 0;
-    }), [products, searchTerm, showLowStockOnly, sortConfig]);
+    }), [products, searchTerm, showLowStockOnly, selectedCategory, sortConfig, pendingIds, exitingIds]);
 
     const totalValue = useMemo(
         () => products.reduce((sum, p) => sum + (p.stock * (p.price || 0)), 0),
@@ -829,7 +877,7 @@ export const Products: React.FC = () => {
                                             {isMobile ? (
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', padding: '16px', backgroundColor: 'var(--color-background)' }}>
                                                     {visibleProds.map(product => (
-                                                        <div key={product.id} style={{
+                                                        <div key={product.id} className={`${exitingIds.has(product.id) ? 'row-exiting' : ''} ${pendingIds.has(product.id) ? 'row-pending' : ''}`} style={{
                                                             backgroundColor: 'var(--color-surface-elevated)',
                                                             borderRadius: 'var(--radius-xl)',
                                                             padding: 'var(--spacing-lg)',
@@ -954,7 +1002,7 @@ export const Products: React.FC = () => {
                                                             const openOrder = orders.find(o => o.productName === product.name && o.status === 'open');
                                                             const isLowStock = Number(product.minStock) > 0 && Number(product.stock) <= Number(product.minStock);
                                                             return (
-                                                                <tr key={product.id} className={isLowStock && !openOrder ? 'row-low-stock' : ''}>
+                                                                <tr key={product.id} className={`${isLowStock && !openOrder ? 'row-low-stock' : ''} ${exitingIds.has(product.id) ? 'row-exiting' : ''} ${pendingIds.has(product.id) ? 'row-pending' : ''}`}>
                                                                     <td>
                                                                         {product.image ? (
                                                                             <img src={product.image} alt={product.name} style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />

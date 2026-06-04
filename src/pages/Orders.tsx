@@ -4,11 +4,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ShoppingCart, Bot, Save, Settings, Truck } from 'lucide-react';
+import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ChevronRight, ShoppingCart, Bot, Save, Settings, Truck } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import { CheckoutButton } from '../components/CheckoutButton';
+
+const isLiveEnv = window.location.hostname === 'kunden.bestellwesen.com' || window.location.hostname === 'lager-hotel.netlify.app' || import.meta.env.VITE_SUPABASE_URL === 'https://owofhbbrywryehlnqmfj.supabase.co';
 
 // ── KI-Log ───────────────────────────────────────────────────────────────────
 
@@ -1615,7 +1617,7 @@ export const Orders: React.FC = () => {
             {/* Create Order Modal */}
             {isCreateModalOpen && (
                 <div className="modal-overlay">
-                    <div className="modal-box" style={{ maxWidth: '600px' }}>
+                    <div className="modal-box" style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
                         <div className="modal-header">
                             <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Neue Bestellung</h3>
                             <button onClick={() => setIsCreateModalOpen(false)} className="btn btn-ghost btn-icon">
@@ -1655,7 +1657,7 @@ export const Orders: React.FC = () => {
                             </button>
                         </div>
 
-                        <div className="modal-body">
+                        <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '20px' }}>
                         {createTab === 'existing' ? (
                             <>
                                 <div style={{ display: 'flex', gap: '8px', marginBottom: 'var(--spacing-md)' }}>
@@ -1695,7 +1697,7 @@ export const Orders: React.FC = () => {
                                 </div>
 
                                 {!selectedProduct ? (
-                                    <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+                                    <div style={{ flex: 1 }}>
                                         {(() => {
                                             const filteredProducts = products.filter(p => {
                                                 const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -1717,52 +1719,60 @@ export const Orders: React.FC = () => {
                                             return Object.entries(grouped).map(([supplierId, prods]) => {
                                                 const supplierName = supplierId === 'none' ? 'Sonstige / Ohne Lieferant' : (suppliers.find(s => s.id === supplierId)?.name || 'Unbekannter Lieferant');
                                                 const isExpanded = isSearchingOrFiltering || expandedSupplierGroups[supplierId];
-                                                const visibleProds = isExpanded ? prods : prods.slice(0, 2);
+                                                const visibleProds = isExpanded ? prods : prods.slice(0, 3);
                                                 const hiddenCount = prods.length - visibleProds.length;
 
                                                 return (
                                                     <div key={supplierId} style={{ marginBottom: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', backgroundColor: 'var(--color-surface)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                                                        <div style={{ padding: '10px 14px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: '8px', position: 'sticky', top: 0, zIndex: 1 }}>
-                                                            <Truck size={16} color="var(--color-text-muted)" />
-                                                            <strong style={{ fontSize: '14px', color: 'var(--color-text-main)' }}>{supplierName}</strong>
-                                                            <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--color-text-muted)', backgroundColor: 'var(--color-background)', padding: '2px 8px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>{prods.length} {prods.length === 1 ? 'Produkt' : 'Produkte'}</span>
+                                                        <div 
+                                                            onClick={() => setExpandedSupplierGroups(prev => ({ ...prev, [supplierId]: !prev[supplierId] }))}
+                                                            style={{ padding: '14px 18px', backgroundColor: isExpanded ? 'var(--color-surface-elevated)' : 'var(--color-surface)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: '12px', position: 'sticky', top: 0, zIndex: 1, cursor: 'pointer', transition: 'background-color 0.2s' }}
+                                                            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--color-surface-elevated)'}
+                                                            onMouseLeave={e => e.currentTarget.style.backgroundColor = isExpanded ? 'var(--color-surface-elevated)' : 'var(--color-surface)'}
+                                                        >
+                                                            {isExpanded ? <ChevronDown size={18} color="var(--color-text-muted)" /> : <ChevronRight size={18} color="var(--color-text-muted)" />}
+                                                            <Truck size={20} color={isExpanded ? "var(--color-primary)" : "var(--color-text-muted)"} />
+                                                            <strong style={{ fontSize: '16px', color: 'var(--color-text-main)' }}>{supplierName}</strong>
+                                                            <span style={{ marginLeft: 'auto', fontSize: '13px', fontWeight: 500, color: 'var(--color-text-muted)', backgroundColor: 'var(--color-background)', padding: '4px 10px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>{prods.length} {prods.length === 1 ? 'Produkt' : 'Produkte'}</span>
                                                         </div>
+                                                        
                                                         <div style={{ padding: '0' }}>
                                                             {visibleProds.map(product => (
                                                                 <div
                                                                     key={product.id}
                                                                     onClick={() => handleProductSelect(product)}
                                                                     style={{
-                                                                        padding: '12px 14px',
+                                                                        padding: '14px 18px',
                                                                         borderBottom: '1px solid var(--color-border)',
                                                                         cursor: 'pointer',
                                                                         display: 'flex',
                                                                         alignItems: 'center',
-                                                                        gap: '12px',
+                                                                        gap: '14px',
                                                                         transition: 'background-color 0.2s'
                                                                     }}
                                                                     onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
                                                                     onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                                                                 >
                                                                     {product.image ? (
-                                                                        <img src={product.image} alt="" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--color-border)' }} />
+                                                                        <img src={product.image} alt="" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--color-border)' }} />
                                                                     ) : (
-                                                                        <div style={{ width: '40px', height: '40px', backgroundColor: '#f1f5f9', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--color-border)' }}>
-                                                                            <Package size={20} color="#94a3b8" />
+                                                                        <div style={{ width: '48px', height: '48px', backgroundColor: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--color-border)' }}>
+                                                                            <Package size={24} color="#94a3b8" />
                                                                         </div>
                                                                     )}
                                                                     <div>
-                                                                        <div style={{ fontWeight: 600, color: 'var(--color-text-main)', fontSize: '14px' }}>{product.name}</div>
-                                                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>Bestand: {product.stock} {product.unit}</div>
+                                                                        <div style={{ fontWeight: 600, color: 'var(--color-text-main)', fontSize: '15px' }}>{product.name}</div>
+                                                                        <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '4px' }}>Bestand: {product.stock} {product.unit}</div>
                                                                     </div>
                                                                     <div style={{ marginLeft: 'auto' }}>
-                                                                        <button type="button" className="btn btn-sm btn-ghost" style={{ padding: '6px', color: 'var(--color-primary)' }}>
-                                                                            <Plus size={16} />
+                                                                        <button type="button" className="btn btn-sm btn-ghost" style={{ padding: '8px 12px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                            <Plus size={16} /> Wählen
                                                                         </button>
                                                                     </div>
                                                                 </div>
                                                             ))}
                                                         </div>
+                                                        
                                                         {!isExpanded && hiddenCount > 0 && (
                                                             <button 
                                                                 type="button" 
@@ -1967,7 +1977,7 @@ export const Orders: React.FC = () => {
 
                                         {/* Order Methods Wrapper */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
-                                            {selectedProduct.supplierId && (
+                                            {!isLiveEnv && selectedProduct.supplierId && (
                                                 <div style={{
                                                     backgroundColor: 'rgba(37, 99, 235, 0.05)',
                                                     padding: 'var(--spacing-md)',
@@ -3002,7 +3012,8 @@ export const Orders: React.FC = () => {
                                                         <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--color-text-main)' }}>{supplierName}</h3>
                                                         {supplierName !== 'Kein Lieferant' && (
                                                             <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
-                                                                <CheckoutButton
+                                                                {!isLiveEnv && (
+                                                                    <CheckoutButton
                                                                     supplierId={supplierProposals[0].supplierId}
                                                                     supplierName={supplierName}
                                                                     items={supplierProposals.map(p => ({
@@ -3018,6 +3029,7 @@ export const Orders: React.FC = () => {
                                                                         console.log('Warenkorb übergeben:', url);
                                                                     }}
                                                                 />
+                                                                )}
                                                                 <button 
                                                                     onClick={async () => {
                                                                         const supplierToIgnore = suppliers.find(s => s.name === supplierName);
