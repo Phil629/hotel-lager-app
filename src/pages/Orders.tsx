@@ -502,6 +502,8 @@ export const Orders: React.FC = () => {
             const usableQty = doAdjust ? Number(defectUsableQty) : 0;
             const isOpen = defectModalOrder.status === 'open';
 
+            const reportedAt = defectModalOrder.defectReportedAt || new Date().toISOString();
+
             if (defectModalOrder.id === 'ALL' && defectModalOrderOptions) {
                 for (const order of defectModalOrderOptions) {
                     await DataService.updateOrder({
@@ -509,7 +511,7 @@ export const Orders: React.FC = () => {
                         hasDefect: true,
                         defectResolved: modalDefectResolved,
                         defectNotes: defectNotes.trim(),
-                        defectReportedAt: new Date().toISOString(),
+                        defectReportedAt: order.defectReportedAt || reportedAt,
                     });
                 }
             } else {
@@ -518,14 +520,19 @@ export const Orders: React.FC = () => {
                 const statusPatch = (doAdjust && isOpen)
                     ? { status: 'received' as const, receivedAt: new Date().toISOString() }
                     : {};
-                await DataService.updateOrder({
+                const updatedDefectOrder = {
                     ...defectModalOrder,
                     hasDefect: true,
                     defectResolved: modalDefectResolved,
                     defectNotes: defectNotes.trim(),
-                    defectReportedAt: new Date().toISOString(),
+                    defectReportedAt: reportedAt,
                     ...statusPatch,
-                });
+                };
+                await DataService.updateOrder(updatedDefectOrder);
+                
+                if (editingOrder && editingOrder.id === defectModalOrder.id) {
+                    setEditingOrder({ ...editingOrder, ...updatedDefectOrder });
+                }
             }
 
             if (doAdjust) {
