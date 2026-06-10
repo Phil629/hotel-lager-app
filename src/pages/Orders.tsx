@@ -363,13 +363,27 @@ export const Orders: React.FC = () => {
         else handleProductSelect(val);
     };
 
+    const getButtonText = () => {
+        if (createTab !== 'existing' || orderCart.length === 0) return 'Bestellung anlegen';
+        const method = getEffectiveOrderMethod(orderCart[0].product);
+        switch (method) {
+            case 'email': return 'Bestellen & E-Mail öffnen';
+            case 'link': 
+            case 'webshop': return 'Bestellen & Webshop öffnen';
+            case 'phone': return 'Bestellen & Anrufen';
+            default: return 'Bestellung anlegen';
+        }
+    };
+
     const handleCreateOrder = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         try {
             if (createTab === 'existing') {
                 if (orderCart.length === 0) return;
                 
-                // 2. Save Orders
+                const savedOrders: Order[] = [];
+                
+                // 1. Bestellungen wie gewohnt in der DB speichern
                 for (const item of orderCart) {
                     const newOrder: Order = {
                         id: generateId(),
@@ -383,7 +397,34 @@ export const Orders: React.FC = () => {
                         notes: orderNotes
                     };
                     await DataService.saveOrder(newOrder);
+                    savedOrders.push(newOrder);
                 }
+
+                // 2. Smart After-Submit Actions basierend auf der Methode
+                const firstProduct = orderCart[0].product;
+                const method = getEffectiveOrderMethod(firstProduct);
+                const supplier = suppliers.find(s => s.id === firstProduct.supplierId);
+
+                if (method === 'email' || !method) {
+                    const { subject: emailSubject, body: emailBody } = generateEmailTemplate(orderCart);
+                    const emailAddress = firstProduct.emailOrderAddress || supplier?.email || '';
+                    const mailtoLink = `mailto:${emailAddress}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+                    window.open(mailtoLink, '_self');
+                    setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
+                } 
+                else if (method === 'link' || method === 'webshop') {
+                    const listText = orderCart.map(item => `${item.quantity}x ${item.product.name} ${item.product.productNumber ? `(Art. ${item.product.productNumber})` : ''}`).join('\n');
+                    navigator.clipboard.writeText(listText).catch(err => console.error("Clipboard Error:", err));
+                    const shopUrl = supplier?.orderUrl || ''; 
+                    if (shopUrl) window.open(shopUrl, '_blank');
+                    
+                    setNotification({ message: 'Liste kopiert & Webshop geöffnet', type: 'success' });
+                } 
+                else if (method === 'phone') {
+                    setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
+                    setPhoneCallPanelData({ order: savedOrders[0], mode: 'order' });
+                }
+
             } else {
                 // One-time Order
                 if (!oneTimeOrder.name) {
@@ -404,9 +445,10 @@ export const Orders: React.FC = () => {
                     notes: oneTimeOrder.notes
                 };
                 await DataService.saveOrder(newOrder);
+                setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
             }
 
-            setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
+            // 3. Modal schließen & State resetten
             setIsCreateModalOpen(false);
             setOrderCart([]);
             setOrderNotes('');
@@ -2442,7 +2484,7 @@ export const Orders: React.FC = () => {
                         </div>{/* modal-body */}
                         <div className="modal-footer">
                             <button onClick={() => { setIsCreateModalOpen(false); setFilterCategory(''); setSearchTerm(''); }} className="btn btn-ghost">Abbrechen</button>
-                            <button onClick={handleCreateOrder} className="btn btn-primary">Bestellung anlegen</button>
+                            <button onClick={handleCreateOrder} className="btn btn-primary">{getButtonText()}</button>
                         </div>
                     </div>
                 </div>
