@@ -166,7 +166,7 @@ export const Orders: React.FC = () => {
     const [showKiLogModal, setShowKiLogModal] = useState(false);
     const [selectedKiLog, setSelectedKiLog] = useState<InboundEmail | null>(null);
 
-    const [phoneCallPanelData, setPhoneCallPanelData] = useState<{ order: Order; mode: 'order' | 'defect' } | null>(null);
+    const [phoneCallPanelData, setPhoneCallPanelData] = useState<{ order: Order; mode: 'order' | 'defect'; cartItems?: { product: Product; quantity: number }[]; supplier?: Supplier | null } | null>(null);
     const [phoneCallProposalData, setPhoneCallProposalData] = useState<{ product: Product, quantity: number } | null>(null);
 
     const getSupplierForOrder = (order: Order) => {
@@ -320,7 +320,7 @@ export const Orders: React.FC = () => {
     const handleProductSelect = (product: Product) => {
         const initialCart = [{ product, quantity: product.standardOrderQuantity || 1 }];
         setOrderCart(initialCart);
-        setIsOrderEmailExpanded(getEffectiveOrderMethod(product) === 'email');
+        setIsOrderEmailExpanded(false);
 
         const { subject, body } = generateEmailTemplate(initialCart);
         setEmailSubject(subject);
@@ -368,10 +368,22 @@ export const Orders: React.FC = () => {
         const method = getEffectiveOrderMethod(orderCart[0].product);
         switch (method) {
             case 'email': return 'Bestellen & E-Mail öffnen';
-            case 'link': 
+            case 'link':
             case 'webshop': return 'Bestellen & Webshop öffnen';
             case 'phone': return 'Bestellen & Anrufen';
             default: return 'Bestellung anlegen';
+        }
+    };
+
+    const getMethodHint = (): string | null => {
+        if (createTab !== 'existing' || orderCart.length === 0) return null;
+        const method = getEffectiveOrderMethod(orderCart[0].product);
+        switch (method) {
+            case 'email': return 'Dein Mail-Client öffnet sich mit dem fertigen Bestelltext.';
+            case 'link':
+            case 'webshop': return 'Einkaufsliste wird kopiert & Webshop öffnet sich automatisch.';
+            case 'phone': return 'Nach dem Speichern erscheint dein Gesprächszettel.';
+            default: return null;
         }
     };
 
@@ -406,23 +418,21 @@ export const Orders: React.FC = () => {
                 const supplier = suppliers.find(s => s.id === firstProduct.supplierId);
 
                 if (method === 'email' || !method) {
-                    const { subject: emailSubject, body: emailBody } = generateEmailTemplate(orderCart);
                     const emailAddress = firstProduct.emailOrderAddress || supplier?.email || '';
                     const mailtoLink = `mailto:${emailAddress}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
                     window.open(mailtoLink, '_self');
                     setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
-                } 
+                }
                 else if (method === 'link' || method === 'webshop') {
-                    const listText = orderCart.map(item => `${item.quantity}x ${item.product.name} ${item.product.productNumber ? `(Art. ${item.product.productNumber})` : ''}`).join('\n');
+                    const listText = orderCart.map(item => `${item.quantity}x ${item.product.name}${item.product.productNumber ? ` (Art. ${item.product.productNumber})` : ''}`).join('\n');
                     navigator.clipboard.writeText(listText).catch(err => console.error("Clipboard Error:", err));
-                    const shopUrl = supplier?.orderUrl || ''; 
+                    const shopUrl = supplier?.orderUrl || '';
                     if (shopUrl) window.open(shopUrl, '_blank');
-                    
                     setNotification({ message: 'Liste kopiert & Webshop geöffnet', type: 'success' });
-                } 
+                }
                 else if (method === 'phone') {
                     setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
-                    setPhoneCallPanelData({ order: savedOrders[0], mode: 'order' });
+                    setPhoneCallPanelData({ order: savedOrders[0], mode: 'order', cartItems: orderCart, supplier });
                 }
 
             } else {
@@ -2108,94 +2118,10 @@ export const Orders: React.FC = () => {
                                                 </div>
                                             )}
 
-                                            {(selectedProduct.supplierPhone || (suppliers.find(s => s.id === selectedProduct.supplierId)?.phone)) && (
-                                                <div style={{
-                                                    backgroundColor: getEffectiveOrderMethod(selectedProduct) === 'phone' ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
-                                                    padding: 'var(--spacing-md)',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    border: getEffectiveOrderMethod(selectedProduct) === 'phone' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                    order: getEffectiveOrderMethod(selectedProduct) === 'phone' ? -1 : 0
-                                                }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                                                        Telefonische Bestellung:
-                                                        {getEffectiveOrderMethod(selectedProduct) === 'phone' && (
-                                                            <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
-                                                        )}
-                                                    </label>
-                                                    <div
-                                                        style={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            gap: 'var(--spacing-sm)',
-                                                            padding: 'var(--spacing-sm)',
-                                                            borderRadius: 'var(--radius-sm)',
-                                                            border: '1px solid var(--color-border)',
-                                                            backgroundColor: 'var(--color-surface)',
-                                                            color: 'var(--color-text-main)',
-                                                            fontWeight: 500
-                                                        }}>
-                                                            <div
-                                                                style={{
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '6px',
-                                                                    fontWeight: 500
-                                                                }}
-                                                            >
-                                                                <Phone size={16} color="var(--color-primary)" />
-                                                                {selectedProduct.supplierPhone || suppliers.find(s => s.id === selectedProduct.supplierId)?.phone}
-                                                                {suppliers.find(s => s.id === selectedProduct.supplierId)?.customerNumber && (
-                                                                    <span style={{ marginLeft: '12px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-                                                                        KdNr: <strong style={{ color: 'var(--color-text-main)' }}>{suppliers.find(s => s.id === selectedProduct.supplierId)?.customerNumber}</strong>
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {(selectedProduct.orderUrl || suppliers.find(s => s.id === selectedProduct.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProduct.supplierId)?.url || suppliers.find(s => s.id === selectedProduct.supplierId)?.loginUrl) && (
-                                                <div style={{
-                                                    backgroundColor: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? 'rgba(37, 99, 235, 0.05)' : 'var(--color-background)',
-                                                    padding: 'var(--spacing-md)',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    border: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                    order: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? -1 : 0
-                                                }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                                                        Bestelllink:
-                                                        {(getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') && (
-                                                            <span style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '10px' }}>STANDARD</span>
-                                                        )}
-                                                    </label>
-                                                    <a
-                                                        href={selectedProduct.orderUrl || suppliers.find(s => s.id === selectedProduct.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProduct.supplierId)?.url || suppliers.find(s => s.id === selectedProduct.supplierId)?.loginUrl || ''}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        style={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            gap: 'var(--spacing-sm)',
-                                                            padding: 'var(--spacing-sm)',
-                                                            borderRadius: 'var(--radius-sm)',
-                                                            border: '1px solid var(--color-border)',
-                                                            backgroundColor: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? 'var(--color-primary)' : 'var(--color-surface)',
-                                                            color: (getEffectiveOrderMethod(selectedProduct) === 'link' || getEffectiveOrderMethod(selectedProduct) === 'webshop') ? 'white' : 'var(--color-text-main)',
-                                                            cursor: 'pointer',
-                                                            fontWeight: 500,
-                                                            textDecoration: 'none'
-                                                        }}
-                                                    >
-                                                        <ExternalLink size={16} />
-                                                        Zur Webseite
-                                                    </a>
-                                                </div>
-                                            )}
 
                                             {(selectedProduct.emailOrderAddress || suppliers.find(s => s.id === selectedProduct.supplierId)?.email) && !selectedProduct.autoOrder && (
                                                 <>
-                                                    {getEffectiveOrderMethod(selectedProduct) !== 'email' && !isOrderEmailExpanded ? (
+                                                    {!isOrderEmailExpanded ? (
                                                         <button
                                                             type="button"
                                                             onClick={() => setIsOrderEmailExpanded(true)}
@@ -2483,6 +2409,11 @@ export const Orders: React.FC = () => {
                         )}
                         </div>{/* modal-body */}
                         <div className="modal-footer">
+                            {getMethodHint() && (
+                                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginRight: 'auto' }}>
+                                    {getMethodHint()}
+                                </span>
+                            )}
                             <button onClick={() => { setIsCreateModalOpen(false); setFilterCategory(''); setSearchTerm(''); }} className="btn btn-ghost">Abbrechen</button>
                             <button onClick={handleCreateOrder} className="btn btn-primary">{getButtonText()}</button>
                         </div>
@@ -2495,9 +2426,13 @@ export const Orders: React.FC = () => {
                 <PhoneCallPanel
                     mode={phoneCallPanelData.mode}
                     order={phoneCallPanelData.order}
-                    supplier={getSupplierForOrder(phoneCallPanelData.order)}
+                    supplier={phoneCallPanelData.supplier ?? getSupplierForOrder(phoneCallPanelData.order)}
                     supplierPhone={phoneCallPanelData.order.supplierPhone}
                     supplierName={phoneCallPanelData.order.supplierName}
+                    lowStockProducts={phoneCallPanelData.cartItems?.map(c => ({
+                        product: c.product,
+                        suggestedQty: c.quantity,
+                    }))}
                     onClose={() => setPhoneCallPanelData(null)}
                 />
             )}
