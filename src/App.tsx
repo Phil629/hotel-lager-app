@@ -21,8 +21,19 @@ import { AppContext } from './contexts/AppContext';
 
 const AuthRedirect = () => {
   const location = useLocation();
-  const from = location.state?.from || '/products';
+  const from = location.state?.from || localStorage.getItem('lastRoute') || '/products';
   return <Navigate to={from} replace />;
+};
+
+const RouteTracker = () => {
+  const location = useLocation();
+  useEffect(() => {
+    const p = location.pathname;
+    if (p !== '/' && p !== '/auth' && p !== '/setup') {
+      localStorage.setItem('lastRoute', p);
+    }
+  }, [location]);
+  return null;
 };
 
 function App() {
@@ -185,6 +196,7 @@ function App() {
   return (
     <AppContext.Provider value={appContextValue}>
       <Router>
+        <RouteTracker />
         <Routes>
           {/* Public Route */}
           <Route path="/auth" element={!session ? <Auth onAuthSuccess={() => {}} /> : <AuthRedirect />} />
@@ -201,7 +213,7 @@ function App() {
                 <Layout>
                   <ErrorBoundary>
                     <Routes>
-                      <Route path="/" element={<Navigate to="/products" replace />} />
+                      <Route path="/" element={<Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
                       <Route path="/products"    element={<Products />} />
                       <Route path="/orders"      element={<Orders />} />
                       <Route path="/suppliers"   element={<Suppliers />} />
@@ -209,9 +221,9 @@ function App() {
                       <Route path="/pricing"     element={<Pricing />} />
                       <Route path="/consumption" element={<Consumption />} />
                       <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
-                      <Route path="/admin"       element={userRole === 'admin' ? <Admin /> : <Navigate to="/products" replace />} />
+                      <Route path="/admin"       element={userRole === 'admin' ? <Admin /> : <Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
                       <Route path="/settings"    element={<Settings />} />
-                      <Route path="*"            element={<Navigate to="/products" replace />} />
+                      <Route path="*"            element={<Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
                     </Routes>
                   </ErrorBoundary>
                 </Layout>
