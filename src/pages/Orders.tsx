@@ -1457,8 +1457,9 @@ export const Orders: React.FC = () => {
                                             <button
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
-                                                    for (const o of supplierOrders) { await toggleOrderStatus(o.id); }
-                                                    setNotification({ message: `Alle ${supplierOrders.length} Bestellungen von ${supplierName} als erhalten markiert.`, type: 'success' });
+                                                    // bypassDefectPrompt=true so defect orders aren't silently skipped
+                                                    for (const o of supplierOrders) { await toggleOrderStatus(o.id, true); }
+                                                    setNotification({ message: `${supplierOrders.length} Bestellung${supplierOrders.length !== 1 ? 'en' : ''} von ${supplierName} als erhalten markiert.`, type: 'success' });
                                                 }}
                                                 className="btn btn-sm btn-success"
                                             >
