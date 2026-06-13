@@ -26,18 +26,24 @@ export const useOrderData = () => {
   };
 
   const loadOrders = async () => {
-    const data = await DataService.getOrders();
-    setOrders(data);
+    try {
+      const data = await DataService.getOrders();
+      setOrders(data);
+    } catch (e) { console.error('loadOrders failed:', e); }
   };
 
   const loadProducts = async () => {
-    const data = await DataService.getProducts();
-    setProducts(data);
+    try {
+      const data = await DataService.getProducts();
+      setProducts(data);
+    } catch (e) { console.error('loadProducts failed:', e); }
   };
 
   const loadSuppliers = async () => {
-    const data = await DataService.getSuppliers();
-    setSuppliers(data);
+    try {
+      const data = await DataService.getSuppliers();
+      setSuppliers(data);
+    } catch (e) { console.error('loadSuppliers failed:', e); }
   };
 
   const loadInboundEmails = async () => {

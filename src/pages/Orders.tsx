@@ -175,6 +175,7 @@ export const Orders: React.FC = () => {
     const getSupplierForOrder = (order: Order) => {
         const product = products.find(p => p.name === order.productName);
         if (product?.supplierId) return suppliers.find(s => s.id === product.supplierId) ?? null;
+        if (!order.supplierName) return null;
         return suppliers.find(s => s.name === order.supplierName) ?? null;
     };
 

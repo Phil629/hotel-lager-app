@@ -154,8 +154,8 @@ export const Products: React.FC = () => {
     const debouncedReloadProducts = () => {
         if (rtDebounce.current) clearTimeout(rtDebounce.current);
         rtDebounce.current = setTimeout(() => {
-            DataService.getProducts().then(setProducts);
-            DataService.getOrders().then(setOrders);
+            DataService.getProducts().then(setProducts).catch(e => console.error('Realtime reload products failed:', e));
+            DataService.getOrders().then(setOrders).catch(e => console.error('Realtime reload orders failed:', e));
         }, 300);
     };
 
