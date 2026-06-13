@@ -1,14 +1,14 @@
-/* eslint-disable */
 import { generateId } from "../utils";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import type { Product, Order, Supplier } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
 import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ChevronRight, ShoppingCart, Bot, Save, Settings, Truck } from 'lucide-react';
-import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import { CheckoutButton } from '../components/CheckoutButton';
+import { useOrderData } from '../hooks/useOrderData';
+import { useCart } from '../hooks/useCart';
 
 const isLiveEnv = window.location.hostname === 'kunden.bestellwesen.com' || window.location.hostname === 'lager-hotel.netlify.app' || import.meta.env.VITE_SUPABASE_URL === 'https://owofhbbrywryehlnqmfj.supabase.co';
 
@@ -107,8 +107,26 @@ const KiLogDetail: React.FC<{ email: InboundEmail }> = ({ email }) => {
 };
 
 export const Orders: React.FC = () => {
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [products, setProducts] = useState<Product[]>([]);
+    const {
+        orders, setOrders,
+        products,
+        suppliers,
+        inboundEmails,
+        loadOrders, loadProducts, loadSuppliers,
+    } = useOrderData();
+
+    const cart = useCart(suppliers);
+    const {
+        orderCart,
+        emailSubject, emailBody,
+        isOrderEmailExpanded,
+        setEmailSubject, setEmailBody, setIsOrderEmailExpanded,
+        handleProductSelect, addToCart, updateCartQuantity, removeFromCart, clearCart,
+        generateEmailTemplate, getEffectiveOrderMethod,
+    } = cart;
+
+    const selectedProduct = orderCart.length > 0 ? orderCart[0].product : null;
+
     const [defectModalOrder, setDefectModalOrder] = useState<Order | null>(null);
     const [defectModalOrderOptions, setDefectModalOrderOptions] = useState<Order[] | null>(null);
     const [defectNotes, setDefectNotes] = useState('');
@@ -125,34 +143,20 @@ export const Orders: React.FC = () => {
     // Create Order Modal State
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [createTab, setCreateTab] = useState<'existing' | 'onetime'>('existing');
-    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [orderCart, setOrderCart] = useState<{product: Product, quantity: number}[]>([]);
     const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
     const [sessionGeneratedOrderIds, setSessionGeneratedOrderIds] = React.useState<string[]>([]);
     const [modalProposals, setModalProposals] = useState<{product: Product, supplierName: string, supplierId: string, quantity: number, openQty: number, selected: boolean}[]>([]);
     const [minStockEdits, setMinStockEdits] = useState<Record<string, number | ''>>({});
-    
-    // Derived state for legacy compatibility
-    const selectedProduct = orderCart.length > 0 ? orderCart[0].product : null;
 
-    
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
     const [orderNotes, setOrderNotes] = useState('');
-    const [emailSubject, setEmailSubject] = useState('');
-    const [emailBody, setEmailBody] = useState('');
-    const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
 
     const [isCreatingNewProduct, setIsCreatingNewProduct] = useState(false);
     const [newSupplierProduct, setNewSupplierProduct] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [expandedSupplierGroups, setExpandedSupplierGroups] = useState<Record<string, boolean>>({});
 
-    const getEffectiveOrderMethod = (product: Product) => {
-        if (product.preferredOrderMethod) return product.preferredOrderMethod;
-        const supplier = suppliers.find(s => s.id === product.supplierId);
-        return supplier?.preferredOrderMethod || 'email';
-    };
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
 
@@ -162,7 +166,6 @@ export const Orders: React.FC = () => {
     const [searchReceivedTerm, setSearchReceivedTerm] = useState('');
     const [expandedReceivedOrders, setExpandedReceivedOrders] = useState<Set<string>>(new Set());
 
-    const [inboundEmails, setInboundEmails] = useState<InboundEmail[]>([]);
     const [showKiLogModal, setShowKiLogModal] = useState(false);
     const [selectedKiLog, setSelectedKiLog] = useState<InboundEmail | null>(null);
 
@@ -176,23 +179,23 @@ export const Orders: React.FC = () => {
     };
 
     const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
-    const toggleSupplier = (supplierKey: string) => {
+    const toggleSupplier = useCallback((supplierKey: string) => {
         setExpandedSuppliers(prev => {
             const next = new Set(prev);
             if (next.has(supplierKey)) next.delete(supplierKey);
             else next.add(supplierKey);
             return next;
         });
-    };
+    }, []);
 
-    const toggleReceivedOrder = (id: string) => {
+    const toggleReceivedOrder = useCallback((id: string) => {
         setExpandedReceivedOrders(prev => {
             const next = new Set(prev);
             if (next.has(id)) next.delete(id);
             else next.add(id);
             return next;
         });
-    };
+    }, []);
 
     // One-time Order State
     const [oneTimeOrder, setOneTimeOrder] = useState<{
@@ -222,144 +225,9 @@ export const Orders: React.FC = () => {
     // Collapsible Details State
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-    const rtDebounce = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-    const debounced = (key: string, fn: () => void, ms = 300) => {
-        clearTimeout(rtDebounce.current[key]);
-        rtDebounce.current[key] = setTimeout(fn, ms);
-    };
-
-    useEffect(() => {
-        loadOrders();
-        loadProducts();
-        loadSuppliers();
-        loadInboundEmails();
-
-        const supabase = getSupabaseClient();
-        if (!supabase) return;
-
-        // W8: eindeutiger Channel-Name pro Tab verhindert Konflikte
-        const channelName = `orders_rt_${Math.random().toString(36).slice(2, 8)}`;
-        const channel = supabase.channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                debounced('orders', loadOrders);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-                debounced('products', loadProducts);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => {
-                debounced('suppliers', loadSuppliers);
-            })
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inbound_emails' }, () => {
-                debounced('inbound_emails', loadInboundEmails);
-            })
-            .subscribe();
-
-        return () => {
-            Object.values(rtDebounce.current).forEach(clearTimeout);
-            supabase.removeChannel(channel);
-        };
-    }, []);
-
-    async function loadOrders() {
-        const data = await DataService.getOrders();
-        setOrders(data);
-    };
-
-    async function loadProducts() {
-        const data = await DataService.getProducts();
-        setProducts(data);
-    };
-
-    async function loadSuppliers() {
-        const data = await DataService.getSuppliers();
-        setSuppliers(data);
-    };
-
-    async function loadInboundEmails() {
-        const supabase = getSupabaseClient();
-        if (!supabase) return;
-        const { data, error } = await supabase
-            .from('inbound_emails')
-            .select('id, supplier_name, subject, body_text, extracted_data, status, created_at')
-            .order('created_at', { ascending: false })
-            .limit(50);
-        if (error) {
-            console.error('Error loading inbound emails:', error);
-        }
-        if (data) setInboundEmails(data as InboundEmail[]);
-    };
-
-    
-    const generateEmailTemplate = (cart: {product: Product, quantity: number}[]) => {
-        if (cart.length === 0) return { subject: '', body: '' };
-        const mainProduct = cart[0].product;
-        const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
-        
-        let subject = mainProduct.emailOrderSubject || supplier?.emailSubjectTemplate || `Bestellung: {product_name}`;
-        let body = mainProduct.emailOrderBody || supplier?.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie {quantity}x {product_name} ({unit}).\n\nMit freundlichen Grüßen\nEinkauf`;
-
-        const productList = cart.map(c => `- ${c.quantity}x ${c.product.name}`).join('\n');
-
-        if (cart.length === 1) {
-            subject = subject.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
-            body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '').replace(/{PRODUKTE}/g, `- ${cart[0].quantity}x ${mainProduct.name}`);
-        } else {
-            const listSubjectInfo = cart.length + " Produkte";
-            const listBodyInfo = '\n' + cart.map(c => `- ${c.quantity}x ${c.product.name}`).join('\n');
-
-            subject = subject.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listSubjectInfo);
-            body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, listBodyInfo).replace(/{PRODUKTE}/g, listBodyInfo);
-        }
-
-        subject = subject.replace(/\{PRODUKTE\}/g, productList);
-        body = body.replace(/\{PRODUKTE\}/g, productList);
-
-        return { subject, body };
-    };
-
-    const handleProductSelect = (product: Product) => {
-        const initialCart = [{ product, quantity: product.standardOrderQuantity || 1 }];
-        setOrderCart(initialCart);
-        setIsOrderEmailExpanded(getEffectiveOrderMethod(product) === 'email');
-
-        const { subject, body } = generateEmailTemplate(initialCart);
-        setEmailSubject(subject);
-        setEmailBody(body);
-    };
-
-    const addToCart = (product: Product) => {
-        setOrderCart(prev => {
-            const newCart = [...prev, { product, quantity: product.standardOrderQuantity || 1 }];
-            const { subject, body } = generateEmailTemplate(newCart);
-            setEmailSubject(subject);
-            setEmailBody(body);
-            return newCart;
-        });
-    };
-
-    const updateCartQuantity = (index: number, quantity: number) => {
-        setOrderCart(prev => {
-            const newCart = prev.map((c, i) => i === index ? { ...c, quantity } : c);
-            const { subject, body } = generateEmailTemplate(newCart);
-            setEmailSubject(subject);
-            setEmailBody(body);
-            return newCart;
-        });
-    };
-
-    const removeFromCart = (index: number) => {
-        setOrderCart(prev => {
-            const newCart = prev.filter((_, i) => i !== index);
-            const { subject, body } = generateEmailTemplate(newCart);
-            setEmailSubject(subject);
-            setEmailBody(body);
-            return newCart;
-        });
-    };
-    
     // setSelectedProduct compatibility wrapper for resetting modal
     const setSelectedProduct = (val: Product | null) => {
-        if (val === null) setOrderCart([]);
+        if (val === null) clearCart();
         else handleProductSelect(val);
     };
 
@@ -408,7 +276,7 @@ export const Orders: React.FC = () => {
 
             setNotification({ message: 'Bestellung erfolgreich erstellt!', type: 'success' });
             setIsCreateModalOpen(false);
-            setOrderCart([]);
+            clearCart();
             setOrderNotes('');
             setOneTimeOrder({ name: '', quantity: 1, supplierName: '', supplierId: '', orderNumber: '', price: '', supplierEmail: '', supplierPhone: '', notes: '', orderUrl: '' });
             loadOrders();
@@ -1662,7 +1530,7 @@ export const Orders: React.FC = () => {
                     <div className="modal-box" style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
                         <div className="modal-header">
                             <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Neue Bestellung</h3>
-                            <button onClick={() => { setIsCreateModalOpen(false); setFilterCategory(''); setSearchTerm(''); }} className="btn btn-ghost btn-icon">
+                            <button onClick={() => { setIsCreateModalOpen(false); clearCart(); setFilterCategory(''); setSearchTerm(''); }} className="btn btn-ghost btn-icon">
                                 <X size={20} />
                             </button>
                         </div>

@@ -7,6 +7,7 @@ import { getSupabaseClient } from '../services/supabase';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 import type { AppSettings } from '../types';
+import { useAppContext } from '../contexts/AppContext';
 
 interface ConfirmState {
     message: string;
@@ -22,6 +23,7 @@ const SectionCard = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const Settings: React.FC = () => {
+    const { currentPlan: serverPlan } = useAppContext();
     const [activeTab, setActiveTab] = useState<'general' | 'team' | 'data'>('general');
     const [companySettings, setCompanySettings] = useState({ staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false });
     const [settings, setSettings] = useState<AppSettings>({
@@ -350,7 +352,7 @@ export const Settings: React.FC = () => {
                             <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Ihre Features sind basierend auf diesem Plan freigeschaltet. Wenden Sie sich an den Support, um Ihren Plan zu ändern.</span>
                         </div>
                         <div style={{ backgroundColor: 'var(--color-primary)', color: 'white', padding: '6px 12px', borderRadius: 'var(--radius-full)', fontWeight: 600, fontSize: '14px', textTransform: 'uppercase' }}>
-                            {settings.currentPlan || 'BASIC'}
+                            {(serverPlan || settings.currentPlan || 'BASIC').toUpperCase()}
                         </div>
                     </div>
                     
@@ -540,13 +542,13 @@ export const Settings: React.FC = () => {
                             <SettingsIcon size={22} color="var(--color-primary)" /> Funktionen & Tarife
                         </h3>
                         <div style={{ backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '6px 12px', borderRadius: '20px', fontWeight: 600, fontSize: '14px', border: '1px solid var(--color-border)' }}>
-                            Aktiver Plan: {settings.currentPlan?.toUpperCase() || 'PRO'}
+                            Aktiver Plan: {(serverPlan || settings.currentPlan || 'pro').toUpperCase()}
                         </div>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-lg)' }}>
                         {/* Basic Plan */}
-                        <div style={{ padding: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', opacity: settings.currentPlan === 'basic' ? 1 : 0.6 }}>
+                        <div style={{ padding: 'var(--spacing-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', opacity: (serverPlan || settings.currentPlan) === 'basic' ? 1 : 0.6 }}>
                             <div style={{ fontWeight: 700, fontSize: '18px', marginBottom: '8px' }}>Basic</div>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-success)" /> Bestellwesen manuell</li>
@@ -554,7 +556,7 @@ export const Settings: React.FC = () => {
                             </ul>
                         </div>
                         {/* Standard Plan */}
-                        <div style={{ padding: 'var(--spacing-md)', border: '1px solid', borderColor: settings.currentPlan === 'standard' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: 'var(--radius-md)', opacity: settings.currentPlan === 'basic' ? 0.4 : (settings.currentPlan === 'standard' ? 1 : 0.6) }}>
+                        <div style={{ padding: 'var(--spacing-md)', border: '1px solid', borderColor: (serverPlan || settings.currentPlan) === 'standard' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: 'var(--radius-md)', opacity: (serverPlan || settings.currentPlan) === 'basic' ? 0.4 : ((serverPlan || settings.currentPlan) === 'standard' ? 1 : 0.6) }}>
                             <div style={{ fontWeight: 700, fontSize: '18px', marginBottom: '8px' }}>Standard</div>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-success)" /> Basic Funktionen</li>
@@ -564,7 +566,7 @@ export const Settings: React.FC = () => {
                             </ul>
                         </div>
                         {/* Pro Plan */}
-                        <div style={{ padding: 'var(--spacing-md)', border: '2px solid', borderColor: settings.currentPlan === 'pro' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: 'var(--radius-md)', opacity: settings.currentPlan === 'pro' ? 1 : 0.4, backgroundColor: settings.currentPlan === 'pro' ? 'var(--color-surface-elevated)' : 'transparent' }}>
+                        <div style={{ padding: 'var(--spacing-md)', border: '2px solid', borderColor: (serverPlan || settings.currentPlan) === 'pro' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: 'var(--radius-md)', opacity: (serverPlan || settings.currentPlan) === 'pro' ? 1 : 0.4, backgroundColor: (serverPlan || settings.currentPlan) === 'pro' ? 'var(--color-surface-elevated)' : 'transparent' }}>
                             <div style={{ fontWeight: 700, fontSize: '18px', marginBottom: '8px', color: 'var(--color-primary)' }}>Pro</div>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <li style={{ display: 'flex', gap: '6px' }}><Check size={16} color="var(--color-success)" /> Standard Funktionen</li>

@@ -3,6 +3,7 @@ import { Package, ShoppingCart, Settings, Users, TrendingUp, Activity, Clipboard
 import logo from '../assets/logo.png';
 import { StorageService } from '../services/storage';
 import { supabase } from '../services/supabase';
+import { useAppContext } from '../contexts/AppContext';
 import { useState, useEffect } from 'react';
 
 function useOnlineStatus() {
@@ -24,24 +25,16 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const location = useLocation();
     const isOnline = useOnlineStatus();
+    const { isAdmin, userRole } = useAppContext();
 
     const settings = StorageService.getSettings();
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [userRole, setUserRole] = useState<string>('');
     const [userEmail, setUserEmail] = useState<string>('');
 
     useEffect(() => {
-        const checkAdmin = async () => {
-            if (!supabase) return;
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                setUserEmail(user.email || '');
-                const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-                setUserRole(data?.role || '');
-                if (user.email?.toLowerCase() === 'phdehos@gmail.com') setIsAdmin(true);
-            }
-        };
-        checkAdmin();
+        if (!supabase) return;
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user) setUserEmail(user.email || '');
+        });
     }, []);
 
     const displayLogo = settings.logoUrl || logo;
@@ -173,13 +166,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                     </Link>
                 </nav>
 
-                {/* DEBUG EMAIL */}
-                <div style={{ padding: '8px', fontSize: '10px', color: 'gray' }}>
-                    Logged in as: {userEmail}
-                </div>
-
-                {/* Admin — pinned to bottom */}
-                {(isAdmin || userEmail?.toLowerCase() === 'phdehos@gmail.com') && (
+                {/* Admin — pinned to bottom, only shown for DB-verified admins */}
+                {isAdmin && (
                     <div style={{ padding: '8px', borderTop: '1px solid var(--sidebar-border)' }}>
                         <Link to="/admin" className={navLink('/admin', 'admin')}>
                             <ShieldAlert size={17} style={{ flexShrink: 0 }} />

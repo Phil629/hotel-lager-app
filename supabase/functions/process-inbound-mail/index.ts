@@ -20,32 +20,54 @@ serve(async (req) => {
 
     console.log(`Received email to: ${to}, from: ${fromAddress}, subject: ${subject}`)
 
-    // Finde den Nutzer anhand der 'to' Adresse: in-[USERID-START]@...
-    const match = to.match(/in-([a-zA-Z0-9\-]+)@/)
-    let user_id = null;
+    // Secure email routing: address format is in-[USER_ID]-[SECRET]@...
+    // The secret prevents spoofed emails from injecting data into arbitrary accounts.
+    // Legacy format in-[USER_ID]@ is still accepted but logged as a warning.
+    const secureMatch = to.match(/in-([a-zA-Z0-9\-]+)-([a-f0-9]{32})@/)
+    const legacyMatch = !secureMatch ? to.match(/in-([a-zA-Z0-9\-]+)@/) : null;
+
+    let user_id: string | null = null;
+    let providedSecret: string | null = null;
     let valuation_method = 'latest';
-    
+
     console.log("Extracted TO address:", to);
-    
-    if (match && match[1]) {
-       user_id = match[1]; // Nehme die UserID direkt aus der Mail-Adresse!
+
+    if (secureMatch) {
+      user_id = secureMatch[1];
+      providedSecret = secureMatch[2];
+    } else if (legacyMatch) {
+      user_id = legacyMatch[1];
+      console.warn("Legacy email format (no secret token) — consider updating inbound address:", to);
     }
 
     if (!user_id) {
-       console.error("Critical fail: Regex failed to extract user ID from email 'to' address:", to)
-       return new Response("User not found", { status: 400 })
+      console.error("Critical fail: Regex failed to extract user ID from email 'to' address:", to)
+      return new Response("User not found", { status: 400 })
     }
 
-    // Validate user exists and fetch valuation method
+    // Validate user exists, fetch valuation method, and verify secret token
     const { data: userProfile } = await supabase
         .from('profiles')
-        .select('id, inventory_valuation_method, company_id')
+        .select('id, inventory_valuation_method, company_id, inbound_email_secret')
         .eq('id', user_id)
         .maybeSingle();
 
     if (!userProfile) {
         console.error("User ID not found in profiles:", user_id);
         return new Response("User not found", { status: 404 });
+    }
+
+    // Enforce secret validation when the token was provided (secure format)
+    // or when the user has a secret stored (they should be using the secure format)
+    if (providedSecret !== null) {
+        if (userProfile.inbound_email_secret && providedSecret !== userProfile.inbound_email_secret) {
+            console.error("Invalid inbound email secret for user:", user_id);
+            return new Response("Unauthorized", { status: 401 });
+        }
+    } else if (userProfile.inbound_email_secret) {
+        // User has a secret but email was sent to old format — reject to prevent spoofing
+        console.error("User has inbound_email_secret but email arrived without token — rejected:", user_id);
+        return new Response("Unauthorized — please use the secure email address from your settings", { status: 401 });
     }
     valuation_method = userProfile.inventory_valuation_method || 'latest';
     const company_id = userProfile.company_id;
