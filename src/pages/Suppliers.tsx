@@ -2,6 +2,7 @@ import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { usePermissions } from '../hooks/usePermissions';
+import { useAppContext } from '../contexts/AppContext';
 import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
 import { getSupabaseClient } from '../services/supabase';
@@ -11,6 +12,8 @@ export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const { canManageSuppliers, role: userRole, canSeePasswords } = usePermissions();
+    const { isAdmin } = useAppContext();
+    const canEdit = canManageSuppliers || isAdmin;
     const [currentCompanyId, setCurrentCompanyId] = useState<string>('');
     const [currentUserId, setCurrentUserId] = useState<string>('');
 
@@ -263,7 +266,7 @@ export const Suppliers: React.FC = () => {
 
             <div className="page-header">
                 <h2 className="page-title">Lieferanten Netzwerk</h2>
-                {canManageSuppliers && <button onClick={() => handleOpenModal()} className="btn btn-primary">
+                {canEdit && <button onClick={() => handleOpenModal()} className="btn btn-primary">
                     <Plus size={18} /> Neuer Lieferant
                 </button>}
             </div>

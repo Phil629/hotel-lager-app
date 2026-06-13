@@ -451,7 +451,10 @@ export const Products: React.FC = () => {
         try {
             await DataService.saveProduct(productData);
             await loadProducts();
+            setNotification({ message: editingId ? 'Produkt aktualisiert!' : 'Produkt angelegt!', type: 'success' });
             closeModal();
+        } catch (err: any) {
+            setNotification({ message: 'Fehler beim Speichern: ' + (err?.message || String(err)), type: 'error' });
         } finally {
             setIsLoading(false);
         }
