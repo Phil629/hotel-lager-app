@@ -136,6 +136,7 @@ export const Consumption: React.FC = () => {
     const [loading, setLoading]   = useState(true);
     const [saving, setSaving]     = useState<string | null>(null);
     const [batchSaving, setBatchSaving] = useState(false);
+    const [actionError, setActionError] = useState<string | null>(null);
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
     const [inlineEdits, setInlineEdits] = useState<Record<string, InlineEdit>>({});
     const [showManualSection, setShowManualSection] = useState(false);
@@ -203,14 +204,21 @@ export const Consumption: React.FC = () => {
 
             const first    = new Date(productOrders[0].date);
             const last     = new Date(productOrders[productOrders.length - 1].date);
-            const diffDays  = Math.max(1, Math.floor((last.getTime() - first.getTime()) / 86_400_000));
-            const diffWeeks = diffDays / 7;
+            const diffDays  = Math.floor((last.getTime() - first.getTime()) / 86_400_000);
+            const diffWeeks = Math.max(diffDays, 1) / 7;
             const consumed  = productOrders.slice(0, -1).reduce((s, o) => s + o.quantity, 0);
             const totalOrdered = productOrders.reduce((s, o) => s + o.quantity, 0);
 
+            // Require at least 7 days of history for a meaningful weekly suggestion.
+            // With diffDays < 7 the formula amplifies a single day's order by 7×,
+            // producing absurdly inflated KI suggestions.
+            const suggestedWeekly = diffDays >= 7
+                ? Number((consumed / diffDays * 7).toFixed(1))
+                : 0;
+
             return {
                 product,
-                suggestedWeekly: Number((consumed / diffDays * 7).toFixed(1)),
+                suggestedWeekly,
                 actualWeeklyRate: Number((totalOrdered / diffWeeks).toFixed(1)),
             };
         });
@@ -287,32 +295,45 @@ export const Consumption: React.FC = () => {
 
     const handleAdopt = async (stat: ProductStat) => {
         setSaving(stat.product.id);
+        setActionError(null);
         try {
             await DataService.saveProduct({ ...stat.product, consumptionAmount: stat.suggestedWeekly, consumptionPeriod: 'week', lastConsumptionDate: new Date().toISOString() });
             await loadData();
+        } catch (e) {
+            setActionError(`Fehler beim Speichern von "${stat.product.name}": ${e instanceof Error ? e.message : String(e)}`);
         } finally { setSaving(null); }
     };
 
     const handleAdoptAll = async () => {
         setBatchSaving(true);
+        setActionError(null);
         try {
-            await Promise.all(suggestions.map(stat =>
+            // allSettled: partial failures don't abort the whole batch; loadData always runs.
+            const results = await Promise.allSettled(suggestions.map(stat =>
                 DataService.saveProduct({ ...stat.product, consumptionAmount: stat.suggestedWeekly, consumptionPeriod: 'week', lastConsumptionDate: new Date().toISOString() })
             ));
+            const failed = results.filter(r => r.status === 'rejected').length;
+            if (failed > 0) setActionError(`${failed} von ${suggestions.length} Speicherungen fehlgeschlagen.`);
             await loadData();
+        } catch (e) {
+            setActionError(`Unbekannter Fehler: ${e instanceof Error ? e.message : String(e)}`);
         } finally { setBatchSaving(false); }
     };
 
     const handleIgnore = async (product: Product) => {
         setSaving(product.id);
+        setActionError(null);
         try {
             await DataService.saveProduct({ ...product, ignoreOrderProposals: true });
             await loadData();
+        } catch (e) {
+            setActionError(`Fehler: ${e instanceof Error ? e.message : String(e)}`);
         } finally { setSaving(null); }
     };
 
     const handleAdjustToActual = async (anomaly: Anomaly) => {
         setSaving(`adjust-${anomaly.product.id}`);
+        setActionError(null);
         try {
             await DataService.saveProduct({
                 ...anomaly.product,
@@ -321,21 +342,27 @@ export const Consumption: React.FC = () => {
                 lastConsumptionDate: new Date().toISOString(),
             });
             await loadData();
+        } catch (e) {
+            setActionError(`Fehler: ${e instanceof Error ? e.message : String(e)}`);
         } finally { setSaving(null); }
     };
 
     const handleRestore = async (product: Product) => {
         setSaving(product.id);
+        setActionError(null);
         try {
             await DataService.saveProduct({ ...product, ignoreOrderProposals: false });
             await loadData();
+        } catch (e) {
+            setActionError(`Fehler: ${e instanceof Error ? e.message : String(e)}`);
         } finally { setSaving(null); }
     };
 
     const handleSaveInline = async (product: Product) => {
         const edit = inlineEdits[product.id];
-        if (!edit || edit.amount === '') return;
+        if (!edit || edit.amount === '' || Number(edit.amount) <= 0) return;
         setSaving(`inline-${product.id}`);
+        setActionError(null);
         try {
             await DataService.saveProduct({
                 ...product,
@@ -344,6 +371,8 @@ export const Consumption: React.FC = () => {
                 lastConsumptionDate: new Date().toISOString(),
             });
             await loadData();
+        } catch (e) {
+            setActionError(`Fehler beim Speichern von "${product.name}": ${e instanceof Error ? e.message : String(e)}`);
         } finally { setSaving(null); }
     };
 
@@ -351,8 +380,9 @@ export const Consumption: React.FC = () => {
     // setzt den manuellen Wert UND stellt Bestellvorschläge wieder her.
     const handleActivateFromIgnored = async (product: Product) => {
         const edit = inlineEdits[product.id];
-        if (!edit || edit.amount === '') return;
+        if (!edit || edit.amount === '' || Number(edit.amount) <= 0) return;
         setSaving(`inline-${product.id}`);
+        setActionError(null);
         try {
             await DataService.saveProduct({
                 ...product,
@@ -362,6 +392,8 @@ export const Consumption: React.FC = () => {
                 ignoreOrderProposals: false,
             });
             await loadData();
+        } catch (e) {
+            setActionError(`Fehler beim Aktivieren von "${product.name}": ${e instanceof Error ? e.message : String(e)}`);
         } finally { setSaving(null); }
     };
 
@@ -515,6 +547,17 @@ export const Consumption: React.FC = () => {
                             Der automatische Bestandsabzug ist deaktiviert. Einstellungen können trotzdem geändert werden, wirken aber erst nach Deaktivierung des Inventory-Modus.
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* ── Action Error Banner ── */}
+            {actionError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', backgroundColor: 'var(--color-danger-bg, #fef2f2)', border: '1px solid var(--color-danger, #ef4444)', borderRadius: 'var(--radius-md)' }}>
+                    <AlertTriangle size={16} color="var(--color-danger, #ef4444)" style={{ flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: '13px', color: 'var(--color-danger, #b91c1c)' }}>{actionError}</span>
+                    <button onClick={() => setActionError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+                        <X size={14} color="var(--color-danger, #ef4444)" />
+                    </button>
                 </div>
             )}
 
@@ -701,8 +744,9 @@ export const Consumption: React.FC = () => {
                                 </thead>
                                 <tbody>
                                     {activePilots.map(p => {
-                                        const isOpen  = expandedRows.has(`pilot-${p.id}`);
-                                        const anomaly = anomalies.find(a => a.product.id === p.id);
+                                        const isOpen       = expandedRows.has(`pilot-${p.id}`);
+                                        const anomaly      = anomalies.find(a => a.product.id === p.id);
+                                        const adjSuggestion = !anomaly ? adjustmentSuggestions.find(a => a.product.id === p.id) : undefined;
                                         return (
                                             <React.Fragment key={p.id}>
                                                 <tr
@@ -732,8 +776,12 @@ export const Consumption: React.FC = () => {
                                                     </td>
                                                     <td style={{ textAlign: 'center' }}>
                                                         {anomaly ? (
-                                                            <span className="badge badge-warning" title={`Autopilot: ${anomaly.autoWeekly} ${p.unit}/Wo — Bestellhistorie: ${anomaly.actualWeekly} ${p.unit}/Wo`}>
+                                                            <span className="badge badge-warning" title={`Autopilot: ${anomaly.autoWeekly} ${p.unit}/Wo — Bestellhistorie: ${anomaly.actualWeekly} ${p.unit}/Wo · Abweichung >50%`}>
                                                                 Abweichung
+                                                            </span>
+                                                        ) : adjSuggestion ? (
+                                                            <span className="badge badge-neutral" style={{ color: 'var(--color-warning)' }} title={`Autopilot: ${adjSuggestion.autoWeekly} ${p.unit}/Wo — Bestellhistorie: ${adjSuggestion.actualWeekly} ${p.unit}/Wo · Abweichung 20–50%`}>
+                                                                Leichte Abw.
                                                             </span>
                                                         ) : (
                                                             <span className="badge badge-neutral">Normal</span>
