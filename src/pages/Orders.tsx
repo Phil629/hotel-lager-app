@@ -56,9 +56,17 @@ const KiLogDetail: React.FC<{ email: InboundEmail }> = ({ email }) => {
 
     if (!d || email.status === 'gemini_error') {
         return (
-            <div style={{ color: 'var(--color-danger)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <AlertTriangle size={14} />
-                KI konnte die E-Mail nicht verarbeiten – kein JSON extrahiert.
+            <div style={{ color: 'var(--color-danger)', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertTriangle size={14} />
+                    KI konnte die E-Mail nicht verarbeiten – kein JSON extrahiert.
+                </div>
+                {d?.parse_error && (
+                    <div style={{ padding: '8px', backgroundColor: 'var(--color-danger-bg)', borderRadius: '4px', border: '1px solid #fca5a5', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                        <strong>Error:</strong> {d.parse_error}<br/>
+                        <strong>Raw Text:</strong><br/>{d.raw_text}
+                    </div>
+                )}
             </div>
         );
     }
