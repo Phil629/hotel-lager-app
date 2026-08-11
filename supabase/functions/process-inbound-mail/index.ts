@@ -116,6 +116,9 @@ Regeln:
 11. KATEGORIE: Weise jedem Artikel ZWINGEND eine logische Warengruppe/Kategorie auf Deutsch zu (z.B. "Getränke", "Reinigung", "Lebensmittel", "Hygiene", "Bürobedarf"). Nutze bevorzugt EXAKT eine der unten gelisteten vorhandenen Kategorien. Falls die Liste leer ist oder nichts passt, MUSST du eine sinnvolle neue erfinden. Verwende NIEMALS generische Begriffe wie "Importiert" oder "KI-Import".
 12. TELEFON: Falls eine Telefonnummer des Lieferanten auf dem Beleg steht, trage sie unter supplier_phone ein (bevorzugt internationales Format, z.B. +49 89 123456).
 13. IBAN: Falls eine IBAN des Lieferanten auf dem Beleg steht, trage sie unter supplier_iban ein.
+14. LIEFERTERMIN: Extrahiere den voraussichtlichen oder tatsächlichen Liefertermin (z.B. 'Lieferung am...', 'Voraussichtliches Lieferdatum') als 'delivery_date' (Format YYYY-MM-DD).
+15. TRACKING: Extrahiere einen eventuellen Tracking-Link (Sendungsverfolgung) als 'tracking_link'.
+16. STATUS-NOTIZEN: Fasse wichtige Versand- und Statusinformationen (z.B. 'Ihre Bestellung hat unser Logistikzentrum verlassen') in 'order_notes' zusammen.
 
 Vorhandene Kategorien (bevorzugt verwenden): ${categoryHint}
 
@@ -146,6 +149,9 @@ Antworte ausschließlich als JSON:
   ],
   "total_price": 0,
   "order_date": "YYYY-MM-DD | null",
+  "delivery_date": "YYYY-MM-DD | null",
+  "tracking_link": "string | null",
+  "order_notes": "string | null",
   "confidence": 0.0
 }
 `
@@ -379,14 +385,14 @@ Antworte ausschließlich als JSON:
             let existingOrder = null;
             if (orderRef) {
                 const { data: existingOrders, error: eoErr } = await supabase.from('orders')
-                    .select('id, quantity, price, date').eq('user_id', user_id).eq('order_number', orderRef).ilike('product_name', item.product_name).limit(1);
+                    .select('id, quantity, price, date, notes').eq('user_id', user_id).eq('order_number', orderRef).ilike('product_name', item.product_name).limit(1);
                 if (existingOrders && existingOrders.length > 0) existingOrder = existingOrders[0];
             }
             
             // Stufe 2: Fangnetz für rein manuell angelegte Bestellungen (die noch keine Bestellnummer haben!)
             if (!existingOrder) {
                 const { data: openOrders } = await supabase.from('orders')
-                    .select('id, quantity, price, date').eq('user_id', user_id).eq('status', 'open').eq('supplier_name', supName).ilike('product_name', item.product_name).is('order_number', null).limit(1);
+                    .select('id, quantity, price, date, notes').eq('user_id', user_id).eq('status', 'open').eq('supplier_name', supName).ilike('product_name', item.product_name).is('order_number', null).limit(1);
                 if (openOrders && openOrders.length > 0) {
                      existingOrder = openOrders[0];
                 }
@@ -425,6 +431,13 @@ Antworte ausschließlich als JSON:
                       updatePayload.ai_revisions = ai_revisions;
                  }
                  if (orderRef) updatePayload.order_number = orderRef;
+                 if (parsedData.delivery_date) updatePayload.expected_delivery_date = parsedData.delivery_date;
+                 if (parsedData.tracking_link) updatePayload.tracking_link = parsedData.tracking_link;
+                 if (parsedData.order_notes) {
+                     updatePayload.notes = existingOrder.notes 
+                         ? `${existingOrder.notes}\n\nUpdate (System): ${parsedData.order_notes}` 
+                         : `Update (System): ${parsedData.order_notes}`;
+                 }
                  
                  const { error: updErr } = await supabase.from('orders').update(updatePayload).eq('id', existingOrder.id);
                  if (updErr) console.error("Error updating order:", JSON.stringify(updErr, null, 2));
@@ -433,6 +446,9 @@ Antworte ausschließlich als JSON:
             } else {
                  createdOrdersCount++;
                 // Keine passende manuelle Bestellung gefunden -> Komplett neu anlegen
+                const baseNotes = `KI-Import (${docType}) aus Betreff: ${subject}. Referenz: ${orderRef || 'Keine'}`;
+                const finalNotes = parsedData.order_notes ? `${baseNotes}\n\nNotiz: ${parsedData.order_notes}` : baseNotes;
+
                 const { error: orderErr } = await supabase.from('orders').insert({
                      id: crypto.randomUUID(),
                      user_id: user_id,
@@ -441,10 +457,12 @@ Antworte ausschließlich als JSON:
                      quantity: Math.round(Number(item.quantity)) || 1,
                      price: Number(item.price) || 0,
                      date: parsedData.order_date || new Date().toISOString().slice(0, 10),
+                     expected_delivery_date: parsedData.delivery_date || null,
+                     tracking_link: parsedData.tracking_link || null,
                      status: orderStatus,
                      supplier_name: supName,
                      order_number: orderRef,
-                     notes: `KI-Import (${docType}) aus Betreff: ${subject}. Referenz: ${orderRef || 'Keine'}`
+                     notes: finalNotes
                 })
                 if (orderErr) {
                      console.error("Error creating order:", JSON.stringify(orderErr, null, 2));
