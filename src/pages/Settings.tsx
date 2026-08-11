@@ -44,6 +44,7 @@ export const Settings: React.FC = () => {
     const [userId, setUserId] = useState<string>('');
     const [role, setRole] = useState<string>('');
     const [companyCode, setCompanyCode] = useState<string>('');
+    const [inboundSecret, setInboundSecret] = useState<string>('');
     const [isMigrating, setIsMigrating] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [teamMembers, setTeamMembers] = useState<Array<{ id: string, email: string, role: string }>>([]);
@@ -58,9 +59,10 @@ export const Settings: React.FC = () => {
         supabase?.auth.getUser().then(async ({ data }) => {
             if (!data?.user || !supabase) return;
             setUserId(data.user.id);
-            const { data: profile } = await supabase.from('profiles').select('role, company_id').eq('id', data.user.id).single();
+            const { data: profile } = await supabase.from('profiles').select('role, company_id, inbound_email_secret').eq('id', data.user.id).single();
             if (profile) {
                 setRole(profile.role || 'user');
+                setInboundSecret(profile.inbound_email_secret || '');
                 if (profile.company_id) {
                     const { data: company } = await supabase.from('companies').select('join_code').eq('id', profile.company_id).single();
                     if (company) setCompanyCode(company.join_code);
@@ -682,11 +684,11 @@ export const Settings: React.FC = () => {
                             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Deine Weiterleitungs-Adresse:</span>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <code style={{ flex: 1, padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: '4px', border: '1px solid var(--color-border)', color: 'var(--color-text-main)', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>
-                                    {/* Full UUID address to prevent regex/lookup failures in Edge Function */}
-                                {userId ? `in-${userId}@inbound.bestellwesen.com` : 'Lade...'}
+                                    {/* Full UUID address with optional secret to prevent regex/lookup failures in Edge Function */}
+                                {userId ? `in-${userId}${inboundSecret ? `-${inboundSecret}` : ''}@inbound.bestellwesen.com` : 'Lade...'}
                                 </code>
                                 <button type="button" onClick={() => {
-                                    navigator.clipboard.writeText(`in-${userId}@inbound.bestellwesen.com`);
+                                    navigator.clipboard.writeText(`in-${userId}${inboundSecret ? `-${inboundSecret}` : ''}@inbound.bestellwesen.com`);
                                     setNotification({ message: 'Adresse kopiert!', type: 'success' });
                                 }} className="btn btn-ghost">Kopieren</button>
                             </div>
