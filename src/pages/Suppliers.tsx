@@ -184,37 +184,42 @@ export const Suppliers: React.FC = () => {
                 });
             }
 
-            // Update assigned products
-            const productUpdates = products.filter(product => {
+            // Update assigned products (assignment, category inheritance, and overwrites)
+            const productPromises = products.filter(product => {
                 const wasAssigned = product.supplierId === targetSupplierId;
                 const isNowAssigned = selectedProductIds.includes(product.id);
-                return wasAssigned !== isNowAssigned;
+                const needsAssignmentChange = wasAssigned !== isNowAssigned;
+                
+                const isCategoryEmpty = !product.category || product.category.trim() === '' || product.category === 'Keine' || product.category === 'Ohne Kategorie';
+                const needsCategoryUpdate = isNowAssigned && !!supplierToSave.defaultCategory && isCategoryEmpty;
+                
+                const needsOverwrite = isNowAssigned && overwriteProducts && (product.emailOrderAddress || product.emailOrderSubject || product.emailOrderBody);
+                
+                return needsAssignmentChange || needsCategoryUpdate || needsOverwrite;
             }).map(product => {
                 const isNowAssigned = selectedProductIds.includes(product.id);
-                return DataService.updateProduct({
+                const isCategoryEmpty = !product.category || product.category.trim() === '' || product.category === 'Keine' || product.category === 'Ohne Kategorie';
+                
+                const updatedProduct = {
                     ...product,
                     supplierId: isNowAssigned ? targetSupplierId : undefined
-                });
+                };
+                
+                if (isNowAssigned && supplierToSave.defaultCategory && isCategoryEmpty) {
+                    updatedProduct.category = supplierToSave.defaultCategory;
+                }
+                
+                if (isNowAssigned && overwriteProducts) {
+                    updatedProduct.emailOrderAddress = undefined;
+                    updatedProduct.emailOrderSubject = undefined;
+                    updatedProduct.emailOrderBody = undefined;
+                }
+                
+                return DataService.updateProduct(updatedProduct);
             });
 
-            if (productUpdates.length > 0) {
-                 await Promise.all(productUpdates);
-            }
-
-            // Overwrite existing product templates if checkbox is checked
-            if (overwriteProducts) {
-                const supplierProducts = products.filter(p => p.supplierId === targetSupplierId);
-                const overwriteUpdates = supplierProducts.map(p => {
-                    return DataService.updateProduct({
-                        ...p,
-                        emailOrderAddress: undefined,
-                        emailOrderSubject: undefined,
-                        emailOrderBody: undefined,
-                    });
-                });
-                if (overwriteUpdates.length > 0) {
-                    await Promise.all(overwriteUpdates);
-                }
+            if (productPromises.length > 0) {
+                 await Promise.all(productPromises);
             }
 
             setNotification({
