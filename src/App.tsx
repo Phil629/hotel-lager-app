@@ -82,7 +82,7 @@ function App() {
           return;
         }
 
-        const { data } = await supabase!
+        const { data, error } = await supabase!
           .from('profiles')
           .select(`
             is_banned,
@@ -95,6 +95,12 @@ function App() {
           `)
           .eq('id', currentSession.user.id)
           .single();
+
+        if (error) {
+          console.error("Error fetching profile on auth state change:", error);
+          setSession(currentSession);
+          return;
+        }
 
         if (data?.is_banned) {
           await supabase!.auth.signOut();
@@ -154,6 +160,15 @@ function App() {
         setIsRecovery(true);
         return;
       }
+      
+      // If we already have a session for the same user, and this is just a token refresh or update,
+      // we don't need to re-fetch the entire profile and permissions.
+      // This prevents the app from "jumping around" or resetting state on tab focus.
+      if ((event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session) {
+        setSession(session);
+        return;
+      }
+      
       checkBanStatus(session);
     });
 
