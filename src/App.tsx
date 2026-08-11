@@ -157,7 +157,21 @@ function App() {
       checkBanStatus(session);
     });
 
-    return () => subscription.unsubscribe();
+    const handleSettingsUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        const newSettings = customEvent.detail;
+        setIsAiCartEnabled(newSettings.enableAiCart !== false);
+        // Note: other settings like canSeePrices depend on role, which might be stale in this closure, 
+        // but enableAiCart is global so we can safely update it here.
+      }
+    };
+    window.addEventListener('companySettingsUpdated', handleSettingsUpdate);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('companySettingsUpdated', handleSettingsUpdate);
+    };
   }, []);
 
   if (loading) {

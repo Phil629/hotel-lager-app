@@ -99,7 +99,9 @@ export const Settings: React.FC = () => {
         // W9: kein window.location.reload() — State direkt aktualisieren
 
         if (role === 'owner' || role === 'admin') {
-            DataService.updateCompanySettings(companySettings).catch(console.error);
+            DataService.updateCompanySettings(companySettings).then(() => {
+                window.dispatchEvent(new CustomEvent('companySettingsUpdated', { detail: companySettings }));
+            }).catch(console.error);
             DataService.updateCompanyName(settings.hotelName || '').catch(console.error);
         }
         setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
