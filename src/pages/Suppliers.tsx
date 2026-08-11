@@ -460,9 +460,14 @@ export const Suppliers: React.FC = () => {
                                                             onChange={e => setOverwriteCategory(e.target.checked)} 
                                                             style={{ width: '16px', height: '16px', marginTop: '2px', cursor: 'pointer' }} 
                                                         />
-                                                        <label htmlFor="overwriteCategory" style={{ fontSize: '13px', color: 'var(--color-text-main)', cursor: 'pointer' }}>
-                                                            Kategorie bei <strong>allen</strong> verknüpften Produkten erzwingen (überschreibt bestehende Kategorien)
-                                                        </label>
+                                                        <div>
+                                                            <label htmlFor="overwriteCategory" style={{ fontSize: '13px', color: 'var(--color-text-main)', cursor: 'pointer', display: 'block' }}>
+                                                                Kategorie bei <strong>allen</strong> verknüpften Produkten erzwingen (überschreibt bestehende Kategorien)
+                                                            </label>
+                                                            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                                                                Hinweis: Neue Artikel, die noch keine eigene Kategorie haben, erhalten diese künftig automatisch.
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
