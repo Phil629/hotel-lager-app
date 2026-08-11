@@ -393,7 +393,7 @@ Antworte ausschließlich als JSON:
             for (const o of matchedOrders) {
                 const updatePayload: any = {};
                 if (parsedData.delivery_date) updatePayload.expected_delivery_date = parsedData.delivery_date;
-                if (parsedData.tracking_link) updatePayload.tracking_link = parsedData.tracking_link;
+                if (parsedData.tracking_link) updatePayload.trackingLink = parsedData.tracking_link;
                 if (parsedData.order_notes) {
                     const baseNotes = o.notes ? `${o.notes}\n\n` : '';
                     updatePayload.notes = `${baseNotes}Update (System): ${parsedData.order_notes}`;
@@ -479,7 +479,7 @@ Antworte ausschließlich als JSON:
                  }
                  if (orderRef) updatePayload.order_number = orderRef;
                  if (parsedData.delivery_date) updatePayload.expected_delivery_date = parsedData.delivery_date;
-                 if (parsedData.tracking_link) updatePayload.tracking_link = parsedData.tracking_link;
+                 if (parsedData.tracking_link) updatePayload.trackingLink = parsedData.tracking_link;
                  if (parsedData.order_notes) {
                      updatePayload.notes = existingOrder.notes 
                          ? `${existingOrder.notes}\n\nUpdate (System): ${parsedData.order_notes}` 
@@ -505,7 +505,7 @@ Antworte ausschließlich als JSON:
                      price: Number(item.price) || 0,
                      date: parsedData.order_date || new Date().toISOString().slice(0, 10),
                      expected_delivery_date: parsedData.delivery_date || null,
-                     tracking_link: parsedData.tracking_link || null,
+                     trackingLink: parsedData.tracking_link || null,
                      status: orderStatus,
                      supplier_name: supName,
                      order_number: orderRef,
