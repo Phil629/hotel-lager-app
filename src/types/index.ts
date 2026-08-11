@@ -7,6 +7,7 @@ export interface Company {
     staffCanSeePrices: boolean;
     staffCanManageSuppliers: boolean;
     staffCanSeePasswords: boolean;
+    enableAiCart?: boolean;
   };
 }
 

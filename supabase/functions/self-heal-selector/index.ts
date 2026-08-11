@@ -183,7 +183,7 @@ serve(async (req) => {
         context,
         failed_selector,
         html_snippet: html_snippet ? html_snippet.substring(0, 50_000) : null,
-        ai_model:     'gemini-1.5-flash',
+        ai_model:     'gemini-1.5-flash-latest',
         healed:       false,
       })
       .select('id')
@@ -234,8 +234,9 @@ Antworte ausschließlich als JSON:
     }
     geminiParts.push({ text: taskPrompt })
 
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+      geminiUrl,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -8,6 +8,7 @@ interface AppContextValue {
   canManageSuppliers: boolean;
   canSeePasswords: boolean;
   permissionsLoaded: boolean;
+  isAiCartEnabled: boolean;
 }
 
 const defaultValue: AppContextValue = {
@@ -18,6 +19,7 @@ const defaultValue: AppContextValue = {
   canManageSuppliers: false,
   canSeePasswords: false,
   permissionsLoaded: false,
+  isAiCartEnabled: true,
 };
 
 export const AppContext = createContext<AppContextValue>(defaultValue);

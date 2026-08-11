@@ -5,7 +5,7 @@ import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
 import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database } from 'lucide-react';
-import { usePermissions } from '../hooks/usePermissions';
+import { useAppContext } from '../contexts/AppContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -57,7 +57,7 @@ const PriceHistoryChart = ({ productName }: { productName: string }) => {
 };
 
 export const Products: React.FC = () => {
-    const { canSeePrices } = usePermissions();
+    const { canSeePrices, isAiCartEnabled } = useAppContext();
     const [products, setProducts] = useState<Product[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [orders, setOrders] = useState<Order[]>([]);
@@ -1688,7 +1688,7 @@ export const Products: React.FC = () => {
                                         ))}
                                     </div>
                                     
-                                    {(() => {
+                                    {isAiCartEnabled && (() => {
                                         const supplierId = selectedProductForOrder.supplierId;
                                         if (!supplierId) return null;
                                         const suggestions = products.filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id));
@@ -1875,31 +1875,31 @@ export const Products: React.FC = () => {
 
                                 {/* Order Methods Wrapper */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                    {selectedProductForOrder.supplierId && (
-                                        <div style={{
-                                            backgroundColor: 'rgba(37, 99, 235, 0.05)',
-                                            padding: 'var(--spacing-md)',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '2px solid var(--color-primary)',
-                                            order: -2
-                                        }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                                                KI-Checkout Autopilot:
-                                            </label>
-                                            <CheckoutButton 
-                                                supplierId={selectedProductForOrder.supplierId}
-                                                supplierName={suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.name || 'Lieferant'}
-                                                items={orderCart.map(c => ({
-                                                    product_id: c.product.id,
-                                                    product_name: c.product.name,
-                                                    quantity: c.quantity,
-                                                    unit: c.product.unit,
-                                                    price_expected: c.product.price || undefined,
-                                                    url: c.product.orderUrl || undefined
-                                                }))}
-                                            />
-                                        </div>
-                                    )}
+                                {isAiCartEnabled && selectedProductForOrder.supplierId && (
+                                    <div style={{
+                                        backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                                        padding: 'var(--spacing-md)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '2px solid var(--color-primary)',
+                                        order: -2
+                                    }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                            KI-Checkout Autopilot:
+                                        </label>
+                                        <CheckoutButton 
+                                            supplierId={selectedProductForOrder.supplierId}
+                                            supplierName={suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.name || 'Lieferant'}
+                                            items={orderCart.map(c => ({
+                                                product_id: c.product.id,
+                                                product_name: c.product.name,
+                                                quantity: c.quantity,
+                                                unit: c.product.unit,
+                                                price_expected: c.product.price || undefined,
+                                                url: c.product.orderUrl || undefined
+                                            }))}
+                                        />
+                                    </div>
+                                )}
 
                                     {(selectedProductForOrder.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.orderUrl || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.url) && (
                                         <div style={{

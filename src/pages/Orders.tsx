@@ -9,6 +9,7 @@ import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import { CheckoutButton } from '../components/CheckoutButton';
 import { useOrderData } from '../hooks/useOrderData';
 import { useCart } from '../hooks/useCart';
+import { useAppContext } from '../contexts/AppContext';
 
 const isLiveEnv = window.location.hostname === 'kunden.bestellwesen.com' || window.location.hostname === 'lager-hotel.netlify.app' || import.meta.env.VITE_SUPABASE_URL === 'https://owofhbbrywryehlnqmfj.supabase.co';
 
@@ -125,6 +126,7 @@ export const Orders: React.FC = () => {
         loadOrders, loadProducts, loadSuppliers,
     } = useOrderData();
 
+    const { isAiCartEnabled } = useAppContext();
     const cart = useCart(suppliers);
     const {
         orderCart,
@@ -1811,7 +1813,7 @@ export const Orders: React.FC = () => {
                                                 ))}
                                             </div>
                                             
-                                            {(() => {
+                                            {isAiCartEnabled && (() => {
                                                 const supplierId = selectedProduct?.supplierId;
                                                 if (!supplierId) return null;
                                                 const suggestions = products.filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id));
@@ -1917,31 +1919,31 @@ export const Orders: React.FC = () => {
 
                                         {/* Order Methods Wrapper */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
-                                            {!isLiveEnv && selectedProduct.supplierId && (
-                                                <div style={{
-                                                    backgroundColor: 'rgba(37, 99, 235, 0.05)',
-                                                    padding: 'var(--spacing-md)',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    border: '2px solid var(--color-primary)',
-                                                    order: -2
-                                                }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                                                        KI-Checkout Autopilot:
-                                                    </label>
-                                                    <CheckoutButton 
-                                                        supplierId={selectedProduct.supplierId}
-                                                        supplierName={suppliers.find(s => s.id === selectedProduct.supplierId)?.name || 'Lieferant'}
-                                                        items={orderCart.map(c => ({
-                                                            product_id: c.product.id,
-                                                            product_name: c.product.name,
-                                                            quantity: c.quantity,
-                                                            unit: c.product.unit,
-                                                            price_expected: c.product.price || undefined,
-                                                            url: c.product.orderUrl || undefined
-                                                        }))}
-                                                    />
-                                                </div>
-                                            )}
+                                            {!isLiveEnv && selectedProduct.supplierId && isAiCartEnabled && (
+                                                    <div style={{
+                                                        backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                                                        padding: 'var(--spacing-md)',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        border: '2px solid var(--color-primary)',
+                                                        order: -2
+                                                    }}>
+                                                        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                                                            KI-Checkout Autopilot:
+                                                        </label>
+                                                        <CheckoutButton 
+                                                            supplierId={selectedProduct.supplierId}
+                                                            supplierName={suppliers.find(s => s.id === selectedProduct.supplierId)?.name || 'Lieferant'}
+                                                            items={orderCart.map(c => ({
+                                                                product_id: c.product.id,
+                                                                product_name: c.product.name,
+                                                                quantity: c.quantity,
+                                                                unit: c.product.unit,
+                                                                price_expected: c.product.price || undefined,
+                                                                url: c.product.orderUrl || undefined
+                                                            }))}
+                                                        />
+                                                    </div>
+                                                )}
 
                                             {(selectedProduct.supplierPhone || (suppliers.find(s => s.id === selectedProduct.supplierId)?.phone)) && (
                                                 <div style={{
@@ -3025,7 +3027,7 @@ export const Orders: React.FC = () => {
                                                         <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--color-text-main)' }}>{supplierName}</h3>
                                                         {supplierName !== 'Kein Lieferant' && (
                                                             <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
-                                                                {!isLiveEnv && (
+                                                                {!isLiveEnv && isAiCartEnabled && (
                                                                     <CheckoutButton
                                                                     supplierId={supplierProposals[0].supplierId}
                                                                     supplierName={supplierName}

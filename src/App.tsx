@@ -57,6 +57,7 @@ function App() {
   const [canSeePrices, setCanSeePrices] = useState(false);
   const [canManageSuppliers, setCanManageSuppliers] = useState(false);
   const [canSeePasswords, setCanSeePasswords] = useState(false);
+  const [isAiCartEnabled, setIsAiCartEnabled] = useState(true);
   const [permissionsLoaded, setPermissionsLoaded] = useState(false);
 
   // Prevents race condition between getSession and onAuthStateChange
@@ -112,6 +113,7 @@ function App() {
           setCanSeePrices(isOwnerOrAdmin || !!companySettings.staffCanSeePrices);
           setCanManageSuppliers(isOwnerOrAdmin || !!companySettings.staffCanManageSuppliers);
           setCanSeePasswords(isOwnerOrAdmin || !!companySettings.staffCanSeePasswords);
+          setIsAiCartEnabled(companySettings.enableAiCart !== false);
           setPermissionsLoaded(true);
 
           // Sync company name to local storage
@@ -191,6 +193,7 @@ function App() {
     canManageSuppliers,
     canSeePasswords,
     permissionsLoaded,
+    isAiCartEnabled,
   };
 
   return (

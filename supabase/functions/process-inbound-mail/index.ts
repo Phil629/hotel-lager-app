@@ -155,7 +155,7 @@ Antworte ausschließlich als JSON:
   "confidence": 0.0
 }
 `
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`
     
     // Baue die Payload für Gemini zusammen
     const geminiParts: any[] = [{ text: prompt }];
