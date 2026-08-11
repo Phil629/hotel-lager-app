@@ -373,6 +373,11 @@ Antworte ausschließlich als JSON:
     let createdOrdersCount = 0;
     let updatedOrdersCount = 0;
 
+    // Bereinige Referenznummern (z.B. "#23654" -> "23654")
+    const cleanRef = (ref: string | null) => ref ? ref.replace(/^[#\s]+/, '').trim() : null;
+    if (parsedData.order_reference) parsedData.order_reference = cleanRef(parsedData.order_reference);
+    if (parsedData.invoice_number) parsedData.invoice_number = cleanRef(parsedData.invoice_number);
+
     // Globale Metadaten-Aktualisierung (z.B. für Versandbestätigungen ohne Artikel-Liste)
     const globalOrderRef = parsedData.order_reference || parsedData.invoice_number || null;
     if (globalOrderRef && (parsedData.tracking_link || parsedData.order_notes || parsedData.delivery_date)) {
@@ -409,7 +414,7 @@ Antworte ausschließlich als JSON:
         if (!item?.product_name) continue;
         
         const lowerName = item.product_name.toLowerCase();
-        if (lowerName.includes('versand') || lowerName.includes('pfand') || lowerName.includes('porto') || lowerName.includes('gebühr') || lowerName.includes('logistik') || lowerName.includes('palette')) {
+        if (lowerName.includes('versand') || lowerName.includes('pfand') || lowerName.includes('porto') || lowerName.includes('gebühr') || lowerName.includes('logistik') || lowerName.includes('palette') || lowerName.includes('shipping') || lowerName.includes('insurance') || lowerName.includes('discount') || lowerName.includes('protection')) {
              console.log("Skipping non-product item:", item.product_name);
              continue;
         }
