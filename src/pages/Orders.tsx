@@ -851,15 +851,17 @@ export const Orders: React.FC = () => {
                                 </span>
                             )}
                         </div>
-                        <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--spacing-xs)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span className="badge badge-primary">{order.quantity}x bestellt</span>
-                            <span>Bestellt am: {new Date(order.date).toLocaleDateString('de-DE')}</span>
-                            {order.supplierName && <span>• {order.supplierName}</span>}
-                            {order.orderNumber && <span>• Nr: {order.orderNumber}</span>}
-                            {order.price && <span>• {order.price.toFixed(2)} €</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: 'var(--spacing-sm)' }}>
+                            <span className="badge badge-primary">{order.quantity}x</span>
+                            <span className="badge badge-neutral" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={12} /> {new Date(order.date).toLocaleDateString('de-DE')}</span>
+                            {order.orderNumber && <span className="badge badge-neutral" title="Bestellnummer">#{order.orderNumber}</span>}
+                            {order.price && <span className="badge badge-neutral" title="Preis">{order.price.toFixed(2)} €</span>}
                         </div>
                         {order.notes && (
-                            <div style={{ fontSize: 'var(--font-size-sm)', fontStyle: 'italic', marginBottom: 'var(--spacing-xs)', color: 'var(--color-text-main)' }}>
+                            <div 
+                                title={order.notes} 
+                                style={{ fontSize: '12px', fontStyle: 'italic', marginBottom: 'var(--spacing-xs)', color: 'var(--color-text-muted)', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            >
                                 "{order.notes}"
                             </div>
                         )}
@@ -1145,42 +1147,50 @@ export const Orders: React.FC = () => {
                         )}
                     </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '130px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '130px', alignItems: 'flex-end' }}>
                     {order.status === 'open' && (
                         <>
-                            <button onClick={() => toggleOrderStatus(order.id)} className="btn btn-sm btn-success">
-                                <CheckCircle size={15} /> Erhalten
-                            </button>
-                            <button onClick={() => openDefectModal(order)} className="btn btn-sm btn-warning">
-                                <AlertTriangle size={15} /> Mangel
-                            </button>
+                            <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                                <button onClick={() => toggleOrderStatus(order.id)} className="btn btn-sm btn-success" style={{ flex: 1, padding: '6px 8px' }}>
+                                    <CheckCircle size={15} /> Erhalten
+                                </button>
+                                <button onClick={() => openDefectModal(order)} className="btn btn-sm btn-warning" style={{ padding: '6px 8px' }} title="Mangel melden">
+                                    <AlertTriangle size={15} />
+                                </button>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                                <button onClick={() => openDeliveryDateModal(order)} className="btn btn-sm btn-ghost" style={{ flex: 1, padding: '4px 8px' }} title="Liefertermin">
+                                    <Calendar size={14} />
+                                </button>
+                                <button onClick={() => setEditingOrder(order)} className="btn btn-sm btn-ghost" style={{ flex: 1, padding: '4px 8px' }} title="Bearbeiten">
+                                    <Edit2 size={14} />
+                                </button>
+                                <button onClick={() => handleRepeatOrder(order)} className="btn btn-sm btn-ghost" style={{ flex: 1, padding: '4px 8px', color: 'var(--color-primary)', borderColor: '#bfdbfe' }} title="Wiederholen">
+                                    <Plus size={14} />
+                                </button>
+                            </div>
                             {order.hasDefect && !!(order.supplierEmail || products.find(p => p.name === order.productName)?.emailOrderAddress || getSupplierForOrder(order)?.email) && (
-                                <button onClick={() => sendDefectEmail(order)} className="btn btn-sm btn-ghost">
-                                    <Mail size={15} /> Email senden
+                                <button onClick={() => sendDefectEmail(order)} className="btn btn-sm btn-ghost" style={{ width: '100%' }}>
+                                    <Mail size={14} /> Email senden
                                 </button>
                             )}
-                            <button onClick={() => openDeliveryDateModal(order)} className="btn btn-sm btn-ghost">
-                                <Calendar size={15} /> Liefertermin
-                            </button>
-                            <button onClick={() => setEditingOrder(order)} className="btn btn-sm btn-ghost">
-                                <Edit2 size={15} /> Bearbeiten
-                            </button>
-                            <button onClick={() => handleRepeatOrder(order)} className="btn btn-sm btn-ghost" style={{ color: 'var(--color-primary)', borderColor: '#bfdbfe' }}>
-                                <Plus size={15} /> Wiederholen
-                            </button>
                         </>
                     )}
                     {order.status === 'received' && (
                         <>
-                            <button onClick={() => toggleOrderStatus(order.id)} className="btn btn-sm btn-ghost">
-                                Rückgängig
-                            </button>
-                            <button onClick={() => setEditingOrder(order)} className="btn btn-sm btn-ghost">
-                                <Edit2 size={15} /> Bearbeiten
-                            </button>
-                            <button onClick={() => handleRepeatOrder(order)} className="btn btn-sm btn-ghost" style={{ color: 'var(--color-primary)', borderColor: '#bfdbfe' }}>
-                                <Plus size={15} /> Wiederholen
-                            </button>
+                            <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                                <button onClick={() => toggleOrderStatus(order.id)} className="btn btn-sm btn-ghost" style={{ flex: 1, padding: '4px 8px' }}>
+                                    Rückgängig
+                                </button>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                                <button onClick={() => setEditingOrder(order)} className="btn btn-sm btn-ghost" style={{ flex: 1, padding: '4px 8px' }} title="Bearbeiten">
+                                    <Edit2 size={14} />
+                                </button>
+                                <button onClick={() => handleRepeatOrder(order)} className="btn btn-sm btn-ghost" style={{ flex: 1, padding: '4px 8px', color: 'var(--color-primary)', borderColor: '#bfdbfe' }} title="Wiederholen">
+                                    <Plus size={14} />
+                                </button>
+                            </div>
                         </>
                     )}
                 </div>
