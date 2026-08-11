@@ -852,9 +852,9 @@ export const Orders: React.FC = () => {
                             )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: 'var(--spacing-sm)' }}>
-                            <span className="badge badge-primary">{order.quantity}x</span>
-                            <span className="badge badge-neutral" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={12} /> {new Date(order.date).toLocaleDateString('de-DE')}</span>
-                            {order.orderNumber && <span className="badge badge-neutral" title="Bestellnummer">#{order.orderNumber}</span>}
+                            <span className="badge badge-primary">{order.quantity}x bestellt</span>
+                            <span className="badge badge-neutral" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={12} /> Bestellt am: {new Date(order.date).toLocaleDateString('de-DE')}</span>
+                            {order.orderNumber && <span className="badge badge-neutral" title="Bestellnummer">Nr: {order.orderNumber}</span>}
                             {order.price && <span className="badge badge-neutral" title="Preis">{order.price.toFixed(2)} €</span>}
                         </div>
                         {order.notes && (
