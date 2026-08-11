@@ -32,6 +32,7 @@ export const Suppliers: React.FC = () => {
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [overwriteProducts, setOverwriteProducts] = useState(false);
+    const [overwriteCategory, setOverwriteCategory] = useState(false);
 
     useEffect(() => {
         const supabaseClient = getSupabaseClient();
@@ -121,6 +122,7 @@ export const Suppliers: React.FC = () => {
             setFormData({ name: '', contactName: '', email: '', phone: '', url: '', notes: [], documents: [], preferredOrderMethod: 'email' });
             setSelectedProductIds([]);
             setOverwriteProducts(false);
+            setOverwriteCategory(false);
         }
         setIsModalOpen(true);
     };
@@ -191,7 +193,7 @@ export const Suppliers: React.FC = () => {
                 const needsAssignmentChange = wasAssigned !== isNowAssigned;
                 
                 const isCategoryEmpty = !product.category || product.category.trim() === '' || product.category === 'Keine' || product.category === 'Ohne Kategorie' || product.category === 'Sonstiges';
-                const needsCategoryUpdate = isNowAssigned && !!supplierToSave.defaultCategory && isCategoryEmpty;
+                const needsCategoryUpdate = isNowAssigned && !!supplierToSave.defaultCategory && (overwriteCategory || isCategoryEmpty);
                 
                 const needsOverwrite = isNowAssigned && overwriteProducts && (product.emailOrderAddress || product.emailOrderSubject || product.emailOrderBody);
                 
@@ -205,7 +207,7 @@ export const Suppliers: React.FC = () => {
                     supplierId: isNowAssigned ? targetSupplierId : undefined
                 };
                 
-                if (isNowAssigned && supplierToSave.defaultCategory && isCategoryEmpty) {
+                if (isNowAssigned && supplierToSave.defaultCategory && (overwriteCategory || isCategoryEmpty)) {
                     updatedProduct.category = supplierToSave.defaultCategory;
                 }
                 
@@ -448,6 +450,20 @@ export const Suppliers: React.FC = () => {
                                                         <option value="Sonstiges">Sonstiges</option>
                                                         <option value="custom">Eigene eingeben...</option>
                                                     </select>
+                                                )}
+                                                {formData.defaultCategory && (
+                                                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            id="overwriteCategory"
+                                                            checked={overwriteCategory} 
+                                                            onChange={e => setOverwriteCategory(e.target.checked)} 
+                                                            style={{ width: '16px', height: '16px', marginTop: '2px', cursor: 'pointer' }} 
+                                                        />
+                                                        <label htmlFor="overwriteCategory" style={{ fontSize: '13px', color: 'var(--color-text-main)', cursor: 'pointer' }}>
+                                                            Kategorie bei <strong>allen</strong> verknüpften Produkten erzwingen (überschreibt bestehende Kategorien)
+                                                        </label>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
