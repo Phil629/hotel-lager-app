@@ -155,7 +155,7 @@ Antworte ausschließlich als JSON:
   "confidence": 0.0
 }
 `
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
     
     // Baue die Payload für Gemini zusammen
     const geminiParts: any[] = [{ text: prompt }];
@@ -216,11 +216,13 @@ Antworte ausschließlich als JSON:
     console.log("Raw Gemini API response snippet:", JSON.stringify(geminiData).substring(0, 500));
 
     let geminiError = false;
+    let apiErrorData: any = null;
 
     // HTTP-Fehler oder leere Candidates (Rate-Limit, ungültiger Key etc.)
     if (!geminiRes.ok || !geminiData?.candidates?.length) {
         console.error("Gemini API error or empty candidates:", JSON.stringify(geminiData).substring(0, 300));
         geminiError = true;
+        apiErrorData = geminiData;
     }
 
     let extractedJsonText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
@@ -234,6 +236,17 @@ Antworte ausschließlich als JSON:
     } catch(e) {
         console.error("Error parsing JSON from Gemini:", e)
         geminiError = true;
+        parsedData = { 
+            parse_error: String(e),
+            raw_text: extractedJsonText 
+        };
+    }
+
+    if (apiErrorData) {
+        parsedData = {
+            parse_error: "Gemini API HTTP Error",
+            raw_text: JSON.stringify(apiErrorData)
+        }
     }
 
     // Schreibe Log in inbound_emails
