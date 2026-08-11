@@ -27,6 +27,8 @@ interface InboundEmail {
         total_price?: number;
         order_date?: string;
         invoice_number?: string;
+        parse_error?: string;
+        raw_text?: string;
     } | null;
     status: string;
     created_at: string;
