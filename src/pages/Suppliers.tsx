@@ -190,7 +190,7 @@ export const Suppliers: React.FC = () => {
                 const isNowAssigned = selectedProductIds.includes(product.id);
                 const needsAssignmentChange = wasAssigned !== isNowAssigned;
                 
-                const isCategoryEmpty = !product.category || product.category.trim() === '' || product.category === 'Keine' || product.category === 'Ohne Kategorie';
+                const isCategoryEmpty = !product.category || product.category.trim() === '' || product.category === 'Keine' || product.category === 'Ohne Kategorie' || product.category === 'Sonstiges';
                 const needsCategoryUpdate = isNowAssigned && !!supplierToSave.defaultCategory && isCategoryEmpty;
                 
                 const needsOverwrite = isNowAssigned && overwriteProducts && (product.emailOrderAddress || product.emailOrderSubject || product.emailOrderBody);
@@ -198,7 +198,7 @@ export const Suppliers: React.FC = () => {
                 return needsAssignmentChange || needsCategoryUpdate || needsOverwrite;
             }).map(product => {
                 const isNowAssigned = selectedProductIds.includes(product.id);
-                const isCategoryEmpty = !product.category || product.category.trim() === '' || product.category === 'Keine' || product.category === 'Ohne Kategorie';
+                const isCategoryEmpty = !product.category || product.category.trim() === '' || product.category === 'Keine' || product.category === 'Ohne Kategorie' || product.category === 'Sonstiges';
                 
                 const updatedProduct = {
                     ...product,
