@@ -373,6 +373,35 @@ Antworte ausschließlich als JSON:
     let createdOrdersCount = 0;
     let updatedOrdersCount = 0;
 
+    // Globale Metadaten-Aktualisierung (z.B. für Versandbestätigungen ohne Artikel-Liste)
+    const globalOrderRef = parsedData.order_reference || parsedData.invoice_number || null;
+    if (globalOrderRef && (parsedData.tracking_link || parsedData.order_notes || parsedData.delivery_date)) {
+        console.log(`Checking for open orders to update metadata globally for reference: ${globalOrderRef}`);
+        const { data: matchedOrders } = await supabase.from('orders')
+            .select('id, notes')
+            .eq('user_id', user_id)
+            .eq('status', 'open')
+            .eq('order_number', globalOrderRef);
+            
+        if (matchedOrders && matchedOrders.length > 0) {
+            console.log(`Found ${matchedOrders.length} orders matching reference. Applying global metadata...`);
+            for (const o of matchedOrders) {
+                const updatePayload: any = {};
+                if (parsedData.delivery_date) updatePayload.expected_delivery_date = parsedData.delivery_date;
+                if (parsedData.tracking_link) updatePayload.tracking_link = parsedData.tracking_link;
+                if (parsedData.order_notes) {
+                    const baseNotes = o.notes ? `${o.notes}\n\n` : '';
+                    updatePayload.notes = `${baseNotes}Update (System): ${parsedData.order_notes}`;
+                }
+                
+                await supabase.from('orders').update(updatePayload).eq('id', o.id);
+                // We don't increment updatedOrdersCount here so that item-level updates can still be counted separately
+                // but we know it processed at least one.
+            }
+            updatedOrdersCount += matchedOrders.length;
+        }
+    }
+
     // Aktualisiere oder Lege Produkte an
     const items = parsedData.items || []
     console.log(`Found ${items.length} items to process.`);
