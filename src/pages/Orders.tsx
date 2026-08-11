@@ -958,29 +958,7 @@ export const Orders: React.FC = () => {
                         {order.aiRevisions?.date?.reverted && <div style={{fontSize: '11px', color: '#9e9e9e', marginBottom: '4px'}}>↳ KI-Datumsänderung abgelehnt</div>}
                         {order.aiRevisions?.price?.reverted && <div style={{fontSize: '11px', color: '#9e9e9e', marginBottom: '4px'}}>↳ KI-Preisänderung abgelehnt</div>}
                         
-                        {(() => {
-                            let supplier = suppliers.find((s: Supplier) => s.name === order.supplierName);
-                            // Fallback if supplier name was changed
-                            if (!supplier) {
-                                const prod = products.find((p: Product) => p.name === order.productName);
-                                if (prod && prod.supplierId) {
-                                    supplier = suppliers.find((s: Supplier) => s.id === prod.supplierId);
-                                }
-                            }
 
-                            if (supplier?.notes && supplier.notes.length > 0) {
-                                return supplier.notes.filter(n => n.showOnOpenOrders).map(n => (
-                                    <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '8px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--spacing-xs)', marginBottom: 'var(--spacing-xs)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
-                                        <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-                                        <div>
-                                            <strong>Lieferantennotiz:</strong><br />
-                                            {n.text}
-                                        </div>
-                                    </div>
-                                ));
-                            }
-                            return null;
-                        })()}
                         {(() => {
                             const product = products.find((p: Product) => p.name === order.productName);
                             if (product?.notes && product.notes.length > 0) {
@@ -1469,6 +1447,15 @@ export const Orders: React.FC = () => {
                                     </div>
                                     {isExpanded && (
                                         <div style={{ padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                            {supplier?.notes && supplier.notes.length > 0 && supplier.notes.filter(n => n.showOnOpenOrders).map(n => (
+                                                <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
+                                                    <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                    <div>
+                                                        <strong>Lieferantennotiz:</strong><br />
+                                                        {n.text}
+                                                    </div>
+                                                </div>
+                                            ))}
                                             {supplierOrders.map(renderOrderCard)}
                                         </div>
                                     )}
