@@ -1,6 +1,6 @@
 import { generateId } from "../utils";
 import React, { useState, useCallback } from 'react';
-import type { Product, Order, Supplier } from '../types';
+import type { Product, Order } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
 import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ChevronRight, ShoppingCart, Bot, Save, Settings, Truck } from 'lucide-react';
