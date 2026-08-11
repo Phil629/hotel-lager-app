@@ -84,6 +84,9 @@ export const PhoneCallPanel: React.FC<PhoneCallPanelProps> = ({
                     {/* Customer number */}
                     {customerNumber && <CopyField label="Kundennummer" value={customerNumber} />}
 
+                    {/* Order number */}
+                    {order?.orderNumber && <CopyField label="Bestellnummer" value={order.orderNumber} />}
+
                     {/* Contact person */}
                     {contactName && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
