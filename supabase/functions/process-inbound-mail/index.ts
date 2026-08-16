@@ -116,9 +116,9 @@ Regeln:
 11. KATEGORIE: Weise jedem Artikel ZWINGEND eine logische Warengruppe/Kategorie auf Deutsch zu (z.B. "Getränke", "Reinigung", "Lebensmittel", "Hygiene", "Bürobedarf"). Nutze bevorzugt EXAKT eine der unten gelisteten vorhandenen Kategorien. Falls die Liste leer ist oder nichts passt, MUSST du eine sinnvolle neue erfinden. Verwende NIEMALS generische Begriffe wie "Importiert" oder "KI-Import".
 12. TELEFON: Falls eine Telefonnummer des Lieferanten auf dem Beleg steht, trage sie unter supplier_phone ein (bevorzugt internationales Format, z.B. +49 89 123456).
 13. IBAN: Falls eine IBAN des Lieferanten auf dem Beleg steht, trage sie unter supplier_iban ein.
-14. LIEFERTERMIN: Extrahiere den voraussichtlichen oder tatsächlichen Liefertermin (z.B. 'Lieferung am...', 'Voraussichtliches Lieferdatum') als 'delivery_date' (Format YYYY-MM-DD).
-15. TRACKING: Extrahiere einen eventuellen Tracking-Link (Sendungsverfolgung) als 'tracking_link'.
-16. STATUS-NOTIZEN: Fasse wichtige Versand- und Statusinformationen (z.B. 'Ihre Bestellung hat unser Logistikzentrum verlassen') in 'order_notes' zusammen.
+14. LIEFERTERMIN: Extrahiere den voraussichtlichen oder tatsächlichen Liefertermin als 'delivery_date' (Format YYYY-MM-DD). Wenn das Jahr fehlt (z.B. 'Montag, den 17.08.'), ergänze das aktuelle Jahr.
+15. TRACKING: Extrahiere einen eventuellen Tracking-Link ODER eine einfache Tracking-Nummer / Sendungsnummer (z.B. '00340434526445045357') als 'tracking_link'.
+16. STATUS-NOTIZEN: Fasse wichtige Versand- und Statusinformationen (z.B. 'Sendung wurde bearbeitet', 'hat unser Logistikzentrum verlassen') in 'order_notes' zusammen.
 
 Vorhandene Kategorien (bevorzugt verwenden): ${categoryHint}
 
