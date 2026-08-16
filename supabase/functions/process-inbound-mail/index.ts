@@ -380,16 +380,32 @@ Antworte ausschließlich als JSON:
 
     // Globale Metadaten-Aktualisierung (z.B. für Versandbestätigungen ohne Artikel-Liste)
     const globalOrderRef = parsedData.order_reference || parsedData.invoice_number || null;
-    if (globalOrderRef && (parsedData.tracking_link || parsedData.order_notes || parsedData.delivery_date)) {
-        console.log(`Checking for open orders to update metadata globally for reference: ${globalOrderRef}`);
-        const { data: matchedOrders } = await supabase.from('orders')
-            .select('id, notes')
-            .eq('user_id', user_id)
-            .eq('status', 'open')
-            .eq('order_number', globalOrderRef);
+    if (parsedData.tracking_link || parsedData.order_notes || parsedData.delivery_date) {
+        let matchedOrders: any[] | null = null;
+        
+        if (globalOrderRef) {
+            console.log(`Checking for open orders to update metadata globally for reference: ${globalOrderRef}`);
+            const { data } = await supabase.from('orders')
+                .select('id, notes')
+                .eq('user_id', user_id)
+                .eq('status', 'open')
+                .eq('order_number', globalOrderRef);
+            matchedOrders = data;
+        } else if (supName && supName !== 'Unbekannter Lieferant (KI)' && (docType === 'delivery_note' || docType === 'order_confirmation')) {
+            console.log(`No order reference found. Checking for all open orders for supplier: ${supName}`);
+            // Fallback: Wenn keine Bestellnummer vorliegt, aber es eine Versandbenachrichtigung ist, 
+            // hänge die Tracking-Daten an ALLE noch offenen Bestellungen dieses Lieferanten an.
+            // (Da Lieferanten offene Posten meist zusammen verschicken)
+            const { data } = await supabase.from('orders')
+                .select('id, notes')
+                .eq('user_id', user_id)
+                .eq('status', 'open')
+                .eq('supplier_name', supName);
+            matchedOrders = data;
+        }
             
         if (matchedOrders && matchedOrders.length > 0) {
-            console.log(`Found ${matchedOrders.length} orders matching reference. Applying global metadata...`);
+            console.log(`Found ${matchedOrders.length} orders to update. Applying global metadata...`);
             for (const o of matchedOrders) {
                 const updatePayload: any = {};
                 if (parsedData.delivery_date) updatePayload.expected_delivery_date = parsedData.delivery_date;
@@ -400,8 +416,6 @@ Antworte ausschließlich als JSON:
                 }
                 
                 await supabase.from('orders').update(updatePayload).eq('id', o.id);
-                // We don't increment updatedOrdersCount here so that item-level updates can still be counted separately
-                // but we know it processed at least one.
             }
             updatedOrdersCount += matchedOrders.length;
         }
