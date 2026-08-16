@@ -1,5 +1,6 @@
 import { generateId } from "../utils";
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { Product, Order } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
@@ -7,6 +8,7 @@ import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Ma
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import { CheckoutButton } from '../components/CheckoutButton';
+import { PrintChecklist } from '../components/PrintChecklist';
 import { useOrderData } from '../hooks/useOrderData';
 import { useCart } from '../hooks/useCart';
 import { useAppContext } from '../contexts/AppContext';
@@ -175,6 +177,7 @@ export const Orders: React.FC = () => {
 
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+    const [printingSupplierId, setPrintingSupplierId] = useState<string | null>(null);
 
     // Pagination State
     const [visibleReceivedCount, setVisibleReceivedCount] = useState(10);
@@ -241,6 +244,16 @@ export const Orders: React.FC = () => {
 
     // Collapsible Details State
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
+    useEffect(() => {
+        if (printingSupplierId) {
+            const timer = setTimeout(() => {
+                window.print();
+                setPrintingSupplierId(null);
+            }, 150);
+            return () => clearTimeout(timer);
+        }
+    }, [printingSupplierId]);
 
     // setSelectedProduct compatibility wrapper for resetting modal
     const setSelectedProduct = (val: Product | null) => {
@@ -1352,27 +1365,6 @@ export const Orders: React.FC = () => {
                             style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}
                         />
                     </div>
-                    <button 
-                        className="no-print"
-                        onClick={() => window.print()}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            backgroundColor: 'white',
-                            color: 'var(--color-text-main)',
-                            border: '1px solid var(--color-border)',
-                            borderRadius: 'var(--radius-md)',
-                            padding: '8px 16px',
-                            cursor: 'pointer',
-                            fontWeight: 500,
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <Printer size={18} />
-                        Drucken
-                    </button>
                 </div>
 
                 {openOrders.length === 0 ? (
@@ -1468,6 +1460,13 @@ export const Orders: React.FC = () => {
                                             </h4>
                                         </div>
                                         <div className="no-print" style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setPrintingSupplierId(supplierKey); }}
+                                                className="btn btn-sm btn-ghost"
+                                                title="Checkliste ausdrucken"
+                                            >
+                                                <Printer size={15} />
+                                            </button>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openDeliveryDateModal(supplierOrders); }}
                                                 className="btn btn-sm btn-ghost"
@@ -3387,6 +3386,18 @@ export const Orders: React.FC = () => {
                     />
                 )
             }
+
+            {/* Portal für die Druckansicht */}
+            {printingSupplierId && typeof document !== 'undefined' && createPortal(
+                <PrintChecklist
+                    supplierName={suppliers.find(s => s.id === printingSupplierId)?.name || (printingSupplierId === 'Sonstige / Einmalbestellungen' ? printingSupplierId : (openOrders.find(o => o.supplierName === printingSupplierId)?.supplierName || 'Unbekannter Lieferant'))}
+                    orders={openOrders.filter(o => {
+                        const p = products.find(prod => prod.name === o.productName);
+                        return (p?.supplierId || o.supplierName || 'Sonstige / Einmalbestellungen') === printingSupplierId;
+                    })}
+                />,
+                document.body
+            )}
         </div>
     );
 };
