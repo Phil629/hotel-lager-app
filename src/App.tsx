@@ -58,6 +58,7 @@ function App() {
   const [canManageSuppliers, setCanManageSuppliers] = useState(false);
   const [canSeePasswords, setCanSeePasswords] = useState(false);
   const [isAiCartEnabled, setIsAiCartEnabled] = useState(true);
+  const [overwriteStockOnReceipt, setOverwriteStockOnReceipt] = useState(false);
   const [permissionsLoaded, setPermissionsLoaded] = useState(false);
 
   // Prevents race condition between getSession and onAuthStateChange
@@ -120,6 +121,7 @@ function App() {
           setCanManageSuppliers(isOwnerOrAdmin || !!companySettings.staffCanManageSuppliers);
           setCanSeePasswords(isOwnerOrAdmin || !!companySettings.staffCanSeePasswords);
           setIsAiCartEnabled(companySettings.enableAiCart !== false);
+          setOverwriteStockOnReceipt(!!companySettings.overwriteStockOnReceipt);
           setPermissionsLoaded(true);
 
           // Sync company name to local storage
@@ -177,6 +179,7 @@ function App() {
       if (customEvent.detail) {
         const newSettings = customEvent.detail;
         setIsAiCartEnabled(newSettings.enableAiCart !== false);
+        setOverwriteStockOnReceipt(!!newSettings.overwriteStockOnReceipt);
         // Note: other settings like canSeePrices depend on role, which might be stale in this closure, 
         // but enableAiCart is global so we can safely update it here.
       }
@@ -223,6 +226,7 @@ function App() {
     canSeePasswords,
     permissionsLoaded,
     isAiCartEnabled,
+    overwriteStockOnReceipt,
   };
 
   return (

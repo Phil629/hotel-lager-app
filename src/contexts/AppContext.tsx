@@ -9,6 +9,7 @@ interface AppContextValue {
   canSeePasswords: boolean;
   permissionsLoaded: boolean;
   isAiCartEnabled: boolean;
+  overwriteStockOnReceipt: boolean;
 }
 
 const defaultValue: AppContextValue = {
@@ -20,6 +21,7 @@ const defaultValue: AppContextValue = {
   canSeePasswords: false,
   permissionsLoaded: false,
   isAiCartEnabled: true,
+  overwriteStockOnReceipt: false,
 };
 
 export const AppContext = createContext<AppContextValue>(defaultValue);
