@@ -1,6 +1,12 @@
 import React from 'react';
 import type { Order } from '../types';
 
+const cleanNotes = (notes?: string) => {
+    if (!notes) return '-';
+    const cleaned = notes.split('KI-Import')[0].trim();
+    return cleaned || '-';
+};
+
 interface PrintChecklistProps {
     supplierName: string;
     orders: Order[];
@@ -48,7 +54,7 @@ export const PrintChecklist: React.FC<PrintChecklistProps> = ({ supplierName, or
                                 {order.quantity}
                             </td>
                             <td style={{ padding: '16px 12px', verticalAlign: 'middle', textAlign: 'center', fontSize: '14px', fontStyle: 'italic', color: '#555' }}>
-                                {order.notes || '-'}
+                                {cleanNotes(order.notes)}
                             </td>
                             <td style={{ padding: '16px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                                 <div style={{ 

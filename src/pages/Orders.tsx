@@ -886,12 +886,12 @@ export const Orders: React.FC = () => {
                             {order.orderNumber && <span className="badge badge-neutral" title="Bestellnummer">Nr: {order.orderNumber}</span>}
                             {order.price && <span className="badge badge-neutral" title="Preis">{order.price.toFixed(2)} €</span>}
                         </div>
-                        {order.notes && (
+                        {order.notes && order.notes.split('KI-Import')[0].trim() && (
                             <div 
-                                title={order.notes} 
+                                title={order.notes.split('KI-Import')[0].trim()} 
                                 style={{ fontSize: '12px', fontStyle: 'italic', marginBottom: 'var(--spacing-xs)', color: 'var(--color-text-muted)', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
-                                "{order.notes}"
+                                "{order.notes.split('KI-Import')[0].trim()}"
                             </div>
                         )}
                         {(() => {
