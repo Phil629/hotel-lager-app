@@ -3,7 +3,7 @@ import React, { useState, useCallback } from 'react';
 import type { Product, Order } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ChevronRight, ShoppingCart, Bot, Save, Settings, Truck } from 'lucide-react';
+import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ChevronRight, ShoppingCart, Bot, Save, Settings, Truck, Printer } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import { CheckoutButton } from '../components/CheckoutButton';
@@ -108,7 +108,7 @@ const KiLogDetail: React.FC<{ email: InboundEmail }> = ({ email }) => {
                         )}
                     </div>
                 </div>
-            ) : (d.tracking_link || d.delivery_date || d.order_notes) ? (
+            ) : ((d as any).tracking_link || (d as any).delivery_date || (d as any).order_notes) ? (
                 <div style={{ fontSize: '13px', color: 'var(--color-success)', marginTop: '8px', padding: '12px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
                     ✅ <strong>Versand-Informationen verarbeitet:</strong> Die Tracking- und Lieferdaten aus dieser E-Mail wurden erfolgreich zu deinen offenen Bestellungen hinzugefügt.
                 </div>
@@ -1164,6 +1164,8 @@ export const Orders: React.FC = () => {
                     </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '130px', alignItems: 'flex-end' }}>
+                    <div className="print-only print-checkbox"></div>
+                    <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                     {order.status === 'open' && (
                         <>
                             <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
@@ -1209,6 +1211,7 @@ export const Orders: React.FC = () => {
                             </div>
                         </>
                     )}
+                    </div>
                 </div>
                 </div>
             </div>
@@ -1339,7 +1342,7 @@ export const Orders: React.FC = () => {
                         <Clock size={24} />
                         Offene Bestellungen
                     </h3>
-                    <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-full)', padding: '6px 16px', border: '1px solid var(--color-border)', flex: '1 1 250px', maxWidth: '400px' }}>
+                    <div className="no-print" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-full)', padding: '6px 16px', border: '1px solid var(--color-border)', flex: '1 1 250px', maxWidth: '400px' }}>
                         <Search size={18} color="var(--color-text-muted)" style={{ marginRight: '8px' }} />
                         <input
                             type="text"
@@ -1349,6 +1352,27 @@ export const Orders: React.FC = () => {
                             style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}
                         />
                     </div>
+                    <button 
+                        className="no-print"
+                        onClick={() => window.print()}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            backgroundColor: 'white',
+                            color: 'var(--color-text-main)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 'var(--radius-md)',
+                            padding: '8px 16px',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        <Printer size={18} />
+                        Drucken
+                    </button>
                 </div>
 
                 {openOrders.length === 0 ? (
@@ -1443,7 +1467,7 @@ export const Orders: React.FC = () => {
                                                 )}
                                             </h4>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                                        <div className="no-print" style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openDeliveryDateModal(supplierOrders); }}
                                                 className="btn btn-sm btn-ghost"
@@ -1471,9 +1495,8 @@ export const Orders: React.FC = () => {
                                             </button>
                                         </div>
                                     </div>
-                                    {isExpanded && (
-                                        <div style={{ padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                            {supplier?.notes && supplier.notes.length > 0 && supplier.notes.filter(n => n.showOnOpenOrders).map(n => (
+                                    <div className={isExpanded ? '' : 'print-expand'} style={{ padding: 'var(--spacing-md)', display: isExpanded ? 'flex' : 'none', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                                        {supplier?.notes && supplier.notes.length > 0 && supplier.notes.filter(n => n.showOnOpenOrders).map(n => (
                                                 <div key={n.id} style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid #ffeeba', display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: 'var(--font-size-sm)' }}>
                                                     <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
                                                     <div>
@@ -1482,9 +1505,8 @@ export const Orders: React.FC = () => {
                                                     </div>
                                                 </div>
                                             ))}
-                                            {supplierOrders.map(renderOrderCard)}
-                                        </div>
-                                    )}
+                                        {supplierOrders.map(renderOrderCard)}
+                                    </div>
                                 </div>
                             );
                         })}
