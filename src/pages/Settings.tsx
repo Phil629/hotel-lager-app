@@ -788,8 +788,8 @@ export const Settings: React.FC = () => {
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginTop: 'var(--spacing-md)' }}>
                             <div>
-                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Bestand beim Wareneingang überschreiben</div>
-                                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Wenn aktiv, wird der Lagerbestand auf die erhaltene Menge gesetzt. Ansonsten wird die erhaltene Menge zum aktuellen Bestand addiert.</div>
+                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Bestand durch Liefermenge ersetzen (statt addieren)</div>
+                                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Aktivieren, wenn ihr den Verbrauch im Hotel nicht im System abzieht. So wächst der Bestand nicht ins Unendliche, sondern wird bei jeder Lieferung automatisch auf die neue Liefermenge korrigiert.</div>
                             </div>
                             <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
                                 <input
