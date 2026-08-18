@@ -971,7 +971,7 @@ export const Settings: React.FC = () => {
                 )}
                 
                 <div style={{ marginTop: 'var(--spacing-xl)', display: 'flex', justifyContent: 'flex-end', position: 'sticky', bottom: '20px', zIndex: 10 }}>
-                    <button type="submit" className="btn btn-primary" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '12px 24px', fontSize: '15px' }}>
+                    <button type="button" onClick={handleSave} className="btn btn-primary" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '12px 24px', fontSize: '15px' }}>
                         <Save size={18} /> Einstellungen speichern
                     </button>
                 </div>
