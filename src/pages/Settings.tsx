@@ -435,7 +435,7 @@ export const Settings: React.FC = () => {
                             <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Dark Mode (Dunkles Design)</div>
                             <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>Wechselt das Design der gesamten App in den dunklen Modus.</div>
                         </div>
-                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                             <input
                                 type="checkbox"
                                 checked={document.documentElement.getAttribute('data-theme') === 'dark'}
@@ -588,7 +588,7 @@ export const Settings: React.FC = () => {
                                 <div style={{ fontWeight: 600, marginBottom: '4px' }}>Lagerbestand & Warnungen</div>
                                 <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>Schaltet die Bestandsanzeigen und farbigen Markierungen aktiv.</div>
                             </div>
-                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                                 <input
                                     type="checkbox"
                                     checked={settings.enableStockManagement}
@@ -606,7 +606,7 @@ export const Settings: React.FC = () => {
                                 <div style={{ fontWeight: 600, marginBottom: '4px', color: '#ea580c' }}>Inventur-Modus (Pausiert)</div>
                                 <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>Der automatische KI-Verbrauch wird temporär pausiert, z.B. für eine Zählung.</div>
                             </div>
-                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                                 <input
                                     type="checkbox"
                                     checked={settings.inventoryMode}
@@ -638,7 +638,7 @@ export const Settings: React.FC = () => {
                             <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Dark Mode (Dunkles Design)</div>
                             <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>Wechselt das Design der gesamten App in den dunklen Modus.</div>
                         </div>
-                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                             <input
                                 type="checkbox"
                                 checked={document.documentElement.getAttribute('data-theme') === 'dark'}
@@ -719,7 +719,7 @@ export const Settings: React.FC = () => {
                                 <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Einkaufspreise & Summen sehen</div>
                                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Dürfen Mitarbeiter die Einkaufspreise und Warenkorb-Summen sehen? (Wenn aus, werden Preise für Mitarbeiter ausgeblendet)</div>
                             </div>
-                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                                 <input
                                     type="checkbox"
                                     checked={companySettings.staffCanSeePrices}
@@ -737,7 +737,7 @@ export const Settings: React.FC = () => {
                                 <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Lieferanten anlegen & bearbeiten</div>
                                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Dürfen Mitarbeiter neue Lieferanten hinzufügen oder bearbeiten? (Passwörter sind immer nur für Inhaber sichtbar)</div>
                             </div>
-                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                                 <input
                                     type="checkbox"
                                     checked={companySettings.staffCanManageSuppliers}
@@ -755,7 +755,7 @@ export const Settings: React.FC = () => {
                                 <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Passwörter der Lieferanten sehen</div>
                                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Dürfen Mitarbeiter die Zugangsdaten der Lieferanten sehen?</div>
                             </div>
-                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                                 <input
                                     type="checkbox"
                                     checked={companySettings.staffCanSeePasswords}
@@ -773,7 +773,7 @@ export const Settings: React.FC = () => {
                                 <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>KI-Warenkorb & Auto-Bestellungen</div>
                                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Mitarbeiter können Artikel im Warenkorb sammeln und automatische Checkout-Optionen nutzen. Falls deaktiviert, wird die Legacy-Bestelllogik (Direktlinks) wiederhergestellt.</div>
                             </div>
-                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                                 <input
                                     type="checkbox"
                                     checked={companySettings.enableAiCart !== false}
@@ -788,10 +788,10 @@ export const Settings: React.FC = () => {
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginTop: 'var(--spacing-md)' }}>
                             <div>
-                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Bestand durch Liefermenge ersetzen (statt addieren)</div>
-                                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Aktivieren, wenn ihr den Verbrauch im Hotel nicht im System abzieht. So wächst der Bestand nicht ins Unendliche, sondern wird bei jeder Lieferung automatisch auf die neue Liefermenge korrigiert.</div>
+                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Bestand bei Wareneingang überschreiben (Absolute Korrektur)</div>
+                                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Empfohlen für Betriebe ohne laufende Entnahmebuchungen. Setzt den Systembestand bei einem Wareneingang exakt auf die neu gelieferte Menge, anstatt diese zum bestehenden Systembestand zu addieren.</div>
                             </div>
-                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
                                 <input
                                     type="checkbox"
                                     checked={companySettings.overwriteStockOnReceipt === true}
@@ -969,6 +969,12 @@ export const Settings: React.FC = () => {
                         </div>
                     </div>
                 )}
+                
+                <div style={{ marginTop: 'var(--spacing-xl)', display: 'flex', justifyContent: 'flex-end', position: 'sticky', bottom: '20px', zIndex: 10 }}>
+                    <button type="submit" className="btn btn-primary" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '12px 24px', fontSize: '15px' }}>
+                        <Save size={18} /> Einstellungen speichern
+                    </button>
+                </div>
             </form>
 
             {confirm && (
