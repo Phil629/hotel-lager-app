@@ -25,7 +25,7 @@ const SectionCard = ({ children }: { children: React.ReactNode }) => (
 export const Settings: React.FC = () => {
     const { currentPlan: serverPlan } = useAppContext();
     const [activeTab, setActiveTab] = useState<'general' | 'team' | 'data'>('general');
-    const [companySettings, setCompanySettings] = useState({ staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false, enableAiCart: true });
+    const [companySettings, setCompanySettings] = useState({ staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false, enableAiCart: true, overwriteStockOnReceipt: false });
     const [settings, setSettings] = useState<AppSettings>({
         serviceId: '',
         templateId: '',
@@ -782,6 +782,24 @@ export const Settings: React.FC = () => {
                                 />
                                 <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: companySettings.enableAiCart !== false ? 'var(--color-primary)' : '#ccc', borderRadius: '24px', transition: '.4s' }}>
                                     <span style={{ position: 'absolute', content: '""', height: '18px', width: '18px', left: companySettings.enableAiCart !== false ? '26px' : '4px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '.4s' }}></span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginTop: 'var(--spacing-md)' }}>
+                            <div>
+                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Bestand beim Wareneingang überschreiben</div>
+                                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Wenn aktiv, wird der Lagerbestand auf die erhaltene Menge gesetzt. Ansonsten wird die erhaltene Menge zum aktuellen Bestand addiert.</div>
+                            </div>
+                            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={companySettings.overwriteStockOnReceipt === true}
+                                    onChange={(e) => setCompanySettings({...companySettings, overwriteStockOnReceipt: e.target.checked})}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: companySettings.overwriteStockOnReceipt === true ? 'var(--color-primary)' : '#ccc', borderRadius: '24px', transition: '.4s' }}>
+                                    <span style={{ position: 'absolute', content: '""', height: '18px', width: '18px', left: companySettings.overwriteStockOnReceipt === true ? '26px' : '4px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '.4s' }}></span>
                                 </span>
                             </label>
                         </div>
