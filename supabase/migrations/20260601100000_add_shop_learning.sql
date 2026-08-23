@@ -108,6 +108,7 @@ CREATE INDEX IF NOT EXISTS idx_suppliers_playbook_domain ON public.suppliers (pl
 --              playbook_version (safe, öffentlich, für Kunden-UI).
 -- ────────────────────────────────────────────────────────────────
 
+DROP VIEW IF EXISTS public.suppliers_safe;
 CREATE OR REPLACE VIEW public.suppliers_safe AS
   SELECT
     -- Kern-Identität

@@ -7,10 +7,10 @@ ALTER TABLE profiles
 
 -- Generate 32-char hex secrets for all existing users
 UPDATE profiles
-SET inbound_email_secret = encode(gen_random_bytes(16), 'hex')
+SET inbound_email_secret = md5(random()::text)
 WHERE inbound_email_secret IS NULL;
 
 -- Make non-null with auto-generated default for new users
 ALTER TABLE profiles
-  ALTER COLUMN inbound_email_secret SET DEFAULT encode(gen_random_bytes(16), 'hex'),
+  ALTER COLUMN inbound_email_secret SET DEFAULT md5(random()::text),
   ALTER COLUMN inbound_email_secret SET NOT NULL;

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS error_logs (
 ALTER TABLE error_logs ENABLE ROW LEVEL SECURITY;
 
 -- Admins can read all error logs for their company
+DROP POLICY IF EXISTS "Admins can read error logs for their company" ON error_logs;
 CREATE POLICY "Admins can read error logs for their company"
     ON error_logs FOR SELECT
     USING (
@@ -18,7 +19,12 @@ CREATE POLICY "Admins can read error logs for their company"
         AND (SELECT role FROM profiles WHERE id = auth.uid()) IN ('admin', 'owner')
     );
 
--- Any authenticated user can insert an error log (for their own errors)
-CREATE POLICY "Users can insert error logs"
+-- Anyone authenticated can insert error logs for their company
+DROP POLICY IF EXISTS "Users can insert error logs" ON error_logs;
+DROP POLICY IF EXISTS "Authenticated users can insert error logs" ON error_logs;
+CREATE POLICY "Authenticated users can insert error logs"
     ON error_logs FOR INSERT
-    WITH CHECK (auth.role() = 'authenticated');
+    WITH CHECK (
+        company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
+        AND auth.role() = 'authenticated'
+    );

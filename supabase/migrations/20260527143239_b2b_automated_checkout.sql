@@ -54,7 +54,7 @@ $$;
 CREATE TABLE IF NOT EXISTS user_supplier_credentials (
   id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id           UUID        NOT NULL REFERENCES companies(id)  ON DELETE CASCADE,
-  supplier_id          UUID        NOT NULL REFERENCES suppliers(id)  ON DELETE CASCADE,
+  supplier_id          TEXT        NOT NULL REFERENCES suppliers(id)  ON DELETE CASCADE,
   login_url            TEXT,
   login_username       TEXT,
   vault_secret_id      UUID,
@@ -89,7 +89,7 @@ CREATE TRIGGER trg_usc_updated_at
 CREATE TABLE IF NOT EXISTS checkout_sessions (
   id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id           UUID        NOT NULL REFERENCES companies(id)  ON DELETE CASCADE,
-  supplier_id          UUID                 REFERENCES suppliers(id)  ON DELETE SET NULL,
+  supplier_id          TEXT                 REFERENCES suppliers(id)  ON DELETE SET NULL,
   initiated_by         UUID                 REFERENCES auth.users(id) ON DELETE SET NULL,
   strategy             TEXT        NOT NULL
     CHECK (strategy IN ('cloud', 'extension')),
@@ -145,7 +145,7 @@ CREATE INDEX IF NOT EXISTS idx_cs_extension_token   ON checkout_sessions (extens
 
 CREATE TABLE IF NOT EXISTS selector_heal_log (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  supplier_id      UUID        NOT NULL REFERENCES suppliers(id)         ON DELETE CASCADE,
+  supplier_id      TEXT        NOT NULL REFERENCES suppliers(id)         ON DELETE CASCADE,
   session_id       UUID                 REFERENCES checkout_sessions(id) ON DELETE SET NULL,
   context          TEXT        NOT NULL
     CHECK (context IN ('login', 'search', 'add_to_cart', 'price_check', 'other')),
