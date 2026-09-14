@@ -429,7 +429,7 @@ Antworte ausschließlich als JSON:
         if (!item?.product_name) continue;
         
         const lowerName = item.product_name.toLowerCase();
-        if (lowerName.includes('versand') || lowerName.includes('pfand') || lowerName.includes('porto') || lowerName.includes('gebühr') || lowerName.includes('logistik') || lowerName.includes('palette') || lowerName.includes('shipping') || lowerName.includes('insurance') || lowerName.includes('discount') || lowerName.includes('protection')) {
+        if (lowerName.includes('versand') || lowerName.includes('pfand') || lowerName.includes('porto') || lowerName.includes('gebühr') || lowerName.includes('logistik') || lowerName.includes('shipping') || lowerName.includes('insurance') || lowerName.includes('discount') || lowerName.includes('protection')) {
              console.log("Skipping non-product item:", item.product_name);
              continue;
         }
