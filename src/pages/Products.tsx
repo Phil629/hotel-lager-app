@@ -651,7 +651,31 @@ export const Products: React.FC = () => {
         }
     };
 
+    // Berechne Bestellstatistiken für ein Produkt aus den bereits geladenen Orders
+    const getOrderStats = (productName: string): { lastReceived: Date | null; avgDays: number | null } => {
+        const receivedOrders = orders
+            .filter(o => o.status === 'received' && o.productName?.trim().toLowerCase() === productName.trim().toLowerCase() && o.receivedAt)
+            .sort((a, b) => new Date(a.receivedAt!).getTime() - new Date(b.receivedAt!).getTime());
+
+        if (receivedOrders.length === 0) return { lastReceived: null, avgDays: null };
+
+        const lastReceived = new Date(receivedOrders[receivedOrders.length - 1].receivedAt!);
+
+        let avgDays: number | null = null;
+        if (receivedOrders.length >= 2) {
+            let totalDays = 0;
+            for (let i = 1; i < receivedOrders.length; i++) {
+                const diff = new Date(receivedOrders[i].receivedAt!).getTime() - new Date(receivedOrders[i - 1].receivedAt!).getTime();
+                totalDays += diff / (1000 * 60 * 60 * 24);
+            }
+            avgDays = Math.round(totalDays / (receivedOrders.length - 1));
+        }
+
+        return { lastReceived, avgDays };
+    };
+
     const handleSort = (key: 'name' | 'stock') => {
+
         let direction: 'asc' | 'desc' = 'asc';
         if (sortConfig.key === key && sortConfig.direction === 'asc') {
             direction = 'desc';
@@ -991,6 +1015,18 @@ export const Products: React.FC = () => {
                                                                         }
                                                                         return badges.length > 0 ? <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>{badges}</div> : null;
                                                                     })()}
+                                                                    {(() => {
+                                                                        const { lastReceived, avgDays } = getOrderStats(product.name);
+                                                                        if (!lastReceived) return null;
+                                                                        const daysAgo = Math.floor((Date.now() - lastReceived.getTime()) / (1000 * 60 * 60 * 24));
+                                                                        const ago = daysAgo === 0 ? 'heute' : daysAgo === 1 ? 'gestern' : `vor ${daysAgo}d`;
+                                                                        return (
+                                                                            <div style={{ fontSize: '10px', color: 'var(--color-text-faint)', marginTop: '6px', lineHeight: 1.5 }}>
+                                                                                <span title={`Zuletzt erhalten: ${lastReceived.toLocaleDateString('de-DE')}`}>⏱ {ago}</span>
+                                                                                {avgDays !== null && <span style={{ marginLeft: '6px' }} title={`Ø ${avgDays} Tage zwischen Lieferungen`}>∅ {avgDays}d</span>}
+                                                                            </div>
+                                                                        );
+                                                                    })()}
                                                                 </div>
                                                                 <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                                                                     <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Gesamtwert</div>
@@ -1071,6 +1107,18 @@ export const Products: React.FC = () => {
                                                                         <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 500 }}>
                                                                             {canSeePrices && product.price ? product.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '-'} / {product.unit}
                                                                         </div>
+                                                                        {(() => {
+                                                                            const { lastReceived, avgDays } = getOrderStats(product.name);
+                                                                            if (!lastReceived) return null;
+                                                                            const daysAgo = Math.floor((Date.now() - lastReceived.getTime()) / (1000 * 60 * 60 * 24));
+                                                                            const ago = daysAgo === 0 ? 'heute' : daysAgo === 1 ? 'gestern' : `vor ${daysAgo}d`;
+                                                                            return (
+                                                                                <div style={{ fontSize: '11px', color: 'var(--color-text-faint)', marginTop: '3px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                                                    <span title={`Zuletzt erhalten: ${lastReceived.toLocaleDateString('de-DE')}`}>⏱ {ago}</span>
+                                                                                    {avgDays !== null && <span title={`Ø ${avgDays} Tage zwischen Lieferungen`}>∅ {avgDays}d</span>}
+                                                                                </div>
+                                                                            );
+                                                                        })()}
                                                                         
                                                                         {(() => {
                                                                             if (groupBy === 'supplier') return null;
