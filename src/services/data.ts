@@ -1,5 +1,6 @@
 import { generateId } from "../utils";
 import { getSupabaseClient } from './supabase';
+import { logError } from './errors';
 import type { Product, Order, Supplier, Note } from '../types';
 
 const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: boolean | undefined): Note[] => {
@@ -324,16 +325,28 @@ export const DataService = {
         const supabase = getSupabaseClient();
         if (!supabase) return;
         const { data, error } = await supabase.rpc('mark_order_received', { p_order_id: orderId });
-        if (error) throw new Error(error.message || JSON.stringify(error));
-        if (data && data.success === false) throw new Error(data.message || 'Unbekannter Fehler im RPC');
+        if (error) {
+            logError(`markOrderReceived fehlgeschlagen: ${error.message}`, { orderId, code: error.code });
+            throw new Error(error.message || JSON.stringify(error));
+        }
+        if (data && data.success === false) {
+            logError(`markOrderReceived: ${data.message}`, { orderId });
+            throw new Error(data.message || 'Unbekannter Fehler im RPC');
+        }
     },
 
     async unmarkOrderReceived(orderId: string): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;
         const { data, error } = await supabase.rpc('unmark_order_received', { p_order_id: orderId });
-        if (error) throw new Error(error.message || JSON.stringify(error));
-        if (data && data.success === false) throw new Error(data.message || 'Unbekannter Fehler im RPC');
+        if (error) {
+            logError(`unmarkOrderReceived fehlgeschlagen: ${error.message}`, { orderId, code: error.code });
+            throw new Error(error.message || JSON.stringify(error));
+        }
+        if (data && data.success === false) {
+            logError(`unmarkOrderReceived: ${data.message}`, { orderId });
+            throw new Error(data.message || 'Unbekannter Fehler im RPC');
+        }
     },
 
     async getSupplierCredentials(supplierId: string): Promise<{ loginUrl?: string; loginUsername?: string; loginPassword?: string } | null> {

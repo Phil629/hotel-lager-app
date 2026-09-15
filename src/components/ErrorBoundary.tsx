@@ -1,4 +1,5 @@
 import React from 'react';
+import { logError } from '../services/errors';
 
 interface State {
   hasError: boolean;
@@ -17,6 +18,10 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('ErrorBoundary caught:', error, info);
+    logError(`UI-Absturz: ${error.message}`, {
+      stack: error.stack?.slice(0, 1000),
+      componentStack: info.componentStack?.slice(0, 1000),
+    });
   }
 
   render() {

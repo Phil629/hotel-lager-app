@@ -24,7 +24,9 @@ const SectionCard = ({ children }: { children: React.ReactNode }) => (
 
 export const Settings: React.FC = () => {
     const { currentPlan: serverPlan } = useAppContext();
-    const [activeTab, setActiveTab] = useState<'general' | 'team' | 'data'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'team' | 'data' | 'logs'>('general');
+    const [errorLogs, setErrorLogs] = useState<Array<{ id: string; message: string; context: Record<string, unknown>; created_at: string }>>([]);
+    const [logsLoading, setLogsLoading] = useState(false);
     const [companySettings, setCompanySettings] = useState({ staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false, enableAiCart: true, overwriteStockOnReceipt: false });
     const [settings, setSettings] = useState<AppSettings>({
         serviceId: '',
@@ -339,6 +341,18 @@ export const Settings: React.FC = () => {
                         <button type="button" onClick={() => setActiveTab('team')} className={`btn ${activeTab === 'team' ? 'btn-primary' : 'btn-ghost'}`}><Users size={18} /> Team & Rechte</button>
                     )}
                     <button type="button" onClick={() => setActiveTab('data')} className={`btn ${activeTab === 'data' ? 'btn-primary' : 'btn-ghost'}`}><Database size={18} /> Daten, Backup & System</button>
+                    {(role === 'owner' || role === 'admin') && (
+                        <button type="button" onClick={async () => {
+                            setActiveTab('logs');
+                            setLogsLoading(true);
+                            const supabaseClient = getSupabaseClient();
+                            if (supabaseClient) {
+                                const { data } = await supabaseClient.from('error_logs').select('id, message, context, created_at').order('created_at', { ascending: false }).limit(50);
+                                setErrorLogs((data as any) || []);
+                            }
+                            setLogsLoading(false);
+                        }} className={`btn ${activeTab === 'logs' ? 'btn-danger' : 'btn-ghost'}`}><AlertTriangle size={18} /> Fehlerprotokoll</button>
+                    )}
                 </div>
                 
                 {activeTab === 'general' && (
@@ -970,11 +984,49 @@ export const Settings: React.FC = () => {
                     </div>
                 )}
                 
+                {activeTab === 'logs' && (
+                    <SectionCard>
+                        <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                            <AlertTriangle size={22} color="var(--color-danger)" /> Fehlerprotokoll
+                        </h3>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', marginBottom: '16px' }}>
+                            Zeigt die letzten 50 im System erfassten Fehler. Wird automatisch befüllt sobald Fehler auftreten.
+                        </p>
+                        {logsLoading ? (
+                            <div style={{ color: 'var(--color-text-muted)', padding: '20px', textAlign: 'center' }}>Lade...</div>
+                        ) : errorLogs.length === 0 ? (
+                            <div style={{ color: 'var(--color-text-muted)', padding: '20px', textAlign: 'center', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                                ✅ Keine Fehler erfasst – alles in Ordnung.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {errorLogs.map(log => (
+                                    <div key={log.id} style={{ backgroundColor: '#fff7f7', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px 16px', fontSize: '13px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontWeight: 600, color: '#dc2626', flex: 1 }}>{log.message}</span>
+                                            <span style={{ color: 'var(--color-text-faint)', flexShrink: 0, fontSize: '12px' }}>
+                                                {new Date(log.created_at).toLocaleString('de-DE')}
+                                            </span>
+                                        </div>
+                                        {log.context && Object.keys(log.context).length > 0 && (
+                                            <pre style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#7f1d1d', backgroundColor: '#fee2e2', padding: '8px', borderRadius: '4px', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                                {JSON.stringify(log.context, null, 2)}
+                                            </pre>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </SectionCard>
+                )}
+
+                {activeTab !== 'logs' && (
                 <div style={{ marginTop: 'var(--spacing-xl)', display: 'flex', justifyContent: 'flex-end', position: 'sticky', bottom: '20px', zIndex: 10 }}>
                     <button type="button" onClick={handleSave} className="btn btn-primary" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '12px 24px', fontSize: '15px' }}>
                         <Save size={18} /> Einstellungen speichern
                     </button>
                 </div>
+                )}
             </form>
 
             {confirm && (
