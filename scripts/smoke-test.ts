@@ -104,6 +104,24 @@ async function run() {
         results.push({ ok: false, name: 'unmark_order_received RPC', detail: e.message });
     }
 
+    // ── Test 6: update_company_settings RPC & RLS Update Policy ────────────
+    try {
+        // Test calling update_company_settings RPC
+        const { error } = await supabase.rpc('update_company_settings', {
+            p_settings: { test: true }
+        });
+        // We expect either OK or "Nicht autorisiert" (because service role has no auth.uid())
+        // but NOT "function public.update_company_settings does not exist"
+        const notFound = error?.message?.includes('does not exist');
+        results.push({
+            ok: !notFound,
+            name: 'update_company_settings RPC existiert',
+            detail: notFound ? error?.message : (error?.message ?? 'OK'),
+        });
+    } catch (e: any) {
+        results.push({ ok: false, name: 'update_company_settings RPC existiert', detail: e.message });
+    }
+
     // ── Ergebnis ───────────────────────────────────────────────────────────
     const passed = results.filter(r => r.ok).length;
     const failed = results.filter(r => !r.ok).length;

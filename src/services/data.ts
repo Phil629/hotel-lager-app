@@ -418,22 +418,58 @@ export const DataService = {
             if (!user) return null;
             const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
             if (!profile?.company_id) return null;
-            const { data: company } = await supabase.from('companies').select('settings').eq('id', profile.company_id).single();
-            return company?.settings || { staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false };
-        } catch (e) { return null; }
+            const { data: company, error } = await supabase.from('companies').select('name, settings').eq('id', profile.company_id).single();
+            if (error) {
+                console.error('Error fetching company settings:', error);
+                return null;
+            }
+            const defaults = {
+                staffCanSeePrices: false,
+                staffCanManageSuppliers: false,
+                staffCanSeePasswords: false,
+                enableAiCart: true,
+                overwriteStockOnReceipt: false,
+            };
+            return {
+                ...defaults,
+                ...(company?.settings || {}),
+                _companyName: company?.name || ''
+            };
+        } catch (e) {
+            console.error('getCompanySettings exception:', e);
+            return null;
+        }
     },
 
     updateCompanySettings: async (settings: any) => {
         try {
             const supabase = getSupabaseClient();
-            if (!supabase) return false;
+            if (!supabase) throw new Error("Keine Datenbankverbindung");
+            
+            // 1. First try RPC (security definer, atomic merge)
+            const { error: rpcError } = await supabase.rpc('update_company_settings', { p_settings: settings });
+            if (!rpcError) return true;
+
+            console.warn("RPC update_company_settings failed, trying direct update:", rpcError);
+
+            // 2. Fallback: direct update via RLS policy
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return false;
+            if (!user) throw new Error("Nicht eingeloggt");
             const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
-            if (!profile?.company_id) return false;
-            await supabase.from('companies').update({ settings }).eq('id', profile.company_id);
+            if (!profile?.company_id) throw new Error("Kein Unternehmen zugeordnet");
+
+            const { error: directError } = await supabase
+                .from('companies')
+                .update({ settings })
+                .eq('id', profile.company_id);
+
+            if (directError) throw directError;
             return true;
-        } catch (e) { return false; }
+        } catch (e: any) {
+            console.error("updateCompanySettings failed:", e);
+            logError(`updateCompanySettings failed: ${e?.message || String(e)}`, { settings });
+            throw e;
+        }
     },
 
     updateCompanyName: async (name: string) => {
@@ -450,9 +486,14 @@ export const DataService = {
             if (!user) return false;
             const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
             if (!profile?.company_id) return false;
-            await supabase.from('companies').update({ name }).eq('id', profile.company_id);
+            const { error: directError } = await supabase.from('companies').update({ name }).eq('id', profile.company_id);
+            if (directError) throw directError;
             return true;
-        } catch (e) { return false; }
+        } catch (e) { 
+            console.error('Failed to update company name:', e);
+            logError(`updateCompanyName failed: ${e instanceof Error ? e.message : String(e)}`);
+            return false; 
+        }
     },
 
     updateUserRole: async (targetUserId: string, newRole: string) => {

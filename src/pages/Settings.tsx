@@ -56,6 +56,8 @@ export const Settings: React.FC = () => {
     const devTimeout = useRef<number | null>(null);
     const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
+    const [isSaving, setIsSaving] = useState(false);
+
     useEffect(() => {
         const stored = StorageService.getSettings();
         supabase?.auth.getUser().then(async ({ data }) => {
@@ -66,15 +68,28 @@ export const Settings: React.FC = () => {
                 setRole(profile.role || 'user');
                 setInboundSecret(profile.inbound_email_secret || '');
                 if (profile.company_id) {
-                    const { data: company } = await supabase.from('companies').select('join_code').eq('id', profile.company_id).single();
-                    if (company) setCompanyCode(company.join_code);
+                    const { data: company } = await supabase.from('companies').select('join_code, name, settings').eq('id', profile.company_id).single();
+                    if (company) {
+                        setCompanyCode(company.join_code);
+                        if (company.name) {
+                            setSettings(s => ({ ...s, hotelName: company.name }));
+                        }
+                    }
 
                     const { data: team } = await supabase.from('profiles').select('id, email, role').eq('company_id', profile.company_id);
                     if (team) setTeamMembers(team);
                 }
             }
         });
-        DataService.getCompanySettings().then(res => { if (res) setCompanySettings(res as any); });
+        DataService.getCompanySettings().then(res => {
+            if (res) {
+                const { _companyName, ...rest } = res as any;
+                setCompanySettings(prev => ({ ...prev, ...rest }));
+                if (_companyName) {
+                    setSettings(s => ({ ...s, hotelName: _companyName }));
+                }
+            }
+        });
         setSettings({
             serviceId: stored.serviceId || '',
             templateId: stored.templateId || '',
@@ -92,21 +107,31 @@ export const Settings: React.FC = () => {
         });
     }, []);
 
-    const handleSave = (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        StorageService.saveSettings(settings);
-        if (userId && supabase) {
-            supabase.from('profiles').update({ inventory_valuation_method: settings.inventoryValuationMethod }).eq('id', userId).then(() => {});
-        }
-        // W9: kein window.location.reload() — State direkt aktualisieren
+        setIsSaving(true);
+        try {
+            StorageService.saveSettings(settings);
 
-        if (role === 'owner' || role === 'admin') {
-            DataService.updateCompanySettings(companySettings).then(() => {
+            if (userId && supabase) {
+                await supabase.from('profiles').update({ inventory_valuation_method: settings.inventoryValuationMethod }).eq('id', userId);
+            }
+
+            if (role === 'owner' || role === 'admin') {
+                await DataService.updateCompanySettings(companySettings);
                 window.dispatchEvent(new CustomEvent('companySettingsUpdated', { detail: companySettings }));
-            }).catch(console.error);
-            DataService.updateCompanyName(settings.hotelName || '').catch(console.error);
+
+                if (settings.hotelName?.trim()) {
+                    await DataService.updateCompanyName(settings.hotelName.trim());
+                }
+            }
+            setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
+        } catch (err: any) {
+            console.error('Fehler beim Speichern der Einstellungen:', err);
+            setNotification({ message: `Fehler beim Speichern: ${err?.message || String(err)}`, type: 'error' });
+        } finally {
+            setIsSaving(false);
         }
-        setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
     };
 
     const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -329,8 +354,8 @@ export const Settings: React.FC = () => {
                     <h2 className="page-title">Einstellungen</h2>
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>Verwalten Sie Ihr Profil und Ihre App-Konfiguration.</p>
                 </div>
-                <button onClick={handleSave} className="btn btn-primary">
-                    <Save size={17} /> Speichern
+                <button onClick={handleSave} className="btn btn-primary" disabled={isSaving}>
+                    <Save size={17} /> {isSaving ? 'Speichere...' : 'Speichern'}
                 </button>
             </div>
 
@@ -1022,8 +1047,8 @@ export const Settings: React.FC = () => {
 
                 {activeTab !== 'logs' && (
                 <div style={{ marginTop: 'var(--spacing-xl)', display: 'flex', justifyContent: 'flex-end', position: 'sticky', bottom: '20px', zIndex: 10 }}>
-                    <button type="button" onClick={handleSave} className="btn btn-primary" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '12px 24px', fontSize: '15px' }}>
-                        <Save size={18} /> Einstellungen speichern
+                    <button type="button" onClick={handleSave} className="btn btn-primary" disabled={isSaving} style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '12px 24px', fontSize: '15px' }}>
+                        <Save size={18} /> {isSaving ? 'Speichere...' : 'Einstellungen speichern'}
                     </button>
                 </div>
                 )}
