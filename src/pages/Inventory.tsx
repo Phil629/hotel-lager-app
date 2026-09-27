@@ -169,7 +169,7 @@ export const Inventory: React.FC = () => {
                                             type="number"
                                             value={product.stock}
                                             onChange={(e) => {
-                                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                                const val = e.target.value === '' ? 0 : Math.floor(parseFloat(e.target.value)) || 0;
                                                 handleUpdateStock(product, val);
                                             }}
                                             style={{

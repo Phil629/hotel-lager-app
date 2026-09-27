@@ -210,7 +210,7 @@ BEGIN
     IF p_encrypted IS NULL OR p_encrypted = '' THEN RETURN NULL; END IF;
     v_key := p_company_id::TEXT || current_setting('app.credential_salt', true);
     IF v_key IS NULL OR LENGTH(v_key) < 10 THEN
-        v_key := p_company_id::TEXT || 'default_salt_replace_in_produktion';
+        v_key := p_company_id::TEXT || 'default_salt_replace_in_production';
     END IF;
     RETURN pgp_sym_decrypt(decode(p_encrypted, 'base64'), v_key);
 EXCEPTION WHEN OTHERS THEN

@@ -158,6 +158,9 @@ const toSupabaseOrder = (o: Order) => {
     if (o.receivedAt) base.received_at = o.receivedAt;
     if (o.notes) base.notes = o.notes;
     if (o.aiRevisions !== undefined) base.ai_revisions = o.aiRevisions;
+    if (o.trackingLink !== undefined) base.trackingLink = o.trackingLink;
+    if (o.company_id !== undefined) base.company_id = o.company_id;
+    if (o.is_auto_generated !== undefined) base.is_auto_generated = o.is_auto_generated;
 
     return base;
 };
@@ -183,7 +186,10 @@ const fromSupabaseOrder = (o: any): Order => ({
     notes: o.notes,
     aiRevisions: o.ai_revisions,
     user_id: o.user_id,
-    updated_by: o.updated_by
+    updated_by: o.updated_by,
+    company_id: o.company_id,
+    trackingLink: o.trackingLink || o.tracking_link || undefined,
+    is_auto_generated: o.is_auto_generated
 });
 
 interface CacheEntry<T> {

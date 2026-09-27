@@ -667,41 +667,6 @@ export const Settings: React.FC = () => {
                 </SectionCard>
                 )}
 
-                {/* Darstellung / Theme */}
-                <SectionCard>
-                    <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
-                        <Sun size={22} color="var(--color-primary)" /> Darstellung
-                    </h3>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-md)', backgroundColor: 'var(--color-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                        <div>
-                            <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-main)' }}>Dark Mode (Dunkles Design)</div>
-                            <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>Wechselt das Design der gesamten App in den dunklen Modus.</div>
-                        </div>
-                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', flexShrink: 0 }}>
-                            <input
-                                type="checkbox"
-                                checked={document.documentElement.getAttribute('data-theme') === 'dark'}
-                                onChange={(e) => {
-                                    const isDark = e.target.checked;
-                                    if (isDark) {
-                                        document.documentElement.setAttribute('data-theme', 'dark');
-                                        localStorage.setItem('theme', 'dark');
-                                    } else {
-                                        document.documentElement.removeAttribute('data-theme');
-                                        localStorage.setItem('theme', 'light');
-                                    }
-                                    // Trigger a re-render so the switch updates immediately
-                                    setSettings(prev => ({...prev}));
-                                }}
-                                style={{ opacity: 0, width: 0, height: 0 }}
-                            />
-                            <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 'var(--color-primary)' : '#ccc', borderRadius: '24px', transition: '.4s' }}>
-                                <span style={{ position: 'absolute', content: '""', height: '18px', width: '18px', left: document.documentElement.getAttribute('data-theme') === 'dark' ? '26px' : '4px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '.4s' }}></span>
-                            </span>
-                        </label>
-                    </div>
-                </SectionCard>
-
                 {/* 3. Automatisierungen */}
                 <SectionCard>
                     <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
