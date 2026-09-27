@@ -236,7 +236,7 @@ export const Admin = () => {
                     setNotification({ message: 'Fehler beim Ändern der Rolle: ' + error.message, type: 'error' });
                 } else {
                     setNotification({ message: 'Rolle erfolgreich geändert.', type: 'success' });
-                    fetchAdminData();
+                    setProfiles(prev => prev.map(p => p.id === id ? { ...p, role: newRole } : p));
                 }
             },
         });
@@ -256,7 +256,7 @@ export const Admin = () => {
                     setNotification({ message: 'Fehler beim Sperren: ' + error.message, type: 'error' });
                 } else {
                     setNotification({ message: is_banned ? 'Konto entsperrt.' : 'Konto gesperrt.', type: 'success' });
-                    fetchAdminData();
+                    setProfiles(prev => prev.map(p => p.id === id ? { ...p, is_banned: !is_banned } : p));
                 }
             },
         });
@@ -277,7 +277,7 @@ export const Admin = () => {
             setNotification({ message: 'Fehler beim Abo-Wechsel: ' + error.message, type: 'error' });
         } else {
             setNotification({ message: 'Abonnement aktualisiert.', type: 'success' });
-            fetchAdminData();
+            setProfiles(prev => prev.map(p => p.id === userId ? { ...p, plan: newPlan } : p));
         }
     };
 
@@ -287,7 +287,7 @@ export const Admin = () => {
         if (error) {
             setNotification({ message: 'Fehler beim Ticket Update.', type: 'error' });
         } else {
-            fetchAdminData();
+            setTickets(prev => prev.map(t => t.id === id ? { ...t, status: newStatus as any } : t));
         }
     };
 
