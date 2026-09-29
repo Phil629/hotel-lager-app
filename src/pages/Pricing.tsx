@@ -274,9 +274,13 @@ export const Pricing: React.FC = () => {
         products.map(p => {
             if (supplierFilter && p.supplierId !== supplierFilter) return null;
             if (categoryFilter && p.category !== categoryFilter) return null;
-            const priced = orders.filter(o => o.productName === p.name && (o.price ?? 0) > 0).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            const fallbackPrice = p.price ?? 0;
+            const priced = orders
+                .filter(o => o.productName === p.name && (o.price ?? fallbackPrice) > 0)
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
             if (priced.length < 2) return null;
-            const fp = priced[0].price!, lp = priced[priced.length - 1].price!;
+            const fp = priced[0].price ?? fallbackPrice;
+            const lp = priced[priced.length - 1].price ?? fallbackPrice;
             const change = ((lp - fp) / fp) * 100;
             if (Math.abs(change) < 3) return null;
             return { product: p, firstPrice: fp, lastPrice: lp, change };
@@ -290,17 +294,20 @@ export const Pricing: React.FC = () => {
     const productStats = useMemo((): ProductStat[] =>
         products.map(p => {
             const po = filteredOrders.filter(o => o.productName === p.name);
-            const priced = po.filter(o => (o.price ?? 0) > 0).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-            const prices = priced.map(o => o.price!);
-            const totalSpend = po.reduce((s, o) => s + o.quantity * (o.price ?? p.price ?? 0), 0);
+            const fallbackPrice = p.price ?? 0;
+            const priced = po
+                .filter(o => (o.price ?? fallbackPrice) > 0)
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            const prices = priced.map(o => o.price ?? fallbackPrice);
+            const totalSpend = po.reduce((s, o) => s + o.quantity * (o.price ?? fallbackPrice), 0);
             const totalQty   = po.reduce((s, o) => s + o.quantity, 0);
-            const avgPrice   = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : (p.price ?? 0);
+            const avgPrice   = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : fallbackPrice;
             return {
                 product: p, totalSpend, totalQty,
                 orderCount: po.length,
                 avgPrice,
-                minPrice:    prices.length ? Math.min(...prices) : (p.price ?? 0),
-                maxPrice:    prices.length ? Math.max(...prices) : (p.price ?? 0),
+                minPrice:    prices.length ? Math.min(...prices) : fallbackPrice,
+                maxPrice:    prices.length ? Math.max(...prices) : fallbackPrice,
                 priceChange: prices.length >= 2 ? ((prices[prices.length - 1] - prices[0]) / prices[0]) * 100 : 0,
                 supplierName: suppliers.find(s => s.id === p.supplierId)?.name || '—',
             };
@@ -353,10 +360,17 @@ export const Pricing: React.FC = () => {
 
     // ── Per-product helpers ───────────────────────────────────────────────────
 
-    const getPriceHistory = (name: string) =>
-        orders.filter(o => o.productName === name && (o.price ?? 0) > 0)
-              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-              .map(o => ({ date: new Date(o.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: '2-digit' }), Preis: o.price! }));
+    const getPriceHistory = (name: string) => {
+        const prod = products.find(p => p.name === name);
+        const fallbackPrice = prod?.price ?? 0;
+        return orders
+            .filter(o => o.productName === name && ((o.price ?? fallbackPrice) > 0))
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            .map(o => ({
+                date: new Date(o.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: '2-digit' }),
+                Preis: o.price ?? fallbackPrice
+            }));
+    };
 
     const getMonthlySpend = (name: string) =>
         Array.from({ length: 6 }, (_, i) => {
@@ -687,15 +701,34 @@ export const Pricing: React.FC = () => {
                                                                                     <LineChart data={history} margin={{ top: 4, right: 12, bottom: 4, left: 4 }}>
                                                                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
                                                                                         <XAxis dataKey="date" tick={{ fill: 'var(--color-text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                                                                                        <YAxis tick={{ fill: 'var(--color-text-muted)', fontSize: 10 }} tickFormatter={v => `${tick}${v}`} axisLine={false} tickLine={false} width={52} />
+                                                                                        <YAxis
+                                                                                            tick={{ fill: 'var(--color-text-muted)', fontSize: 10 }}
+                                                                                            tickFormatter={v => `${tick}${v}`}
+                                                                                            axisLine={false}
+                                                                                            tickLine={false}
+                                                                                            width={52}
+                                                                                            domain={[dataMin => +(Math.max(0, dataMin * 0.85)).toFixed(2), dataMax => +(dataMax * 1.15).toFixed(2)]}
+                                                                                        />
                                                                                         <Tooltip content={<CTooltip currency={currency} />} />
                                                                                         <Line type="monotone" dataKey="Preis" stroke="var(--color-primary)" strokeWidth={2} dot={{ fill: 'var(--color-primary)', r: 3 }} />
                                                                                     </LineChart>
                                                                                 </ResponsiveContainer>
                                                                             </div>
+                                                                        ) : history.length === 1 ? (
+                                                                            <div style={{ height: '160px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)', padding: '16px', backgroundColor: 'var(--color-surface)' }}>
+                                                                                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--color-primary)' }}>
+                                                                                    {fmt(history[0].Preis, currency)}
+                                                                                </div>
+                                                                                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                                                                    1 Bestellung erfasst am {history[0].date}
+                                                                                </div>
+                                                                                <div style={{ fontSize: '11px', color: 'var(--color-text-faint)' }}>
+                                                                                    Verlaufschart wird ab der 2. Bestellung gezeichnet
+                                                                                </div>
+                                                                            </div>
                                                                         ) : (
                                                                             <div style={{ height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'var(--color-text-faint)', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)' }}>
-                                                                                Mindestens 2 Bestellungen mit Preis nötig
+                                                                                Noch keine Bestellungen erfasst
                                                                             </div>
                                                                         )}
                                                                     </div>

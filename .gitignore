@@ -35,3 +35,14 @@ yarn-error.log*
 
 # Secrets and environment variables
 .env
+
+# Logs and debug artifacts
+*.log
+*.log*
+*.patch
+diff.txt
+test_pw_out.json
+scratch/
+scripts/debug/
+
+

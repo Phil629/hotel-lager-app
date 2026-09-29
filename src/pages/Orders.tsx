@@ -12,116 +12,11 @@ import { PrintChecklist } from '../components/PrintChecklist';
 import { useOrderData } from '../hooks/useOrderData';
 import { useCart } from '../hooks/useCart';
 import { useAppContext } from '../contexts/AppContext';
+import { KiLogModal, KiStatusBadge, timeAgo } from '../components/orders/KiLogModal';
+import { DeliveryDateModal } from '../components/orders/DeliveryDateModal';
+import { DefectModal } from '../components/orders/DefectModal';
 
 const isLiveEnv = window.location.hostname === 'kunden.bestellwesen.com' || window.location.hostname === 'lager-hotel.netlify.app' || import.meta.env.VITE_SUPABASE_URL === 'https://owofhbbrywryehlnqmfj.supabase.co';
-
-// ── KI-Log ───────────────────────────────────────────────────────────────────
-
-interface InboundEmail {
-    id: string;
-    supplier_name: string;
-    subject: string;
-    body_text: string;
-    extracted_data: {
-        document_type?: string;
-        confidence?: number;
-        supplier_name?: string;
-        items?: { product_name: string; quantity: number; price?: number }[];
-        total_price?: number;
-        order_date?: string;
-        invoice_number?: string;
-        parse_error?: string;
-        raw_text?: string;
-    } | null;
-    status: string;
-    created_at: string;
-}
-
-const timeAgo = (dateStr: string): string => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 2) return 'gerade eben';
-    if (mins < 60) return `vor ${mins} Min.`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `vor ${hours} Std.`;
-    const days = Math.floor(hours / 24);
-    return `vor ${days} Tag${days !== 1 ? 'en' : ''}`;
-};
-
-const KiStatusBadge: React.FC<{ status: string }> = ({ status }) => {
-    if (status === 'processed') return <span className="badge badge-success">Erfolgreich</span>;
-    if (status === 'gemini_error') return <span className="badge badge-danger">KI-Fehler</span>;
-    if (status === 'processed_duplicate') return <span className="badge badge-success" title="Bestellung wurde aktualisiert oder verknüpft">Aktualisiert</span>;
-    return <span className="badge badge-neutral">{status}</span>;
-};
-
-const KiLogDetail: React.FC<{ email: InboundEmail }> = ({ email }) => {
-    const d = email.extracted_data;
-    const fmtPrice = (v: number) => v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-
-    if (!d || email.status === 'gemini_error') {
-        return (
-            <div style={{ color: 'var(--color-danger)', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <AlertTriangle size={14} />
-                    KI konnte die E-Mail nicht verarbeiten – kein JSON extrahiert.
-                </div>
-                {d?.parse_error && (
-                    <div style={{ padding: '8px', backgroundColor: 'var(--color-danger-bg)', borderRadius: '4px', border: '1px solid #fca5a5', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                        <strong>Error:</strong> {d.parse_error}<br/>
-                        <strong>Raw Text:</strong><br/>{d.raw_text}
-                    </div>
-                )}
-            </div>
-        );
-    }
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px', fontSize: '13px' }}>
-                {d.document_type && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Typ:</span> {d.document_type}</span>}
-                {d.supplier_name && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Lieferant:</span> {d.supplier_name}</span>}
-                {d.order_date && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Datum:</span> {d.order_date}</span>}
-                {d.invoice_number && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Belegnr.:</span> {d.invoice_number}</span>}
-                {d.total_price != null && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Gesamt:</span> {fmtPrice(d.total_price)}</span>}
-                {d.confidence != null && (
-                    <span>
-                        <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Konfidenz:</span>{' '}
-                        <span style={{ color: d.confidence >= 0.8 ? 'var(--color-success)' : d.confidence >= 0.5 ? 'var(--color-warning)' : 'var(--color-danger)', fontWeight: 600 }}>
-                            {(d.confidence * 100).toFixed(0)}%
-                        </span>
-                    </span>
-                )}
-            </div>
-            {d.items?.length ? (
-                <div>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
-                        {d.items.length} Positionen erkannt
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {d.items.slice(0, 12).map((item, i) => (
-                            <span key={i} style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '3px 10px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                                {item.quantity}× {item.product_name}{item.price ? ` · ${fmtPrice(item.price)}` : ''}
-                            </span>
-                        ))}
-                        {d.items.length > 12 && (
-                            <span style={{ fontSize: '12px', color: 'var(--color-text-faint)', padding: '3px 4px' }}>
-                                +{d.items.length - 12} weitere
-                            </span>
-                        )}
-                    </div>
-                </div>
-            ) : ((d as any).tracking_link || (d as any).delivery_date || (d as any).order_notes) ? (
-                <div style={{ fontSize: '13px', color: 'var(--color-success)', marginTop: '8px', padding: '12px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
-                    ✅ <strong>Versand-Informationen verarbeitet:</strong> Die Tracking- und Lieferdaten aus dieser E-Mail wurden erfolgreich zu deinen offenen Bestellungen hinzugefügt.
-                </div>
-            ) : (
-                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '8px', padding: '12px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
-                    ℹ️ <strong>Keine Bestell-Daten erkannt:</strong> Diese E-Mail enthielt keine relevanten Positionen (vermutlich Newsletter oder Werbung). Es wurden <u>keine</u> Bestellungen angelegt.
-                </div>
-            )}
-        </div>
-    );
-};
 
 export const Orders: React.FC = () => {
     const {
@@ -186,7 +81,6 @@ export const Orders: React.FC = () => {
     const [expandedReceivedOrders, setExpandedReceivedOrders] = useState<Set<string>>(new Set());
 
     const [showKiLogModal, setShowKiLogModal] = useState(false);
-    const [selectedKiLog, setSelectedKiLog] = useState<InboundEmail | null>(null);
 
     const [phoneCallPanelData, setPhoneCallPanelData] = useState<{ order: Order; mode: 'order' | 'defect' } | null>(null);
     const [phoneCallProposalData, setPhoneCallProposalData] = useState<{ product: Product, quantity: number } | null>(null);
@@ -267,17 +161,19 @@ export const Orders: React.FC = () => {
             if (createTab === 'existing') {
                 if (orderCart.length === 0) return;
                 
-                // 2. Save Orders
                 for (const item of orderCart) {
+                    const supplier = suppliers.find(s => s.id === item.product.supplierId);
                     const newOrder: Order = {
                         id: generateId(),
                         date: new Date(orderDate).toISOString(),
                         productName: item.product.name,
                         quantity: item.quantity,
                         status: 'open',
+                        price: item.product.price,
+                        supplierName: supplier?.name,
                         productImage: item.product.image,
-                        supplierEmail: item.product.emailOrderAddress,
-                        supplierPhone: item.product.supplierPhone,
+                        supplierEmail: item.product.emailOrderAddress || supplier?.orderEmail || supplier?.email,
+                        supplierPhone: item.product.supplierPhone || supplier?.orderPhone || supplier?.phone,
                         notes: orderNotes
                     };
                     await DataService.saveOrder(newOrder);
@@ -617,15 +513,18 @@ export const Orders: React.FC = () => {
         try {
             const prod = proposal.product;
             const nowIso = new Date().toISOString();
+            const supplier = suppliers.find(s => s.id === prod.supplierId);
             const newOrder: import('../types').Order = {
                  id: generateId(),
                  date: nowIso,
                  productName: prod.name,
                  quantity: proposal.quantity,
                  status: 'open',
+                 price: prod.price,
+                 supplierName: supplier?.name,
                  productImage: prod.image,
-                 supplierEmail: prod.emailOrderAddress,
-                 supplierPhone: prod.supplierPhone,
+                 supplierEmail: prod.emailOrderAddress || supplier?.orderEmail || supplier?.email,
+                 supplierPhone: prod.supplierPhone || supplier?.orderPhone || supplier?.phone,
                  notes: 'Aus Bestellvorschlägen generiert'
             };
             
@@ -2377,320 +2276,41 @@ export const Orders: React.FC = () => {
             )}
 
             {/* Defect Modal */}
-            {
-                defectModalOrder && (
-                    <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.5)',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        zIndex: 1200
-                    }}>
-                        <div style={{
-                            backgroundColor: 'var(--color-surface)',
-                            padding: 'var(--spacing-xl)',
-                            borderRadius: 'var(--radius-lg)',
-                            width: '100%',
-                            maxWidth: '500px',
-                            boxShadow: 'var(--shadow-lg)'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-                                    <AlertTriangle size={24} color="#ff9800" />
-                                    Mangel melden
-                                </h3>
-                                <button onClick={closeDefectModal} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            {defectModalOrderOptions && defectModalOrderOptions.length > 1 ? (
-                                <div style={{ marginBottom: 'var(--spacing-md)' }}>
-                                    <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                                        Produkt auswählen
-                                    </label>
-                                    <select
-                                        value={defectModalOrder.id}
-                                        onChange={e => {
-                                            if (e.target.value === 'ALL') {
-                                                setDefectModalOrder({ id: 'ALL', productName: 'Alle Produkte der Lieferung', quantity: 0 } as any);
-                                                setDefectNotes('');
-                                            } else {
-                                                const selected = defectModalOrderOptions.find(o => o.id === e.target.value);
-                                                if (selected) {
-                                                    setDefectModalOrder(selected);
-                                                    setDefectNotes(selected.defectNotes || '');
-                                                }
-                                            }
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            padding: 'var(--spacing-sm)',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid var(--color-border)',
-                                            fontSize: 'var(--font-size-sm)'
-                                        }}
-                                    >
-                                        <option value="ALL">Alle Produkte der Lieferung</option>
-                                        {defectModalOrderOptions.map(o => (
-                                            <option key={o.id} value={o.id}>{o.productName} ({o.quantity}x)</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            ) : (
-                                <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-md)' }}>
-                                    Produkt: <strong>{defectModalOrder.productName}</strong>
-                                </p>
-                            )}
-                            <div style={{ marginBottom: 'var(--spacing-md)' }}>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                                    Mangelbeschreibung
-                                </label>
-                                <textarea
-                                    value={defectNotes}
-                                    onChange={e => setDefectNotes(e.target.value)}
-                                    placeholder="Beschreiben Sie den Mangel..."
-                                    rows={4}
-                                    style={{
-                                        width: '100%',
-                                        padding: 'var(--spacing-sm)',
-                                        borderRadius: 'var(--radius-sm)',
-                                        border: '1px solid var(--color-border)',
-                                        fontFamily: 'inherit',
-                                        fontSize: 'var(--font-size-sm)',
-                                        resize: 'vertical'
-                                    }}
-                                />
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 'var(--spacing-sm)', cursor: 'pointer' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={modalDefectResolved}
-                                        onChange={e => setModalDefectResolved(e.target.checked)}
-                                        style={{ width: '16px', height: '16px' }}
-                                    />
-                                    <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>Mangel ist erledigt</span>
-                                </label>
-                            </div>
-                            {/* Stock adjustment section — hidden for "ALL" grouped orders */}
-                            {defectModalOrder.id !== 'ALL' && (() => {
-                                const product = products.find(p => p.name === defectModalOrder.productName);
-                                if (!product) return null;
-                                const isOpen = defectModalOrder.status === 'open';
-                                const usable = defectUsableQty === '' ? defectModalOrder.quantity : Number(defectUsableQty);
-                                const stockDelta = isOpen ? usable : usable - defectModalOrder.quantity;
-                                const newStock = Math.max(0, product.stock + stockDelta);
-                                const belowMin = product.minStock !== undefined && newStock < product.minStock;
-                                return (
-                                    <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 'var(--spacing-md)', marginBottom: 'var(--spacing-md)' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: defectAdjustStock ? 'var(--spacing-md)' : 0 }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={defectAdjustStock}
-                                                onChange={e => {
-                                                    setDefectAdjustStock(e.target.checked);
-                                                    if (e.target.checked && defectUsableQty === '') setDefectUsableQty(defectModalOrder.quantity);
-                                                }}
-                                                style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }}
-                                            />
-                                            <div>
-                                                <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-main)' }}>Lagerbestand direkt korrigieren</span>
-                                                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginLeft: '6px' }}>optional</span>
-                                            </div>
-                                        </label>
-                                        {defectAdjustStock && (
-                                            <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                <div style={{ display: 'flex', gap: '16px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
-                                                    <span>Bestellmenge: <strong style={{ color: 'var(--color-text-main)' }}>{defectModalOrder.quantity} {product.unit}</strong></span>
-                                                    <span>Aktueller Bestand: <strong style={{ color: 'var(--color-text-main)' }}>{product.stock} {product.unit}</strong></span>
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                    <label style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                                        Tatsächlich verwendbar:
-                                                    </label>
-                                                    <input
-                                                        type="number"
-                                                        value={defectUsableQty}
-                                                        onChange={e => setDefectUsableQty(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0))}
-                                                        min={0}
-                                                        style={{ width: '80px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: 'var(--font-size-sm)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text-main)', textAlign: 'right' }}
-                                                    />
-                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>{product.unit}</span>
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: belowMin ? 'var(--color-warning-bg)' : 'var(--color-success-bg)', border: `1px solid ${belowMin ? '#fcd34d' : 'var(--color-success)'}`, borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-sm)' }}>
-                                                    <span style={{ color: 'var(--color-text-muted)' }}>
-                                                        {isOpen
-                                                            ? `+${usable} ${product.unit} werden auf Lager gebucht`
-                                                            : stockDelta >= 0
-                                                                ? `+${stockDelta} ${product.unit} Korrektur`
-                                                                : `${stockDelta} ${product.unit} werden abgezogen`
-                                                        }
-                                                    </span>
-                                                    <strong style={{ color: 'var(--color-text-main)' }}>→ {newStock} {product.unit}</strong>
-                                                </div>
-                                                {isOpen && (
-                                                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                                                        Die Bestellung wird gleichzeitig als erhalten markiert.
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-
-                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)', justifyContent: 'flex-end' }}>
-                                <button
-                                    onClick={closeDefectModal}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--color-border)',
-                                        backgroundColor: 'var(--color-surface)',
-                                        color: 'var(--color-text-main)',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Abbrechen
-                                </button>
-                                <button
-                                    onClick={saveDefect}
-                                    disabled={!defectNotes.trim()}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: 'none',
-                                        backgroundColor: defectNotes.trim() ? '#ff9800' : '#ccc',
-                                        color: 'white',
-                                        cursor: defectNotes.trim() ? 'pointer' : 'not-allowed'
-                                    }}
-                                >
-                                    {defectAdjustStock ? 'Mangel & Bestand speichern' : 'Mangel speichern'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
+            <DefectModal
+                order={defectModalOrder}
+                orderOptions={defectModalOrderOptions}
+                defectNotes={defectNotes}
+                setDefectNotes={setDefectNotes}
+                modalDefectResolved={modalDefectResolved}
+                setModalDefectResolved={setModalDefectResolved}
+                defectAdjustStock={defectAdjustStock}
+                setDefectAdjustStock={setDefectAdjustStock}
+                defectUsableQty={defectUsableQty}
+                setDefectUsableQty={setDefectUsableQty}
+                onSelectOrder={(selected) => {
+                    setDefectModalOrder(selected);
+                    if (selected.id === 'ALL') {
+                        setDefectNotes('');
+                    } else {
+                        setDefectNotes(selected.defectNotes || '');
+                    }
+                }}
+                onClose={closeDefectModal}
+                onSave={saveDefect}
+                products={products}
+            />
 
             {/* Delivery Date Modal */}
-            {
-                deliveryDateModalOrder && (
-                    <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.5)',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        zIndex: 1000
-                    }}>
-                        <div style={{
-                            backgroundColor: 'var(--color-surface)',
-                            padding: 'var(--spacing-xl)',
-                            borderRadius: 'var(--radius-lg)',
-                            width: '100%',
-                            maxWidth: '400px',
-                            boxShadow: 'var(--shadow-lg)'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-                                    <Calendar size={24} />
-                                    Liefertermin setzen
-                                </h3>
-                                <button onClick={closeDeliveryDateModal} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-md)' }}>
-                                {deliveryDateModalOrders && deliveryDateModalOrders.length > 1 ? (
-                                    <>Lieferant: <strong>{deliveryDateModalOrder.supplierName || 'Lieferung'}</strong> ({deliveryDateModalOrders.length} Produkte)</>
-                                ) : (
-                                    <>Produkt: <strong>{deliveryDateModalOrder.productName}</strong></>
-                                )}
-                            </p>
-                            <div style={{ marginBottom: 'var(--spacing-md)' }}>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                                    Erwartetes Lieferdatum
-                                </label>
-                                <input
-                                    type="date"
-                                    value={deliveryDate}
-                                    onChange={e => setDeliveryDate(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: 'var(--spacing-sm)',
-                                        borderRadius: 'var(--radius-sm)',
-                                        border: '1px solid var(--color-border)',
-                                        fontSize: 'var(--font-size-sm)'
-                                    }}
-                                />
-                                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--spacing-xs)' }}>
-                                    Leer lassen, um Liefertermin zu entfernen
-                                </p>
-                            </div>
-                            <div style={{ marginBottom: 'var(--spacing-md)' }}>
-                                <label style={{ display: 'block', marginBottom: 'var(--spacing-xs)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                                    Tracking Link / Sendungsverfolgung
-                                </label>
-                                <input
-                                    type="url"
-                                    value={deliveryTrackingLink}
-                                    onChange={e => setDeliveryTrackingLink(e.target.value)}
-                                    onBlur={e => {
-                                        const val = e.target.value;
-                                        if (val && !/^https?:\/\//i.test(val)) {
-                                            setDeliveryTrackingLink(`https://${val}`);
-                                        }
-                                    }}
-                                    placeholder="https://..."
-                                    style={{
-                                        width: '100%',
-                                        padding: 'var(--spacing-sm)',
-                                        borderRadius: 'var(--radius-sm)',
-                                        border: '1px solid var(--color-border)',
-                                        fontSize: 'var(--font-size-sm)'
-                                    }}
-                                />
-                            </div>
-                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)', justifyContent: 'flex-end' }}>
-                                <button
-                                    onClick={closeDeliveryDateModal}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--color-border)',
-                                        backgroundColor: 'var(--color-surface)',
-                                        color: 'var(--color-text-main)',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Abbrechen
-                                </button>
-                                <button
-                                    onClick={saveDeliveryDate}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: 'none',
-                                        backgroundColor: 'var(--color-primary)',
-                                        color: 'white',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Speichern
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
+            <DeliveryDateModal
+                order={deliveryDateModalOrder}
+                orders={deliveryDateModalOrders}
+                deliveryDate={deliveryDate}
+                setDeliveryDate={setDeliveryDate}
+                deliveryTrackingLink={deliveryTrackingLink}
+                setDeliveryTrackingLink={setDeliveryTrackingLink}
+                onClose={closeDeliveryDateModal}
+                onSave={saveDeliveryDate}
+            />
 
             {
                 editingOrder && (
@@ -3287,95 +2907,11 @@ export const Orders: React.FC = () => {
                 )}
 
             {/* ── KI-Log Modal ── */}
-            {showKiLogModal && (
-                <div className="modal-overlay" onClick={() => { setShowKiLogModal(false); setSelectedKiLog(null); }}>
-                    <div
-                        className="modal-box"
-                        style={{ maxWidth: '720px', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
-                        onClick={e => e.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <div className="modal-header">
-                            <Bot size={18} color="var(--color-primary)" />
-                            <h3 style={{ flex: 1 }}>KI-Import Protokoll</h3>
-                            <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ padding: '4px 8px' }}
-                                onClick={() => { setShowKiLogModal(false); setSelectedKiLog(null); }}
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-
-                        {/* Body */}
-                        <div style={{ flex: 1, overflowY: 'auto' }}>
-                            {inboundEmails.length === 0 ? (
-                                <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                                    <Bot size={36} style={{ opacity: 0.2, display: 'block', margin: '0 auto 12px' }} />
-                                    Noch keine KI-Importe vorhanden.
-                                </div>
-                            ) : (
-                                <table className="products-table">
-                                    <thead>
-                                        <tr>
-                                            <th style={{ width: '130px' }}>Datum</th>
-                                            <th style={{ width: '160px' }}>Absender</th>
-                                            <th>Betreff</th>
-                                            <th style={{ width: '120px', textAlign: 'center' }}>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {inboundEmails.map(email => {
-                                            const isSelected = selectedKiLog?.id === email.id;
-                                            return (
-                                                <React.Fragment key={email.id}>
-                                                    <tr
-                                                        onClick={() => setSelectedKiLog(isSelected ? null : email)}
-                                                        style={{ cursor: 'pointer', backgroundColor: isSelected ? 'var(--color-surface-elevated)' : undefined }}
-                                                    >
-                                                        <td style={{ fontSize: '12px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                                                            {new Date(email.created_at).toLocaleString('de-DE', {
-                                                                day: '2-digit', month: '2-digit', year: '2-digit',
-                                                                hour: '2-digit', minute: '2-digit',
-                                                            })}
-                                                        </td>
-                                                        <td style={{ fontSize: '13px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                            {email.supplier_name || '–'}
-                                                        </td>
-                                                        <td style={{ fontSize: '13px', color: 'var(--color-text-main)', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                            {email.subject || <span style={{ color: 'var(--color-text-faint)' }}>(kein Betreff)</span>}
-                                                        </td>
-                                                        <td style={{ textAlign: 'center' }}>
-                                                            <KiStatusBadge status={email.status} />
-                                                        </td>
-                                                    </tr>
-                                                    {isSelected && (
-                                                        <tr>
-                                                            <td colSpan={4} style={{ padding: '14px 20px 16px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)' }}>
-                                                                <KiLogDetail email={email} />
-                                                            </td>
-                                                        </tr>
-                                                    )}
-                                                </React.Fragment>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="modal-footer">
-                            <span style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginRight: 'auto' }}>
-                                {inboundEmails.length} Einträge · Klick auf Zeile für Details
-                            </span>
-                            <button className="btn btn-ghost" onClick={() => { setShowKiLogModal(false); setSelectedKiLog(null); }}>
-                                Schließen
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <KiLogModal
+                isOpen={showKiLogModal}
+                onClose={() => setShowKiLogModal(false)}
+                inboundEmails={inboundEmails}
+            />
 
             {
                 notification && (

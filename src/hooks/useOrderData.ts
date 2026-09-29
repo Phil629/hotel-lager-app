@@ -25,23 +25,23 @@ export const useOrderData = () => {
     rtDebounce.current[key] = setTimeout(fn, ms);
   };
 
-  const loadOrders = async () => {
+  const loadOrders = async (force = false) => {
     try {
-      const data = await DataService.getOrders();
+      const data = await DataService.getOrders(force);
       setOrders(data);
     } catch (e) { console.error('loadOrders failed:', e); }
   };
 
-  const loadProducts = async () => {
+  const loadProducts = async (force = false) => {
     try {
-      const data = await DataService.getProducts();
+      const data = await DataService.getProducts(force);
       setProducts(data);
     } catch (e) { console.error('loadProducts failed:', e); }
   };
 
-  const loadSuppliers = async () => {
+  const loadSuppliers = async (force = false) => {
     try {
-      const data = await DataService.getSuppliers();
+      const data = await DataService.getSuppliers(force);
       setSuppliers(data);
     } catch (e) { console.error('loadSuppliers failed:', e); }
   };
@@ -71,13 +71,13 @@ export const useOrderData = () => {
     const channel = supabase
       .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        debounced('orders', loadOrders);
+        debounced('orders', () => loadOrders(true));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-        debounced('products', loadProducts);
+        debounced('products', () => loadProducts(true));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => {
-        debounced('suppliers', loadSuppliers);
+        debounced('suppliers', () => loadSuppliers(true));
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inbound_emails' }, () => {
         debounced('inbound_emails', loadInboundEmails);

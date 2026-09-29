@@ -1,23 +1,41 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Products } from './pages/Products';
-import { Orders } from './pages/Orders';
-import { Settings } from './pages/Settings';
-import { Suppliers } from './pages/Suppliers';
-import { Pricing } from './pages/Pricing';
-import { Consumption } from './pages/Consumption';
-import { Inventory } from './pages/Inventory';
-import { Auth } from './pages/Auth';
-import { Admin } from './pages/Admin';
-import { Setup } from './pages/Setup';
-import { UpdatePassword } from './pages/UpdatePassword';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { supabase } from './services/supabase';
 import { StorageService } from './services/storage';
 import { AppContext } from './contexts/AppContext';
+
+// Lazy-loaded pages for fast initial bundle and optimal code splitting
+const Products = lazy(() => import('./pages/Products').then(m => ({ default: m.Products })));
+const Orders = lazy(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
+const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
+const Suppliers = lazy(() => import('./pages/Suppliers').then(m => ({ default: m.Suppliers })));
+const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
+const Consumption = lazy(() => import('./pages/Consumption').then(m => ({ default: m.Consumption })));
+const Inventory = lazy(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
+const Auth = lazy(() => import('./pages/Auth').then(m => ({ default: m.Auth })));
+const Admin = lazy(() => import('./pages/Admin').then(m => ({ default: m.Admin })));
+const Setup = lazy(() => import('./pages/Setup').then(m => ({ default: m.Setup })));
+const UpdatePassword = lazy(() => import('./pages/UpdatePassword').then(m => ({ default: m.UpdatePassword })));
+
+const PageLoading = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: 'var(--color-text-muted)', fontSize: '15px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{
+        width: '24px',
+        height: '24px',
+        border: '3px solid var(--color-border)',
+        borderTopColor: 'var(--color-primary)',
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite'
+      }} />
+      <span>Lade Bereich...</span>
+    </div>
+  </div>
+);
 
 const AuthRedirect = () => {
   const location = useLocation();
@@ -214,7 +232,11 @@ function App() {
   }
 
   if (isRecovery) {
-    return <UpdatePassword onSuccess={() => setIsRecovery(false)} />;
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <UpdatePassword onSuccess={() => setIsRecovery(false)} />
+      </Suspense>
+    );
   }
 
   const appContextValue = {
@@ -233,40 +255,44 @@ function App() {
     <AppContext.Provider value={appContextValue}>
       <Router>
         <RouteTracker />
-        <Routes>
-          {/* Public Route */}
-          <Route path="/auth" element={!session ? <Auth onAuthSuccess={() => {}} /> : <AuthRedirect />} />
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
+            {/* Public Route */}
+            <Route path="/auth" element={!session ? <Auth onAuthSuccess={() => {}} /> : <AuthRedirect />} />
 
-          {/* Setup Route */}
-          <Route path="/setup" element={session && needsSetup ? <Setup onSetupComplete={() => setNeedsSetup(false)} /> : <Navigate to="/products" replace />} />
+            {/* Setup Route */}
+            <Route path="/setup" element={session && needsSetup ? <Setup onSetupComplete={() => setNeedsSetup(false)} /> : <Navigate to="/products" replace />} />
 
-          {/* Protected App Routes */}
-          <Route path="/*" element={
-            <ProtectedRoute session={session}>
-              {needsSetup ? (
-                <Navigate to="/setup" replace />
-              ) : (
-                <Layout>
-                  <ErrorBoundary>
-                    <Routes>
-                      <Route path="/" element={<Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
-                      <Route path="/products"    element={<Products />} />
-                      <Route path="/orders"      element={<Orders />} />
-                      <Route path="/suppliers"   element={<Suppliers />} />
-                      <Route path="/inventory"   element={<Inventory />} />
-                      <Route path="/pricing"     element={<Pricing />} />
-                      <Route path="/consumption" element={<Consumption />} />
-                      <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
-                      <Route path="/admin"       element={userRole === 'admin' ? <Admin /> : <Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
-                      <Route path="/settings"    element={<Settings />} />
-                      <Route path="*"            element={<Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
-                    </Routes>
-                  </ErrorBoundary>
-                </Layout>
-              )}
-            </ProtectedRoute>
-          } />
-        </Routes>
+            {/* Protected App Routes */}
+            <Route path="/*" element={
+              <ProtectedRoute session={session}>
+                {needsSetup ? (
+                  <Navigate to="/setup" replace />
+                ) : (
+                  <Layout>
+                    <ErrorBoundary>
+                      <Suspense fallback={<PageLoading />}>
+                        <Routes>
+                          <Route path="/" element={<Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
+                          <Route path="/products"    element={<Products />} />
+                          <Route path="/orders"      element={<Orders />} />
+                          <Route path="/suppliers"   element={<Suppliers />} />
+                          <Route path="/inventory"   element={<Inventory />} />
+                          <Route path="/pricing"     element={<Pricing />} />
+                          <Route path="/consumption" element={<Consumption />} />
+                          <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
+                          <Route path="/admin"       element={userRole === 'admin' ? <Admin /> : <Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
+                          <Route path="/settings"    element={<Settings />} />
+                          <Route path="*"            element={<Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
+                        </Routes>
+                      </Suspense>
+                    </ErrorBoundary>
+                  </Layout>
+                )}
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </Suspense>
       </Router>
     </AppContext.Provider>
   );

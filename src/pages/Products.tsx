@@ -6,55 +6,17 @@ import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
 import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import { CheckoutButton } from '../components/CheckoutButton';
-import QRCode from "react-qr-code";
 import { useSearchParams } from 'react-router-dom';
+import { PriceHistoryChart } from '../components/products/PriceHistoryChart';
+import { ProductIoTModal } from '../components/products/ProductIoTModal';
+import { StockUpdateModal } from '../components/products/StockUpdateModal';
+import { QuickAddModal } from '../components/products/QuickAddModal';
 
 const CATEGORIES = ['Lebensmittel', 'Getränke', 'Reinigung', 'Büro', 'Sonstiges'];
-
-
-const PriceHistoryChart = ({ productName }: { productName: string }) => {
-    const [data, setData] = useState<any[]>([]);
-    
-    useEffect(() => {
-        if (!productName) return;
-        DataService.getOrders().then(orders => {
-            const filtered = orders
-                .filter(o => o.productName === productName && o.price)
-                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                .map(o => ({
-                    date: new Date(o.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric'}),
-                    price: o.price,
-                    supplier: o.supplierName || 'Unbekannt'
-                }));
-            setData(filtered);
-        });
-    }, [productName]);
-
-    if (data.length === 0) return <div style={{ padding: '30px 10px', textAlign: 'center', color: '#94a3b8', backgroundColor: '#f8fafc', borderRadius: '8px' }}>Keine historischen Preisdaten für dieses Produkt gefunden. Die Rechnung fällt beim nächsten automatischen Scan ein!</div>;
-
-    return (
-        <div style={{ width: '100%', height: 280, marginTop: '20px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="date" tick={{fontSize: 12, fill: '#64748b'}} tickMargin={10} axisLine={false} tickLine={false} />
-                    <YAxis dataKey="price" tick={{fontSize: 12, fill: '#64748b'}} tickFormatter={val => Number(val).toFixed(2) + '€'} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-                    <Tooltip 
-                        contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: any, _name: any, props: any) => [`${Number(value).toFixed(2)} € (Lieferant: ${props.payload.supplier})`, 'Einkaufspreis']}
-                        labelFormatter={(label: any) => `Kaufdatum: ${label}`}
-                    />
-                    <Line type="stepAfter" dataKey="price" stroke="#0ea5e9" strokeWidth={3} dot={{r: 4, fill: '#0284c7', strokeWidth: 0}} activeDot={{r: 6}} animationDuration={1500} />
-                </LineChart>
-            </ResponsiveContainer>
-        </div>
-    );
-};
 
 export const Products: React.FC = () => {
     const { canSeePrices, isAiCartEnabled } = useAppContext();
@@ -87,7 +49,6 @@ export const Products: React.FC = () => {
     });
     // isEmailSectionOpen removed as requested
     const [showIoTLink, setShowIoTLink] = useState<{ product: Product, curl: string, powershell: string } | null>(null);
-    const [qrTab, setQrTab] = useState<'api' | 'order' | 'stock'>('api');
     const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
     const [phoneCallProduct, setPhoneCallProduct] = useState<Product | null>(null);
 
@@ -154,8 +115,8 @@ export const Products: React.FC = () => {
     const debouncedReloadProducts = () => {
         if (rtDebounce.current) clearTimeout(rtDebounce.current);
         rtDebounce.current = setTimeout(() => {
-            DataService.getProducts().then(setProducts).catch(e => console.error('Realtime reload products failed:', e));
-            DataService.getOrders().then(setOrders).catch(e => console.error('Realtime reload orders failed:', e));
+            DataService.getProducts(true).then(setProducts).catch(e => console.error('Realtime reload products failed:', e));
+            DataService.getOrders(true).then(setOrders).catch(e => console.error('Realtime reload orders failed:', e));
         }, 300);
     };
 
@@ -346,6 +307,40 @@ export const Products: React.FC = () => {
 
         setProducts(products.map(p => p.id === product.id ? updatedProduct : p));
         await DataService.updateProduct(updatedProduct);
+    };
+
+    const handleQuickAddSubmit = async () => {
+        const lines = quickAddText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length === 0 || !quickAddSupplierId) return;
+        
+        setIsLoading(true);
+        const supplier = suppliers.find(s => s.id === quickAddSupplierId);
+        
+        try {
+            for (const name of lines) {
+                const newProd: Product = {
+                    id: generateId(),
+                    name: name,
+                    category: supplier?.defaultCategory || 'Ohne Kategorie',
+                    stock: 0,
+                    price: 0,
+                    minStock: 0,
+                    unit: 'Stück',
+                    supplierId: quickAddSupplierId,
+                    autoOrder: false,
+                    notes: []
+                };
+                await DataService.saveProduct(newProd);
+            }
+            await loadProducts();
+            setNotification({ message: `${lines.length} Produkte erfolgreich angelegt!`, type: 'success' });
+            setIsQuickAddModalOpen(false);
+            setQuickAddText('');
+        } catch (err) {
+            setNotification({ message: 'Fehler beim Anlegen der Produkte.', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const loadSuppliers = async () => {
@@ -560,15 +555,18 @@ export const Products: React.FC = () => {
             }
 
             for (const item of orderCart) {
+                const supplier = suppliers.find(s => s.id === item.product.supplierId);
                 const newOrder: Order = {
                     id: generateId(),
                     date: new Date(orderDate).toISOString(),
                     productName: item.product.name,
                     quantity: item.quantity,
                     status: 'open',
+                    price: item.product.price,
+                    supplierName: supplier?.name,
                     productImage: item.product.image,
-                    supplierEmail: item.product.emailOrderAddress,
-                    supplierPhone: item.product.supplierPhone,
+                    supplierEmail: item.product.emailOrderAddress || supplier?.orderEmail || supplier?.email,
+                    supplierPhone: item.product.supplierPhone || supplier?.orderPhone || supplier?.phone,
                     notes: orderNotes
                 };
                 await DataService.saveOrder(newOrder);
@@ -2183,258 +2181,22 @@ export const Products: React.FC = () => {
                     </div>
                 ))(orderCart[0].product)
             }
-            {/* IoT / QR Code Modal with Tabs */}
-            {showIoTLink && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    zIndex: 1000
-                }}>
-                    <div style={{
-                        backgroundColor: 'var(--color-surface)',
-                        padding: 'var(--spacing-xl)',
-                        borderRadius: 'var(--radius-lg)',
-                        width: '100%',
-                        maxWidth: '600px',
-                        maxHeight: '90vh',
-                        overflowY: 'auto'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                            <h3 style={{ margin: 0 }}>IoT & QR Code Integration</h3>
-                            <button onClick={() => setShowIoTLink(null)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={24} /></button>
-                        </div>
-
-                        {/* Tabs */}
-                        <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 'var(--spacing-md)' }}>
-                            <button
-                                onClick={() => setQrTab('api')}
-                                style={{
-                                    padding: '10px 16px',
-                                    border: 'none',
-                                    background: 'none',
-                                    borderBottom: qrTab === 'api' ? '2px solid var(--color-primary)' : 'none',
-                                    color: qrTab === 'api' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                    fontWeight: qrTab === 'api' ? 600 : 400,
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                API / IoT Button
-                            </button>
-                            <button
-                                onClick={() => setQrTab('order')}
-                                style={{
-                                    padding: '10px 16px',
-                                    border: 'none',
-                                    background: 'none',
-                                    borderBottom: qrTab === 'order' ? '2px solid var(--color-primary)' : 'none',
-                                    color: qrTab === 'order' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                    fontWeight: qrTab === 'order' ? 600 : 400,
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                QR: Bestellen
-                            </button>
-                            <button
-                                onClick={() => setQrTab('stock')}
-                                style={{
-                                    padding: '10px 16px',
-                                    border: 'none',
-                                    background: 'none',
-                                    borderBottom: qrTab === 'stock' ? '2px solid var(--color-primary)' : 'none',
-                                    color: qrTab === 'stock' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                    fontWeight: qrTab === 'stock' ? 600 : 400,
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                QR: Bestand
-                            </button>
-                        </div>
-
-                        {/* Tab Content */}
-                        {qrTab === 'api' && (
-                            <>
-                                {showIoTLink.curl ? (
-                                    <>
-                                        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-md)' }}>
-                                            Dieser API-Endpunkt erzeugt eine offene Bestellung für <strong>{showIoTLink.product.name}</strong>.
-                                            Ideal für IoT-Buttons (z.B. AWS IoT Button, flic.io) oder Skripte.
-                                        </p>
-
-                                        <div style={{ marginBottom: 'var(--spacing-md)' }}>
-                                            <div style={{ fontWeight: 600, marginBottom: '4px' }}>CURL (Linux/Mac)</div>
-                                            <div style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '12px', borderRadius: '4px', overflowX: 'auto', fontFamily: 'monospace', fontSize: '12px' }}>
-                                                {showIoTLink.curl}
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <div style={{ fontWeight: 600, marginBottom: '4px' }}>PowerShell (Windows)</div>
-                                            <div style={{ backgroundColor: '#012456', color: '#ffffff', padding: '12px', borderRadius: '4px', overflowX: 'auto', fontFamily: 'monospace', fontSize: '12px' }}>
-                                                {showIoTLink.powershell}
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div>
-                                        <div style={{ padding: '20px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', color: '#991B1B' }}>
-                                            <h4 style={{ marginTop: 0 }}>Supabase ist nicht konfiguriert</h4>
-                                            <p>Die IoT-Button Integration benötigt eine Supabase-Datenbank.</p>
-                                            <p>Bitte konfigurieren Sie diese in den Einstellungen.</p>
-                                            <p style={{ fontWeight: 'bold' }}>Die QR-Codes (siehe andere Tabs) funktionieren auch ohne Supabase!</p>
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
-
-                        {qrTab === 'order' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                <p>Scannt diesen Code, um direkt die Bestellmaske für <strong>{showIoTLink.product.name}</strong> zu öffnen.</p>
-                                <div style={{ padding: '20px', background: 'white', border: '1px solid #eee' }}>
-                                    <QRCode
-                                        value={`${window.location.protocol}//${window.location.host}${window.location.pathname}?action=order&id=${showIoTLink.product.id}`}
-                                        size={200}
-                                    />
-                                </div>
-                                <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
-                                    Funktioniert auf jedem Gerät im gleichen Netzwerk.
-                                </p>
-                            </div>
-                        )}
-
-                        {qrTab === 'stock' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                <p>Scannt diesen Code, um den Bestand von <strong>{showIoTLink.product.name}</strong> zu aktualisieren.</p>
-                                <div style={{ padding: '20px', background: 'white', border: '1px solid #eee' }}>
-                                    <QRCode
-                                        value={`${window.location.protocol}//${window.location.host}${window.location.pathname}?action=stock&id=${showIoTLink.product.id}`}
-                                        size={200}
-                                    />
-                                </div>
-                                <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
-                                    Öffnet direkt den Dialog zur Bestandsänderung (+/-).
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+            {/* IoT / QR Code Modal */}
+            <ProductIoTModal data={showIoTLink} onClose={() => setShowIoTLink(null)} />
 
             {/* Stock Update Modal (Scan Action) */}
-            {isStockUpdateModalOpen && stockUpdateProduct && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    zIndex: 1200
-                }}>
-                    <div style={{
-                        backgroundColor: 'var(--color-surface)',
-                        padding: 'var(--spacing-xl)',
-                        borderRadius: 'var(--radius-lg)',
-                        width: '100%',
-                        maxWidth: '400px',
-                        boxShadow: 'var(--shadow-lg)'
-                    }}>
-                        <h3 style={{ marginTop: 0, marginBottom: 'var(--spacing-md)' }}>Bestand aktualisieren</h3>
-                        <p style={{ marginBottom: 'var(--spacing-lg)' }}>
-                            Produkt: <strong>{stockUpdateProduct.name}</strong>
-                        </p>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)' }}>
-                            <button
-                                onClick={() => setStockUpdateValue(prev => Math.max(0, prev - 1))}
-                                style={{
-                                    width: '40px',
-                                    height: '40px',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    background: 'var(--color-background)',
-                                    fontSize: '1.2rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                -
-                            </button>
-                            <input
-                                type="number"
-                                value={stockUpdateValue}
-                                onChange={(e) => setStockUpdateValue(parseInt(e.target.value) || 0)}
-                                style={{
-                                    flex: 1,
-                                    textAlign: 'center',
-                                    fontSize: '1.5rem',
-                                    fontWeight: 'bold',
-                                    border: 'none',
-                                    background: 'transparent'
-                                }}
-                            />
-                            <button
-                                onClick={() => setStockUpdateValue(prev => prev + 1)}
-                                style={{
-                                    width: '40px',
-                                    height: '40px',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    background: 'var(--color-background)',
-                                    fontSize: '1.2rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                +
-                            </button>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
-                            <button
-                                onClick={() => setIsStockUpdateModalOpen(false)}
-                                style={{
-                                    flex: 1,
-                                    padding: '12px',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--color-border)',
-                                    backgroundColor: 'var(--color-surface)',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Abbrechen
-                            </button>
-                            <button
-                                onClick={() => {
-                                    handleStockUpdate(stockUpdateProduct, stockUpdateValue);
-                                    setIsStockUpdateModalOpen(false);
-                                    setNotification({ message: 'Bestand aktualisiert!', type: 'success' });
-                                }}
-                                style={{
-                                    flex: 1,
-                                    padding: '12px',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: 'none',
-                                    backgroundColor: 'var(--color-primary)',
-                                    color: 'white',
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Speichern
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <StockUpdateModal
+                isOpen={isStockUpdateModalOpen}
+                product={stockUpdateProduct}
+                value={stockUpdateValue}
+                setValue={setStockUpdateValue}
+                onClose={() => setIsStockUpdateModalOpen(false)}
+                onSave={(prod, val) => {
+                    handleStockUpdate(prod, val);
+                    setIsStockUpdateModalOpen(false);
+                    setNotification({ message: 'Bestand aktualisiert!', type: 'success' });
+                }}
+            />
 
             {phoneCallProduct && (
                 <PhoneCallPanel
@@ -2462,83 +2224,16 @@ export const Products: React.FC = () => {
                 )
             }
 
-            {isQuickAddModalOpen && quickAddSupplierId && (
-                <div className="modal-overlay" onClick={() => setIsQuickAddModalOpen(false)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-                        <div className="modal-header" style={{ padding: '24px 24px 16px 24px', borderBottom: '1px solid var(--color-border)' }}>
-                            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <Plus size={22} color="var(--color-primary)" />
-                                Mehrere Produkte anlegen
-                            </h2>
-                            <button onClick={() => setIsQuickAddModalOpen(false)} className="btn btn-ghost btn-icon" style={{ padding: '8px' }}>
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="modal-body" style={{ padding: '24px', backgroundColor: '#f8fafc' }}>
-                            <div style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '16px', borderRadius: 'var(--radius-lg)', marginBottom: '24px', fontSize: '14px', border: '1px solid #bfdbfe', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                                <div style={{ marginTop: '2px' }}><Plus size={18} /></div>
-                                <div>
-                                    <strong style={{ display: 'block', marginBottom: '4px' }}>Tipp für schnelles Anlegen:</strong> 
-                                    Kopiere einfach die Produkte aus einer Rechnung, PDF oder E-Mail und füge sie hier ein (genau ein Produkt pro Zeile).
-                                </div>
-                            </div>
-                            <div className="form-group" style={{ margin: 0 }}>
-                                <label className="form-label" style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '8px' }}>Produktnamen eingeben:</label>
-                                <textarea
-                                    value={quickAddText}
-                                    onChange={(e) => setQuickAddText(e.target.value)}
-                                    placeholder="Cola 0.5L&#10;Fanta 0.5L&#10;Sprite 0.5L"
-                                    rows={8}
-                                    className="input-field"
-                                    style={{ fontFamily: 'inherit', padding: '16px', fontSize: '15px', lineHeight: '1.6', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--color-surface)', border: '1px solid #cbd5e1', boxShadow: 'inset 0 2px 4px 0 rgb(0 0 0 / 0.02)', resize: 'vertical' }}
-                                    autoFocus
-                                />
-                            </div>
-                        </div>
-                        <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
-                            <button onClick={() => setIsQuickAddModalOpen(false)} className="btn btn-ghost" disabled={isLoading}>Abbrechen</button>
-                            <button 
-                                onClick={async () => {
-                                    const lines = quickAddText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                                    if (lines.length === 0) return;
-                                    
-                                    setIsLoading(true);
-                                    const supplier = suppliers.find(s => s.id === quickAddSupplierId);
-                                    
-                                    try {
-                                        for (const name of lines) {
-                                            const newProd: Product = {
-                                                id: generateId(),
-                                                name: name,
-                                                category: supplier?.defaultCategory || 'Ohne Kategorie',
-                                                stock: 0,
-                                                price: 0,
-                                                minStock: 0,
-                                                unit: 'Stück',
-                                                supplierId: quickAddSupplierId,
-                                                autoOrder: false,
-                                                notes: []
-                                            };
-                                            await DataService.saveProduct(newProd);
-                                        }
-                                        await loadProducts();
-                                        setNotification({ message: `${lines.length} Produkte erfolgreich angelegt!`, type: 'success' });
-                                        setIsQuickAddModalOpen(false);
-                                    } catch (err) {
-                                        setNotification({ message: 'Fehler beim Anlegen der Produkte.', type: 'error' });
-                                    } finally {
-                                        setIsLoading(false);
-                                    }
-                                }}
-                                className="btn btn-primary"
-                                disabled={isLoading || quickAddText.trim().length === 0}
-                            >
-                                {isLoading ? 'Speichert...' : `${quickAddText.split('\n').map(l => l.trim()).filter(l => l.length > 0).length} Produkte anlegen`}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <QuickAddModal
+                isOpen={isQuickAddModalOpen}
+                supplierId={quickAddSupplierId}
+                suppliers={suppliers}
+                text={quickAddText}
+                setText={setQuickAddText}
+                isLoading={isLoading}
+                onClose={() => setIsQuickAddModalOpen(false)}
+                onSubmit={handleQuickAddSubmit}
+            />
         </div >
     );
 };

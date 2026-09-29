@@ -186,23 +186,99 @@ const fromSupabaseOrder = (o: any): Order => ({
     updated_by: o.updated_by
 });
 
+interface CacheEntry<T> {
+    data: T;
+    timestamp: number;
+}
+
+const CACHE_TTL_MS = 30_000; // 30 Sekunden TTL für reaktives In-Memory Caching
+
+class DataCache {
+    private cache = new Map<string, CacheEntry<any>>();
+    private inFlight = new Map<string, Promise<any>>();
+
+    get<T>(key: string): T | null {
+        const entry = this.cache.get(key);
+        if (!entry) return null;
+        if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+            this.cache.delete(key);
+            return null;
+        }
+        return entry.data;
+    }
+
+    set<T>(key: string, data: T): void {
+        this.cache.set(key, { data, timestamp: Date.now() });
+    }
+
+    invalidate(keyPattern?: string): void {
+        if (!keyPattern || keyPattern === 'all') {
+            this.cache.clear();
+            return;
+        }
+        for (const key of this.cache.keys()) {
+            if (key === keyPattern || key.startsWith(`${keyPattern}_`)) {
+                this.cache.delete(key);
+            }
+        }
+    }
+
+    async fetchWithCache<T>(
+        key: string,
+        fetcher: () => Promise<T>,
+        forceRefresh: boolean = false
+    ): Promise<T> {
+        if (!forceRefresh) {
+            const cached = this.get<T>(key);
+            if (cached !== null) {
+                return cached;
+            }
+            const existingPromise = this.inFlight.get(key);
+            if (existingPromise) {
+                return existingPromise;
+            }
+        }
+
+        const promise = (async () => {
+            try {
+                const data = await fetcher();
+                this.set(key, data);
+                return data;
+            } finally {
+                this.inFlight.delete(key);
+            }
+        })();
+
+        this.inFlight.set(key, promise);
+        return promise;
+    }
+}
+
+export const dataCache = new DataCache();
+
 export const DataService = {
     toSupabaseProduct,
     toSupabaseOrder,
     toSupabaseSupplier,
 
-    async getProducts(): Promise<Product[]> {
-        const supabase = getSupabaseClient();
-        if (!supabase) return [];
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .order('name');
-        if (error) {
-            console.error('Supabase error:', error);
-            throw error;
-        }
-        return (data || []).map(fromSupabaseProduct);
+    invalidateCache(key?: 'products' | 'orders' | 'suppliers' | 'companySettings' | 'all'): void {
+        dataCache.invalidate(key);
+    },
+
+    async getProducts(forceRefresh = false): Promise<Product[]> {
+        return dataCache.fetchWithCache('products', async () => {
+            const supabase = getSupabaseClient();
+            if (!supabase) return [];
+            const { data, error } = await supabase
+                .from('products')
+                .select('*')
+                .order('name');
+            if (error) {
+                console.error('Supabase error:', error);
+                throw error;
+            }
+            return (data || []).map(fromSupabaseProduct);
+        }, forceRefresh);
     },
 
     async saveProduct(product: Product): Promise<void> {
@@ -211,6 +287,7 @@ export const DataService = {
         const dbProduct = toSupabaseProduct(product);
         const { error } = await supabase.from('products').upsert(dbProduct);
         if (error) throw new Error(error.message || JSON.stringify(error));
+        dataCache.invalidate('products');
     },
 
     async updateProduct(product: Product): Promise<void> {
@@ -225,41 +302,44 @@ export const DataService = {
         if (count === 0) {
             throw new Error("Fehlende Berechtigung oder Produkt nicht gefunden (RLS blockiert).");
         }
+        dataCache.invalidate('products');
     },
 
-    async getOrders(): Promise<Order[]> {
-        const supabase = getSupabaseClient();
-        if (!supabase) return [];
-        const { data, error } = await supabase
-            .from('orders')
-            .select('*')
-            .order('date', { ascending: false });
-        if (error) {
-            console.error('Supabase error:', error);
-            throw error;
-        }
-
-        const orders = (data || []).map(fromSupabaseOrder);
-
-        // Only fetch profiles when there are orders that reference users
-        const userIds = [...new Set([
-            ...orders.map(o => o.user_id).filter(Boolean),
-            ...orders.map(o => o.updated_by).filter(Boolean),
-        ])] as string[];
-
-        if (userIds.length > 0) {
-            const { data: profilesData } = await supabase
-                .from('profiles')
-                .select('id,email')
-                .in('id', userIds);
-            const profilesMap = new Map((profilesData || []).map(p => [p.id, p.email]));
-            for (const o of orders) {
-                if (o.user_id) o.creatorEmail = profilesMap.get(o.user_id);
-                if (o.updated_by) o.updaterEmail = profilesMap.get(o.updated_by);
+    async getOrders(forceRefresh = false): Promise<Order[]> {
+        return dataCache.fetchWithCache('orders', async () => {
+            const supabase = getSupabaseClient();
+            if (!supabase) return [];
+            const { data, error } = await supabase
+                .from('orders')
+                .select('*')
+                .order('date', { ascending: false });
+            if (error) {
+                console.error('Supabase error:', error);
+                throw error;
             }
-        }
 
-        return orders;
+            const orders = (data || []).map(fromSupabaseOrder);
+
+            // Only fetch profiles when there are orders that reference users
+            const userIds = [...new Set([
+                ...orders.map(o => o.user_id).filter(Boolean),
+                ...orders.map(o => o.updated_by).filter(Boolean),
+            ])] as string[];
+
+            if (userIds.length > 0) {
+                const { data: profilesData } = await supabase
+                    .from('profiles')
+                    .select('id,email')
+                    .in('id', userIds);
+                const profilesMap = new Map((profilesData || []).map(p => [p.id, p.email]));
+                for (const o of orders) {
+                    if (o.user_id) o.creatorEmail = profilesMap.get(o.user_id);
+                    if (o.updated_by) o.updaterEmail = profilesMap.get(o.updated_by);
+                }
+            }
+
+            return orders;
+        }, forceRefresh);
     },
 
     async saveOrder(order: Order): Promise<void> {
@@ -268,6 +348,7 @@ export const DataService = {
         const dbOrder = toSupabaseOrder(order);
         const { error } = await supabase.from('orders').insert(dbOrder);
         if (error) throw new Error(error.message || JSON.stringify(error));
+        dataCache.invalidate('orders');
     },
 
     async updateOrder(order: Order): Promise<void> {
@@ -276,6 +357,7 @@ export const DataService = {
         const dbOrder = toSupabaseOrder(order);
         const { error } = await supabase.from('orders').upsert(dbOrder);
         if (error) throw error;
+        dataCache.invalidate('orders');
     },
 
     async deleteOrder(id: string): Promise<void> {
@@ -283,21 +365,24 @@ export const DataService = {
         if (!supabase) return;
         const { error } = await supabase.from('orders').delete().eq('id', id);
         if (error) throw error;
+        dataCache.invalidate('orders');
     },
 
-    async getSuppliers(): Promise<Supplier[]> {
-        const supabase = getSupabaseClient();
-        if (!supabase) return [];
-        // suppliers_safe view excludes login_password — credentials fetched separately via RPC
-        const { data, error } = await supabase
-            .from('suppliers_safe')
-            .select('*')
-            .order('name');
-        if (error) {
-            console.error('Supabase error:', error);
-            throw error;
-        }
-        return (data || []).map(fromSupabaseSupplier);
+    async getSuppliers(forceRefresh = false): Promise<Supplier[]> {
+        return dataCache.fetchWithCache('suppliers', async () => {
+            const supabase = getSupabaseClient();
+            if (!supabase) return [];
+            // suppliers_safe view excludes login_password — credentials fetched separately via RPC
+            const { data, error } = await supabase
+                .from('suppliers_safe')
+                .select('*')
+                .order('name');
+            if (error) {
+                console.error('Supabase error:', error);
+                throw error;
+            }
+            return (data || []).map(fromSupabaseSupplier);
+        }, forceRefresh);
     },
 
     async saveSupplier(supplier: Supplier): Promise<void> {
@@ -306,6 +391,7 @@ export const DataService = {
         const dbSupplier = toSupabaseSupplier(supplier);
         const { error } = await supabase.from('suppliers').upsert(dbSupplier);
         if (error) throw error;
+        dataCache.invalidate('suppliers');
     },
 
     async deleteSupplier(id: string): Promise<void> {
@@ -319,6 +405,8 @@ export const DataService = {
         if (unlinkError) throw unlinkError;
         const { error } = await supabase.from('suppliers').delete().eq('id', id);
         if (error) throw error;
+        dataCache.invalidate('suppliers');
+        dataCache.invalidate('products');
     },
 
     async markOrderReceived(orderId: string): Promise<void> {
@@ -333,6 +421,8 @@ export const DataService = {
             logError(`markOrderReceived: ${data.message}`, { orderId });
             throw new Error(data.message || 'Unbekannter Fehler im RPC');
         }
+        dataCache.invalidate('orders');
+        dataCache.invalidate('products');
     },
 
     async unmarkOrderReceived(orderId: string): Promise<void> {
@@ -347,6 +437,8 @@ export const DataService = {
             logError(`unmarkOrderReceived: ${data.message}`, { orderId });
             throw new Error(data.message || 'Unbekannter Fehler im RPC');
         }
+        dataCache.invalidate('orders');
+        dataCache.invalidate('products');
     },
 
     async getSupplierCredentials(supplierId: string): Promise<{ loginUrl?: string; loginUsername?: string; loginPassword?: string } | null> {
@@ -410,35 +502,37 @@ export const DataService = {
         }
     },
 
-    getCompanySettings: async () => {
-        try {
-            const supabase = getSupabaseClient();
-            if (!supabase) return null;
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return null;
-            const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
-            if (!profile?.company_id) return null;
-            const { data: company, error } = await supabase.from('companies').select('name, settings').eq('id', profile.company_id).single();
-            if (error) {
-                console.error('Error fetching company settings:', error);
+    getCompanySettings: async (forceRefresh = false) => {
+        return dataCache.fetchWithCache('companySettings', async () => {
+            try {
+                const supabase = getSupabaseClient();
+                if (!supabase) return null;
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return null;
+                const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
+                if (!profile?.company_id) return null;
+                const { data: company, error } = await supabase.from('companies').select('name, settings').eq('id', profile.company_id).single();
+                if (error) {
+                    console.error('Error fetching company settings:', error);
+                    return null;
+                }
+                const defaults = {
+                    staffCanSeePrices: false,
+                    staffCanManageSuppliers: false,
+                    staffCanSeePasswords: false,
+                    enableAiCart: true,
+                    overwriteStockOnReceipt: false,
+                };
+                return {
+                    ...defaults,
+                    ...(company?.settings || {}),
+                    _companyName: company?.name || ''
+                };
+            } catch (e) {
+                console.error('getCompanySettings exception:', e);
                 return null;
             }
-            const defaults = {
-                staffCanSeePrices: false,
-                staffCanManageSuppliers: false,
-                staffCanSeePasswords: false,
-                enableAiCart: true,
-                overwriteStockOnReceipt: false,
-            };
-            return {
-                ...defaults,
-                ...(company?.settings || {}),
-                _companyName: company?.name || ''
-            };
-        } catch (e) {
-            console.error('getCompanySettings exception:', e);
-            return null;
-        }
+        }, forceRefresh);
     },
 
     updateCompanySettings: async (settings: any) => {
@@ -448,7 +542,10 @@ export const DataService = {
             
             // 1. First try RPC (security definer, atomic merge)
             const { error: rpcError } = await supabase.rpc('update_company_settings', { p_settings: settings });
-            if (!rpcError) return true;
+            if (!rpcError) {
+                dataCache.invalidate('companySettings');
+                return true;
+            }
 
             console.warn("RPC update_company_settings failed, trying direct update:", rpcError);
 
@@ -464,6 +561,7 @@ export const DataService = {
                 .eq('id', profile.company_id);
 
             if (directError) throw directError;
+            dataCache.invalidate('companySettings');
             return true;
         } catch (e: any) {
             console.error("updateCompanySettings failed:", e);
@@ -479,7 +577,10 @@ export const DataService = {
             
             // Try updating via RPC (security definer bypasses RLS)
             const { error: rpcError } = await supabase.rpc('update_company_name', { new_name: name });
-            if (!rpcError) return true;
+            if (!rpcError) {
+                dataCache.invalidate('companySettings');
+                return true;
+            }
 
             // Fallback: try direct update
             const { data: { user } } = await supabase.auth.getUser();
@@ -488,6 +589,7 @@ export const DataService = {
             if (!profile?.company_id) return false;
             const { error: directError } = await supabase.from('companies').update({ name }).eq('id', profile.company_id);
             if (directError) throw directError;
+            dataCache.invalidate('companySettings');
             return true;
         } catch (e) { 
             console.error('Failed to update company name:', e);
