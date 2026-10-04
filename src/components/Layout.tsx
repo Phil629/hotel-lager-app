@@ -2,9 +2,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { Package, ShoppingCart, Settings, Users, TrendingUp, Activity, ClipboardList, ShieldAlert, WifiOff } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { StorageService } from '../services/storage';
-import { supabase } from '../services/supabase';
+import { supabase, getSupabaseClient } from '../services/supabase';
+import { DataService, DATA_CHANGED_EVENT } from '../services/data';
+import { inventorySync } from '../services/inventorySync';
 import { useAppContext } from '../contexts/AppContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 function useOnlineStatus() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -29,6 +31,17 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     const settings = StorageService.getSettings();
     const [userEmail, setUserEmail] = useState<string>('');
+    const [lowStockCount, setLowStockCount] = useState<number>(0);
+
+    const updateLowStockCount = useCallback(async () => {
+        try {
+            const products = await DataService.getProducts();
+            const count = products.filter(p => Number(p.minStock) > 0 && Number(p.stock) <= Number(p.minStock)).length;
+            setLowStockCount(count);
+        } catch (e) {
+            console.error('Failed to update low stock count in Layout:', e);
+        }
+    }, []);
 
     useEffect(() => {
         if (!supabase) return;
@@ -36,6 +49,36 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             if (user) setUserEmail(user.email || '');
         });
     }, []);
+
+    useEffect(() => {
+        inventorySync.start();
+        updateLowStockCount();
+
+        // Listen for internal cache invalidations / writes
+        const handleDataChanged = (e: Event) => {
+            const key = (e as CustomEvent).detail;
+            if (!key || key === 'all' || key === 'products' || key === 'orders') {
+                updateLowStockCount();
+            }
+        };
+        window.addEventListener(DATA_CHANGED_EVENT, handleDataChanged);
+
+        // Also listen for Supabase realtime changes on products
+        const client = getSupabaseClient();
+        let channel: any = null;
+        if (client) {
+            channel = client.channel(`layout_products_${Math.random().toString(36).slice(2, 7)}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+                    updateLowStockCount();
+                })
+                .subscribe();
+        }
+
+        return () => {
+            window.removeEventListener(DATA_CHANGED_EVENT, handleDataChanged);
+            if (client && channel) client.removeChannel(channel);
+        };
+    }, [updateLowStockCount]);
 
     const displayLogo = settings.logoUrl || logo;
     const displayHotelName = settings.hotelName || 'Unternehmen';
@@ -140,9 +183,34 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         Bestellungen
                     </Link>
 
-                    <Link to="/products" className={navLink('/products')}>
-                        <Package size={17} style={{ flexShrink: 0 }} />
-                        Produkte
+                    <Link
+                        to="/products"
+                        className={navLink('/products')}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Package size={17} style={{ flexShrink: 0 }} />
+                            Produkte
+                        </div>
+                        {lowStockCount > 0 && (
+                            <span
+                                title={`${lowStockCount} Artikel unter Mindestbestand`}
+                                style={{
+                                    backgroundColor: '#ef4444',
+                                    color: '#ffffff',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    padding: '1px 7px',
+                                    borderRadius: '999px',
+                                    minWidth: '18px',
+                                    textAlign: 'center',
+                                    lineHeight: '16px',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                }}
+                            >
+                                {lowStockCount}
+                            </span>
+                        )}
                     </Link>
 
                     <Link to="/suppliers" className={navLink('/suppliers')}>

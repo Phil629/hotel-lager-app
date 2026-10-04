@@ -193,6 +193,53 @@ interface CacheEntry<T> {
 
 const CACHE_TTL_MS = 30_000; // 30 Sekunden TTL für reaktives In-Memory Caching
 
+/** Window event fired whenever locally cached data is invalidated (detail = cache key). */
+export const DATA_CHANGED_EVENT = 'stockapp:data-changed';
+
+/** Default page size for the received-orders history in the Orders view. */
+export const RECEIVED_ORDERS_PAGE_SIZE = 25;
+
+/**
+ * Removes characters that have special meaning inside PostgREST filter strings
+ * (`,` `(` `)` `*` `%` `\` quotes) so user input can safely be used in `.or()` / `.ilike()`.
+ */
+const sanitizeSearchTerm = (term: string): string =>
+    term.replace(/[,()*%\\"'`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
+
+/** Adds creator/updater e-mail addresses to orders (one batched profiles lookup). */
+const attachProfileEmails = async (supabase: NonNullable<ReturnType<typeof getSupabaseClient>>, orders: Order[]): Promise<Order[]> => {
+    const userIds = [...new Set([
+        ...orders.map(o => o.user_id).filter(Boolean),
+        ...orders.map(o => o.updated_by).filter(Boolean),
+    ])] as string[];
+    if (userIds.length === 0) return orders;
+
+    const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id,email')
+        .in('id', userIds);
+    const profilesMap = new Map((profilesData || []).map(p => [p.id, p.email]));
+    for (const o of orders) {
+        if (o.user_id) o.creatorEmail = profilesMap.get(o.user_id);
+        if (o.updated_by) o.updaterEmail = profilesMap.get(o.updated_by);
+    }
+    return orders;
+};
+
+export interface ReceivedOrdersPage {
+    /** Received orders for the requested page (plus all unresolved-defect orders, always included). */
+    orders: Order[];
+    /** Total number of received orders matching the search (for "x remaining"). */
+    total: number;
+}
+
+export interface PricePoint {
+    date: string;
+    price: number;
+    supplierName?: string;
+    quantity: number;
+}
+
 class DataCache {
     private cache = new Map<string, CacheEntry<any>>();
     private inFlight = new Map<string, Promise<any>>();
@@ -214,12 +261,16 @@ class DataCache {
     invalidate(keyPattern?: string): void {
         if (!keyPattern || keyPattern === 'all') {
             this.cache.clear();
-            return;
-        }
-        for (const key of this.cache.keys()) {
-            if (key === keyPattern || key.startsWith(`${keyPattern}_`)) {
-                this.cache.delete(key);
+        } else {
+            for (const key of this.cache.keys()) {
+                if (key === keyPattern || key.startsWith(`${keyPattern}_`)) {
+                    this.cache.delete(key);
+                }
             }
+        }
+        // Notify lightweight listeners (e.g. nav badges) that data changed locally.
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent(DATA_CHANGED_EVENT, { detail: keyPattern || 'all' }));
         }
     }
 
@@ -305,6 +356,26 @@ export const DataService = {
         dataCache.invalidate('products');
     },
 
+    /**
+     * Updates only the stock count (and count timestamp) of a product.
+     * Used by the inventory counter / offline sync queue.
+     */
+    async updateProductStock(id: string, stock: number, lastCountedAt: string): Promise<void> {
+        const supabase = getSupabaseClient();
+        if (!supabase) throw new Error('Keine Datenbankverbindung');
+        const { error, count } = await supabase
+            .from('products')
+            .update({ stock, last_counted_at: lastCountedAt }, { count: 'exact' })
+            .eq('id', id);
+        if (error) throw new Error(error.message || JSON.stringify(error));
+        if (count === 0) throw new Error('Produkt nicht gefunden oder keine Berechtigung (RLS).');
+        dataCache.invalidate('products');
+    },
+
+    /**
+     * Full order history. Used by analytics views (Finanzen, Verbrauch, Produkte).
+     * The Orders view uses the lighter `getOpenOrders` + `getReceivedOrdersPage` instead.
+     */
     async getOrders(forceRefresh = false): Promise<Order[]> {
         return dataCache.fetchWithCache('orders', async () => {
             const supabase = getSupabaseClient();
@@ -317,28 +388,99 @@ export const DataService = {
                 console.error('Supabase error:', error);
                 throw error;
             }
+            return attachProfileEmails(supabase, (data || []).map(fromSupabaseOrder));
+        }, forceRefresh);
+    },
 
-            const orders = (data || []).map(fromSupabaseOrder);
+    /** All open (not yet received) orders. Always small, so loaded completely. */
+    async getOpenOrders(forceRefresh = false): Promise<Order[]> {
+        return dataCache.fetchWithCache('orders_open', async () => {
+            const supabase = getSupabaseClient();
+            if (!supabase) return [];
+            const { data, error } = await supabase
+                .from('orders')
+                .select('*')
+                .eq('status', 'open')
+                .order('date', { ascending: false });
+            if (error) {
+                console.error('Supabase error:', error);
+                throw error;
+            }
+            return attachProfileEmails(supabase, (data || []).map(fromSupabaseOrder));
+        }, forceRefresh);
+    },
 
-            // Only fetch profiles when there are orders that reference users
-            const userIds = [...new Set([
-                ...orders.map(o => o.user_id).filter(Boolean),
-                ...orders.map(o => o.updated_by).filter(Boolean),
-            ])] as string[];
+    /**
+     * One page of received orders, newest first, optionally filtered server-side.
+     * Received orders with an unresolved defect are always included so they never
+     * disappear behind the "load more" button.
+     */
+    async getReceivedOrdersPage(
+        { limit = RECEIVED_ORDERS_PAGE_SIZE, search = '' }: { limit?: number; search?: string } = {},
+        forceRefresh = false
+    ): Promise<ReceivedOrdersPage> {
+        const term = sanitizeSearchTerm(search);
+        const cacheKey = `orders_received_${limit}_${term.toLowerCase()}`;
+        return dataCache.fetchWithCache(cacheKey, async () => {
+            const supabase = getSupabaseClient();
+            if (!supabase) return { orders: [], total: 0 };
 
-            if (userIds.length > 0) {
-                const { data: profilesData } = await supabase
-                    .from('profiles')
-                    .select('id,email')
-                    .in('id', userIds);
-                const profilesMap = new Map((profilesData || []).map(p => [p.id, p.email]));
-                for (const o of orders) {
-                    if (o.user_id) o.creatorEmail = profilesMap.get(o.user_id);
-                    if (o.updated_by) o.updaterEmail = profilesMap.get(o.updated_by);
-                }
+            let pageQuery = supabase
+                .from('orders')
+                .select('*', { count: 'exact' })
+                .eq('status', 'received')
+                .order('received_at', { ascending: false, nullsFirst: false })
+                .order('date', { ascending: false })
+                .range(0, Math.max(0, limit - 1));
+            if (term) {
+                pageQuery = pageQuery.or(
+                    `product_name.ilike.%${term}%,supplier_name.ilike.%${term}%,notes.ilike.%${term}%,order_number.ilike.%${term}%`
+                );
             }
 
-            return orders;
+            const defectQuery = supabase
+                .from('orders')
+                .select('*')
+                .eq('status', 'received')
+                .eq('has_defect', true)
+                .or('defect_resolved.is.null,defect_resolved.eq.false');
+
+            const [pageRes, defectRes] = await Promise.all([pageQuery, term ? Promise.resolve({ data: [], error: null }) : defectQuery]);
+            if (pageRes.error) {
+                console.error('Supabase error:', pageRes.error);
+                throw pageRes.error;
+            }
+            if (defectRes.error) console.error('Supabase error (defects):', defectRes.error);
+
+            const byId = new Map<string, Order>();
+            for (const row of [...(defectRes.data || []), ...(pageRes.data || [])]) {
+                byId.set(row.id, fromSupabaseOrder(row));
+            }
+            const orders = await attachProfileEmails(supabase, [...byId.values()]);
+            return { orders, total: pageRes.count ?? orders.length };
+        }, forceRefresh);
+    },
+
+    /** Price history of a single product (only the columns needed for charts/trends). */
+    async getOrderPriceHistory(productName: string, forceRefresh = false): Promise<PricePoint[]> {
+        return dataCache.fetchWithCache(`orders_price_${productName}`, async () => {
+            const supabase = getSupabaseClient();
+            if (!supabase || !productName) return [];
+            const { data, error } = await supabase
+                .from('orders')
+                .select('date, price, supplier_name, quantity')
+                .eq('product_name', productName)
+                .order('date', { ascending: true });
+            if (error) {
+                console.error('Supabase error:', error);
+                throw error;
+            }
+            return (data || []).map(r => ({
+                date: r.date,
+                price: Number(r.price ?? 0),
+                supplierName: r.supplier_name ?? undefined,
+                quantity: Number(r.quantity ?? 0),
+            }));
         }, forceRefresh);
     },
 

@@ -25,6 +25,7 @@ export const Orders: React.FC = () => {
         suppliers,
         inboundEmails,
         loadOrders, loadProducts, loadSuppliers,
+        receivedTotal, receivedLimit, receivedLoading, searchReceived, loadMoreReceived,
     } = useOrderData();
 
     const { isAiCartEnabled } = useAppContext();
@@ -74,8 +75,7 @@ export const Orders: React.FC = () => {
     const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
     const [printingSupplierId, setPrintingSupplierId] = useState<string | null>(null);
 
-    // Pagination State
-    const [visibleReceivedCount, setVisibleReceivedCount] = useState(10);
+    // Search state (received-orders search is executed server-side via useOrderData)
     const [searchOpenTerm, setSearchOpenTerm] = useState('');
     const [searchReceivedTerm, setSearchReceivedTerm] = useState('');
     const [expandedReceivedOrders, setExpandedReceivedOrders] = useState<Set<string>>(new Set());
@@ -626,13 +626,9 @@ export const Orders: React.FC = () => {
             }
         });
 
+    // Already filtered + paginated server-side (see useOrderData / DataService.getReceivedOrdersPage)
     const receivedOrders = orders
         .filter(o => o.status === 'received')
-        .filter(o => {
-            if (!searchReceivedTerm) return true;
-            const term = searchReceivedTerm.toLowerCase();
-            return o.productName.toLowerCase().includes(term) || (o.supplierName && o.supplierName.toLowerCase().includes(term)) || (o.notes && o.notes.toLowerCase().includes(term));
-        })
         .sort((a, b) => {
             const aHasUnresolvedDefect = a.hasDefect && !a.defectResolved;
             const bHasUnresolvedDefect = b.hasDefect && !b.defectResolved;
@@ -1183,7 +1179,7 @@ export const Orders: React.FC = () => {
         );
     };
 
-    const visibleReceivedOrders = receivedOrders.slice(0, visibleReceivedCount);
+    const remainingReceivedCount = Math.max(0, receivedTotal - Math.min(receivedLimit, receivedTotal));
 
     return (
         <div>
@@ -1428,11 +1424,14 @@ export const Orders: React.FC = () => {
                         <Search size={18} color="var(--color-text-muted)" style={{ marginRight: '8px' }} />
                         <input
                             type="text"
-                            placeholder="Erhaltene Bestellungen suchen..."
+                            placeholder="Produkt, Lieferant, Notiz oder Bestellnr. suchen..."
                             value={searchReceivedTerm}
-                            onChange={e => setSearchReceivedTerm(e.target.value)}
+                            onChange={e => { setSearchReceivedTerm(e.target.value); searchReceived(e.target.value); }}
                             style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-main)' }}
                         />
+                        {receivedLoading && searchReceivedTerm && (
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-faint)', whiteSpace: 'nowrap', marginLeft: '8px' }}>Suche…</span>
+                        )}
                     </div>
                 </div>
 
@@ -1444,16 +1443,28 @@ export const Orders: React.FC = () => {
                         borderRadius: 'var(--radius-lg)',
                         color: 'var(--color-text-muted)'
                     }}>
-                        Noch keine Bestellungen erhalten.
+                        {searchReceivedTerm
+                            ? (receivedLoading ? 'Suche läuft…' : `Keine erhaltenen Bestellungen zu „${searchReceivedTerm}“ gefunden.`)
+                            : 'Noch keine Bestellungen erhalten.'}
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {visibleReceivedOrders.map(renderReceivedOrderCard)}
+                        {receivedOrders.map(renderReceivedOrderCard)}
 
-                        {visibleReceivedCount < receivedOrders.length && (
-                            <button onClick={() => setVisibleReceivedCount(prev => prev + 10)} className="btn btn-ghost" style={{ marginTop: '8px', width: '100%', justifyContent: 'center' }}>
-                                Mehr laden ({receivedOrders.length - visibleReceivedCount} verbleibend)
+                        {remainingReceivedCount > 0 && (
+                            <button
+                                onClick={loadMoreReceived}
+                                disabled={receivedLoading}
+                                className="btn btn-ghost"
+                                style={{ marginTop: '8px', width: '100%', justifyContent: 'center' }}
+                            >
+                                {receivedLoading ? 'Wird geladen…' : `Weitere laden (${remainingReceivedCount} verbleibend)`}
                             </button>
+                        )}
+                        {receivedTotal > 0 && (
+                            <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--color-text-faint)' }}>
+                                {Math.min(receivedLimit, receivedTotal)} von {receivedTotal} erhaltenen Bestellungen angezeigt
+                            </div>
                         )}
                     </div>
                 )}

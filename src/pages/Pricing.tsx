@@ -6,7 +6,7 @@ import { StorageService } from '../services/storage';
 import {
     TrendingUp, TrendingDown, Euro, Package, AlertTriangle, Download, X,
     Filter, PiggyBank, Plus, Trash2, Search, ChevronDown, ChevronRight,
-    Users, ShoppingCart, BarChart2, Layers,
+    Users, ShoppingCart, BarChart2, Layers, Minus,
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -397,6 +397,32 @@ export const Pricing: React.FC = () => {
         a.click(); URL.revokeObjectURL(a.href);
     };
 
+    const handleProductsCsvExport = () => {
+        const rows: (string | number)[][] = [
+            ['Produkt', 'Kategorie', 'Lieferant', 'Einheit', 'Bestellungen', 'Menge gesamt', 'Ø Preis (EUR)', 'Min Preis (EUR)', 'Max Preis (EUR)', 'Preisänderung (%)', 'Ausgaben gesamt (EUR)'],
+            ...filteredProductStats.map(s => [
+                s.product.name,
+                s.product.category || '',
+                s.supplierName,
+                s.product.unit || '',
+                s.orderCount,
+                s.totalQty,
+                s.avgPrice.toFixed(2).replace('.', ','),
+                s.minPrice.toFixed(2).replace('.', ','),
+                s.maxPrice.toFixed(2).replace('.', ','),
+                s.priceChange.toFixed(1).replace('.', ','),
+                s.totalSpend.toFixed(2).replace('.', ',')
+            ])
+        ];
+        const csv = '\uFEFF' + rows.map(r => r.map(v => `"${v}"`).join(';')).join('\r\n');
+        const a = Object.assign(document.createElement('a'), {
+            href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })),
+            download: `preishistorie_produkte_${new Date().toISOString().slice(0, 10)}.csv`
+        });
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+
     if (loading) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Lade Finanzdaten…</div>;
 
     const inflColor   = avgInflation > 10 ? 'var(--color-danger)' : avgInflation < -3 ? 'var(--color-success)' : 'var(--color-text-main)';
@@ -623,9 +649,21 @@ export const Pricing: React.FC = () => {
             {/* ══════════════ PRODUCTS TAB ══════════════════════════════════ */}
             {activeTab === 'products' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
-                    <div style={{ position: 'relative' }}>
-                        <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
-                        <input type="text" placeholder="Produkt, Kategorie oder Lieferant suchen…" value={productSearch} onChange={e => setProductSearch(e.target.value)} className="input-field" style={{ width: '100%', padding: '10px 12px 10px 36px', boxSizing: 'border-box' }} />
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ position: 'relative', flex: '1 1 300px' }}>
+                            <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+                            <input type="text" placeholder="Produkt, Kategorie oder Lieferant suchen…" value={productSearch} onChange={e => setProductSearch(e.target.value)} className="input-field" style={{ width: '100%', padding: '10px 12px 10px 36px', boxSizing: 'border-box' }} />
+                        </div>
+                        <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={handleProductsCsvExport}
+                            disabled={filteredProductStats.length === 0}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                            title="Tabelle als CSV exportieren"
+                        >
+                            <Download size={15} /> Preishistorie CSV
+                        </button>
                     </div>
 
                     <div className="card" style={{ overflow: 'hidden' }}>
@@ -635,7 +673,7 @@ export const Pricing: React.FC = () => {
                                     <tr>
                                         <th>Produkt</th><th>Kategorie</th><th>Lieferant</th>
                                         <th style={{ textAlign: 'right' }}>Ø Preis</th>
-                                        <th style={{ textAlign: 'right' }}>Preisänderung</th>
+                                        <th style={{ textAlign: 'right' }}>Preistrend</th>
                                         <th style={{ textAlign: 'right' }}>Ausgaben gesamt</th>
                                         <th style={{ width: '32px' }} />
                                     </tr>
@@ -661,9 +699,35 @@ export const Pricing: React.FC = () => {
                                                     <td style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{stat.supplierName}</td>
                                                     <td style={{ textAlign: 'right', fontSize: '13px', fontWeight: 500 }}>{fmt(stat.avgPrice, currency)}</td>
                                                     <td style={{ textAlign: 'right' }}>
-                                                        {stat.priceChange !== 0
-                                                            ? <span style={{ fontSize: '12px', fontWeight: 600, color: stat.priceChange > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>{stat.priceChange > 0 ? '+' : ''}{stat.priceChange.toFixed(1)}%</span>
-                                                            : <span style={{ color: 'var(--color-text-faint)', fontSize: '12px' }}>—</span>}
+                                                        {stat.priceChange !== 0 ? (
+                                                            <span style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '3px',
+                                                                fontSize: '12px',
+                                                                fontWeight: 700,
+                                                                padding: '2px 6px',
+                                                                borderRadius: 'var(--radius-sm)',
+                                                                backgroundColor: stat.priceChange > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                                color: stat.priceChange > 0 ? 'var(--color-danger, #ef4444)' : 'var(--color-success, #10b981)'
+                                                            }}>
+                                                                {stat.priceChange > 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                                                                {stat.priceChange > 0 ? '+' : ''}{stat.priceChange.toFixed(1)}%
+                                                            </span>
+                                                        ) : stat.orderCount >= 2 ? (
+                                                            <span style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '2px',
+                                                                color: 'var(--color-text-muted)',
+                                                                fontSize: '11px',
+                                                                fontWeight: 500
+                                                            }}>
+                                                                <Minus size={12} /> 0.0%
+                                                            </span>
+                                                        ) : (
+                                                            <span style={{ color: 'var(--color-text-faint)', fontSize: '12px' }}>1 Kauf</span>
+                                                        )}
                                                     </td>
                                                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(stat.totalSpend, currency)}</td>
                                                     <td>{exp ? <ChevronDown size={15} color="var(--color-text-muted)" /> : <ChevronRight size={15} color="var(--color-text-muted)" />}</td>

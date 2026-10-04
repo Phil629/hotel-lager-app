@@ -160,9 +160,14 @@ export const Products: React.FC = () => {
                 setProducts(loadedProducts);
                 setOrders(loadedOrders);
 
-                // Handle URL Actions (QR Scans)
+                // Handle URL Actions (QR Scans & Filter shortcuts)
                 const action = searchParams.get('action');
                 const id = searchParams.get('id');
+                const filter = searchParams.get('filter');
+
+                if (filter === 'low_stock') {
+                    setShowLowStockOnly(true);
+                }
 
                 if (action && id && loadedProducts.length > 0) {
                     const product = loadedProducts.find(p => p.id === id);
