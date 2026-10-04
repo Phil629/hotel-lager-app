@@ -6,7 +6,7 @@ import { Save, Database, ArrowRight, Upload, Building2, Mail, Settings as Settin
 import { getSupabaseClient } from '../services/supabase';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
-import type { AppSettings } from '../types';
+import type { AppSettings, CompanySettings } from '../types';
 import { useAppContext } from '../contexts/AppContext';
 
 interface ConfirmState {
@@ -27,7 +27,7 @@ export const Settings: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'general' | 'team' | 'data' | 'logs'>('general');
     const [errorLogs, setErrorLogs] = useState<Array<{ id: string; message: string; context: Record<string, unknown>; created_at: string }>>([]);
     const [logsLoading, setLogsLoading] = useState(false);
-    const [companySettings, setCompanySettings] = useState({ staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false, enableAiCart: true, overwriteStockOnReceipt: false });
+    const [companySettings, setCompanySettings] = useState<CompanySettings>({ staffCanSeePrices: false, staffCanManageSuppliers: false, staffCanSeePasswords: false, enableAiCart: true, overwriteStockOnReceipt: false });
     const [settings, setSettings] = useState<AppSettings>({
         serviceId: '',
         templateId: '',
@@ -59,16 +59,19 @@ export const Settings: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
+        let isMounted = true;
         const stored = StorageService.getSettings();
         supabase?.auth.getUser().then(async ({ data }) => {
-            if (!data?.user || !supabase) return;
+            if (!isMounted || !data?.user || !supabase) return;
             setUserId(data.user.id);
             const { data: profile } = await supabase.from('profiles').select('role, company_id, inbound_email_secret').eq('id', data.user.id).single();
+            if (!isMounted) return;
             if (profile) {
                 setRole(profile.role || 'user');
                 setInboundSecret(profile.inbound_email_secret || '');
                 if (profile.company_id) {
                     const { data: company } = await supabase.from('companies').select('join_code, name, settings').eq('id', profile.company_id).single();
+                    if (!isMounted) return;
                     if (company) {
                         setCompanyCode(company.join_code);
                         if (company.name) {
@@ -77,13 +80,14 @@ export const Settings: React.FC = () => {
                     }
 
                     const { data: team } = await supabase.from('profiles').select('id, email, role').eq('company_id', profile.company_id);
+                    if (!isMounted) return;
                     if (team) setTeamMembers(team);
                 }
             }
         });
         DataService.getCompanySettings().then(res => {
-            if (res) {
-                const { _companyName, ...rest } = res as any;
+            if (res && isMounted) {
+                const { _companyName, ...rest } = res;
                 setCompanySettings(prev => ({ ...prev, ...rest }));
                 if (_companyName) {
                     setSettings(s => ({ ...s, hotelName: _companyName }));
@@ -105,6 +109,10 @@ export const Settings: React.FC = () => {
             inventoryValuationMethod: stored.inventoryValuationMethod || 'latest',
             logoUrl: stored.logoUrl || ''
         });
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     const handleSave = async (e: React.FormEvent) => {

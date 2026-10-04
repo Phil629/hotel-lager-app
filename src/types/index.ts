@@ -1,14 +1,18 @@
+export interface CompanySettings {
+  staffCanSeePrices: boolean;
+  staffCanManageSuppliers: boolean;
+  staffCanSeePasswords: boolean;
+  enableAiCart?: boolean;
+  overwriteStockOnReceipt?: boolean;
+  _companyName?: string;
+}
+
 export interface Company {
   id: string;
   name: string;
   join_code: string;
   created_at?: string;
-  settings?: {
-    staffCanSeePrices: boolean;
-    staffCanManageSuppliers: boolean;
-    staffCanSeePasswords: boolean;
-    enableAiCart?: boolean;
-  };
+  settings?: CompanySettings;
 }
 
 export interface Profile {

@@ -1,7 +1,7 @@
 import { generateId } from "../utils";
 import { getSupabaseClient } from './supabase';
 import { logError } from './errors';
-import type { Product, Order, Supplier, Note } from '../types';
+import type { Product, Order, Supplier, Note, CompanySettings } from '../types';
 
 const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: boolean | undefined): Note[] => {
     if (!notesStr) return [];
@@ -650,8 +650,8 @@ export const DataService = {
         }
     },
 
-    getCompanySettings: async (forceRefresh = false) => {
-        return dataCache.fetchWithCache('companySettings', async () => {
+    getCompanySettings: async (forceRefresh = false): Promise<CompanySettings | null> => {
+        return dataCache.fetchWithCache('companySettings', async (): Promise<CompanySettings | null> => {
             try {
                 const supabase = getSupabaseClient();
                 if (!supabase) return null;
