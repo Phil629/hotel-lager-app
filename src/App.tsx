@@ -226,7 +226,7 @@ function App() {
         <p style={{ color: '#9f1239', maxWidth: '400px', textAlign: 'center' }}>
           Dein Account wurde vorübergehend gesperrt. Bitte wende dich an den Support, um mehr Informationen zu erhalten.
         </p>
-        <a href="mailto:support@bestell-app.de" style={{ color: '#be123c' }}>support@bestell-app.de</a>
+        <a href="mailto:support@bestellwesen.com" style={{ color: '#be123c' }}>support@bestellwesen.com</a>
       </div>
     );
   }
