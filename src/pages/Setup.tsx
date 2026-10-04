@@ -66,6 +66,7 @@ export const Setup: React.FC<SetupProps> = ({ onSetupComplete }) => {
             });
             if (rpcError) throw new Error(rpcError.message || 'Einladungs-Code ungültig.');
             if (!companyData) throw new Error('Unternehmen nicht gefunden.');
+            if ((companyData as any).error) throw new Error((companyData as any).error);
 
             const settings = StorageService.getSettings();
             settings.hotelName = companyData.name;
