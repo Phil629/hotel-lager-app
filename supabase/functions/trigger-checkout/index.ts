@@ -94,8 +94,8 @@ serve(async (req) => {
       }, 422)
     }
 
-    // Force 'extension' strategy for testing! Ignore DB setting.
-    const strategy: 'cloud' | 'extension' = 'extension'
+    // Determine strategy: use supplier setting if 'cloud', otherwise default to 'extension'
+    const strategy: 'cloud' | 'extension' = (supplier.strategy === 'cloud' || supplier.preferred_order_method === 'cloud') ? 'cloud' : 'extension'
 
     // 5. Load credentials via user-scoped RPC so SECURITY DEFINER can resolve auth.uid()
     let credentials: { loginUrl?: string; loginUsername?: string; loginPassword?: string } = {}

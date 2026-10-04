@@ -550,12 +550,22 @@ function translateError(msg) {
 
 // 🧰 withHeal: DOM action + self-healing fallback ──────────────────────────────
 
+const healAttemptsBySession = new Map()
+const MAX_HEALS_PER_SESSION = 5
+
 async function withHeal({ supplierTabId, sessionId, supplierId, selfHealUrl, userJwt,
                            ctx, command, selector, value, timeout = 8000 }) {
   const result = await domAction(supplierTabId, { command, selector, value, timeout })
   if (result.success) return result
 
-  console.log(`[sw] Selector failed [${ctx}] "${selector}": ${result.error} - attempting self-heal`)
+  const attempts = healAttemptsBySession.get(sessionId) || 0
+  if (attempts >= MAX_HEALS_PER_SESSION) {
+    console.warn(`[sw] Self-heal Limit (${MAX_HEALS_PER_SESSION}) für Session ${sessionId} erreicht. Überspringe KI-Reparatur.`)
+    throw new Error(`Step failed [${ctx}]: ${selector} (Self-Heal Limit erreicht)`)
+  }
+  healAttemptsBySession.set(sessionId, attempts + 1)
+
+  console.log(`[sw] Selector failed [${ctx}] "${selector}": ${result.error} - attempting self-heal (${attempts + 1}/${MAX_HEALS_PER_SESSION})`)
 
   // Capture screenshot from service worker (requires "tabs" permission)
   let screenshotBase64 = ''

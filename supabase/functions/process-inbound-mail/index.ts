@@ -11,6 +11,17 @@ const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!
 
 serve(async (req) => {
   try {
+    const inboundSecret = Deno.env.get('INBOUND_WEBHOOK_SECRET');
+    if (inboundSecret) {
+      const url = new URL(req.url);
+      const querySecret = url.searchParams.get('secret');
+      const authHeader = req.headers.get('Authorization');
+      if (querySecret !== inboundSecret && authHeader !== `Bearer ${inboundSecret}`) {
+        console.warn('[process-inbound-mail] Unauthorized webhook request blocked');
+        return new Response("Unauthorized webhook", { status: 401 });
+      }
+    }
+
     // SendGrid sendet multipart/form-data
     const formData = await req.formData()
     const to = formData.get('to') as string || ''
@@ -386,22 +397,28 @@ Antworte ausschließlich als JSON:
         
         if (globalOrderRef) {
             console.log(`Checking for open orders to update metadata globally for reference: ${globalOrderRef}`);
-            const { data } = await supabase.from('orders')
+            let qGlobal = supabase.from('orders')
                 .select('id, notes')
-                .eq('user_id', user_id)
                 .eq('status', 'open')
                 .eq('order_number', globalOrderRef);
+            if (company_id) qGlobal = qGlobal.eq('company_id', company_id);
+            else qGlobal = qGlobal.eq('user_id', user_id);
+
+            const { data } = await qGlobal;
             matchedOrders = data;
         } else if (supName && supName !== 'Unbekannter Lieferant (KI)' && (docType === 'delivery_note' || docType === 'order_confirmation')) {
             console.log(`No order reference found. Checking for all open orders for supplier: ${supName}`);
             // Fallback: Wenn keine Bestellnummer vorliegt, aber es eine Versandbenachrichtigung ist, 
             // hänge die Tracking-Daten an ALLE noch offenen Bestellungen dieses Lieferanten an.
             // (Da Lieferanten offene Posten meist zusammen verschicken)
-            const { data } = await supabase.from('orders')
+            let qSup = supabase.from('orders')
                 .select('id, notes')
-                .eq('user_id', user_id)
                 .eq('status', 'open')
                 .eq('supplier_name', supName);
+            if (company_id) qSup = qSup.eq('company_id', company_id);
+            else qSup = qSup.eq('user_id', user_id);
+
+            const { data } = await qSup;
             matchedOrders = data;
         }
             
@@ -446,15 +463,27 @@ Antworte ausschließlich als JSON:
             // Stufe 1: Deduplication Check (Exakter Treffer mit Belegnummer)
             let existingOrder = null;
             if (orderRef) {
-                const { data: existingOrders, error: eoErr } = await supabase.from('orders')
-                    .select('id, quantity, price, date, notes').eq('user_id', user_id).eq('order_number', orderRef).ilike('product_name', item.product_name).limit(1);
+                let q1 = supabase.from('orders')
+                    .select('id, quantity, price, date, notes');
+                if (company_id) q1 = q1.eq('company_id', company_id);
+                else q1 = q1.eq('user_id', user_id);
+
+                const { data: existingOrders } = await q1.eq('order_number', orderRef).ilike('product_name', item.product_name).limit(1);
                 if (existingOrders && existingOrders.length > 0) existingOrder = existingOrders[0];
             }
             
             // Stufe 2: Fangnetz für rein manuell angelegte Bestellungen (die noch keine Bestellnummer haben!)
             if (!existingOrder) {
-                const { data: openOrders } = await supabase.from('orders')
-                    .select('id, quantity, price, date, notes').eq('user_id', user_id).eq('status', 'open').eq('supplier_name', supName).ilike('product_name', item.product_name).is('order_number', null).limit(1);
+                let q2 = supabase.from('orders')
+                    .select('id, quantity, price, date, notes')
+                    .eq('status', 'open')
+                    .eq('supplier_name', supName)
+                    .ilike('product_name', item.product_name)
+                    .is('order_number', null);
+                if (company_id) q2 = q2.eq('company_id', company_id);
+                else q2 = q2.eq('user_id', user_id);
+
+                const { data: openOrders } = await q2.limit(1);
                 if (openOrders && openOrders.length > 0) {
                      existingOrder = openOrders[0];
                 }

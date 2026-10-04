@@ -342,7 +342,7 @@ const StatusPanel: React.FC<{
           <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
             {session.items.map((item, i) => (
               <ItemRow
-                key={i}
+                key={item.product_id ?? `${item.product_name}-${i}`}
                 item={item}
                 spinning={spinning}
                 priceThresholdPct={priceThresholdPct}

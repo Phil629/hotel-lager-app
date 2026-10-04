@@ -11,8 +11,13 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            // Supabase REST & Auth API: try network first, fall back to cache
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            // Supabase Auth: Never cache authentication endpoints
+            urlPattern: /^https:\/\/.*\.supabase\.co\/auth\/.*/i,
+            handler: 'NetworkOnly',
+          },
+          {
+            // Supabase REST API: try network first, fall back to cache for offline support
+            urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'supabase-api',

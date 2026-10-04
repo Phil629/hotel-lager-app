@@ -41,8 +41,18 @@ DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
 
 -- Users can read their own profile
 CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+-- Users can update their own profile (valuation method, etc.)
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 -- Admins can view ALL profiles
 CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+);
+-- Admins can update ALL profiles (roles, bans, admin notes)
+DROP POLICY IF EXISTS "Admins can update profiles" ON public.profiles;
+CREATE POLICY "Admins can update profiles" ON public.profiles FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+) WITH CHECK (
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
 );
 
