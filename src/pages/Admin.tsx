@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import {
     Users, Ticket, CheckCircle, ShieldAlert, Ban, TrendingUp, UserCheck,
@@ -104,63 +104,7 @@ export const Admin = () => {
     const [liveTerminalData, setLiveTerminalData] = useState<LiveTerminalData | null>(null);
     const terminalScrollRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        fetchAdminData();
-    }, [activeTab]);
-
-    // ── Live-Terminal: Realtime-Subscription auf shop_playbooks ──────────────
-    useEffect(() => {
-        if (!terminalDomain || !supabase) {
-            setLiveTerminalData(null);
-            return;
-        }
-        const client = supabase;
-
-        // Fetch latest state immediately to avoid race conditions/stale list data
-        const fetchLatestTerminalData = async () => {
-            try {
-                const { data, error } = await client
-                    .from('shop_playbooks')
-                    .select('automation_status, learning_logs')
-                    .eq('domain', terminalDomain)
-                    .single();
-                if (!error && data) {
-                    setLiveTerminalData({
-                        status: data.automation_status,
-                        logs: (data.learning_logs || []) as LogEntry[],
-                    });
-                }
-            } catch (err) {
-                console.error('[admin] Fehler beim Laden der Live-Logs:', err);
-            }
-        };
-        void fetchLatestTerminalData();
-
-        const channel = client
-            .channel(`dojo-terminal-${terminalDomain}`)
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'shop_playbooks',
-                filter: `domain=eq.${terminalDomain}`,
-            }, (payload: any) => {
-                setLiveTerminalData({
-                    status: payload.new.automation_status,
-                    logs: (payload.new.learning_logs || []) as LogEntry[],
-                });
-            })
-            .subscribe();
-        return () => { void client.removeChannel(channel); };
-    }, [terminalDomain]);
-
-    // ── Auto-Scroll: immer zur neuesten Log-Zeile scrollen ──────────────────
-    useEffect(() => {
-        if (terminalScrollRef.current) {
-            terminalScrollRef.current.scrollTop = terminalScrollRef.current.scrollHeight;
-        }
-    }, [liveTerminalData?.logs.length]);
-
-    const fetchAdminData = async () => {
+    const fetchAdminData = useCallback(async () => {
         if (!supabase) return;
         setLoading(true);
         try {
@@ -219,12 +163,68 @@ export const Admin = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [activeTab]);
+
+    useEffect(() => {
+        fetchAdminData();
+    }, [fetchAdminData]);
+
+    // ── Live-Terminal: Realtime-Subscription auf shop_playbooks ──────────────
+    useEffect(() => {
+        if (!terminalDomain || !supabase) {
+            setLiveTerminalData(null);
+            return;
+        }
+        const client = supabase;
+
+        // Fetch latest state immediately to avoid race conditions/stale list data
+        const fetchLatestTerminalData = async () => {
+            try {
+                const { data, error } = await client
+                    .from('shop_playbooks')
+                    .select('automation_status, learning_logs')
+                    .eq('domain', terminalDomain)
+                    .single();
+                if (!error && data) {
+                    setLiveTerminalData({
+                        status: data.automation_status,
+                        logs: (data.learning_logs || []) as LogEntry[],
+                    });
+                }
+            } catch (err) {
+                console.error('[admin] Fehler beim Laden der Live-Logs:', err);
+            }
+        };
+        void fetchLatestTerminalData();
+
+        const channel = client
+            .channel(`dojo-terminal-${terminalDomain}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'shop_playbooks',
+                filter: `domain=eq.${terminalDomain}`,
+            }, (payload: any) => {
+                setLiveTerminalData({
+                    status: payload.new.automation_status,
+                    logs: (payload.new.learning_logs || []) as LogEntry[],
+                });
+            })
+            .subscribe();
+        return () => { void client.removeChannel(channel); };
+    }, [terminalDomain]);
+
+    // ── Auto-Scroll: immer zur neuesten Log-Zeile scrollen ──────────────────
+    useEffect(() => {
+        if (terminalScrollRef.current) {
+            terminalScrollRef.current.scrollTop = terminalScrollRef.current.scrollHeight;
+        }
+    }, [liveTerminalData?.logs.length]);
 
     // ── Users tab actions ─────────────────────────────────────────────────────
 
     const toggleRole = (id: string, currentRole: string) => {
-        const newRole = currentRole === 'admin' ? 'user' : 'admin';
+        const newRole = currentRole === 'admin' ? 'owner' : 'admin';
         setConfirm({
             message: `Soll der Nutzer wirklich den Status ${newRole.toUpperCase()} erhalten?`,
             confirmLabel: 'Ja, Rolle ändern',
@@ -919,7 +919,7 @@ export const Admin = () => {
                                     <option value="pro">Pro (39€)</option>
                                 </select>
                                 <span style={{ backgroundColor: p.role === 'admin' ? '#be123c' : 'var(--color-border)', color: p.role === 'admin' ? 'white' : 'var(--color-text-muted)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', fontSize: '13px', fontWeight: 600 }}>
-                                    {(p.role || 'user').toUpperCase()}
+                                    {(p.role || 'owner').toUpperCase()}
                                 </span>
                             </div>
                             <div style={{ marginTop: '8px' }}>

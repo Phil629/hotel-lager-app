@@ -281,7 +281,11 @@ function App() {
                           <Route path="/pricing"     element={<Pricing />} />
                           <Route path="/consumption" element={<Consumption />} />
                           <Route path="/statistics"  element={<Navigate to="/pricing" replace />} />
-                          <Route path="/admin"       element={userRole === 'admin' ? <Admin /> : <Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
+                          <Route path="/admin"       element={
+                            <ProtectedRoute session={session} requiredRole="admin" userRole={userRole}>
+                              <Admin />
+                            </ProtectedRoute>
+                          } />
                           <Route path="/settings"    element={<Settings />} />
                           <Route path="*"            element={<Navigate to={localStorage.getItem('lastRoute') || "/products"} replace />} />
                         </Routes>
