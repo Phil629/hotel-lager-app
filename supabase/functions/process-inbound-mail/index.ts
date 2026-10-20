@@ -195,26 +195,84 @@ Antworte ausschließlich als JSON:
         }
     }
 
-    const geminiRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: geminiParts }],
-        generationConfig: {
-            temperature: 0.2, // Hohe Determiniertheit für Datenextraktion 
-            responseMimeType: "application/json"
-        }
-      })
+    const geminiBody = JSON.stringify({
+      contents: [{ parts: geminiParts }],
+      generationConfig: {
+          temperature: 0.2, // Hohe Determiniertheit für Datenextraktion 
+          responseMimeType: "application/json"
+      }
     })
 
-    const geminiData = await geminiRes.json()
+    // Retry + Fallback: 503 "high demand" / 429 / 5xx / Timeouts sind meist temporär.
+    // Pro Modell mehrere Versuche mit exponentiellem Backoff, danach Fallback-Modell.
+    // Gesamtbudget begrenzt, damit die Edge Function nicht ins Zeitlimit läuft.
+    const GEMINI_MODELS = [geminiUrl, `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`]
+    const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
+    const MAX_ATTEMPTS_PER_MODEL = 3
+    const PER_ATTEMPT_TIMEOUT_MS = 40_000
+    const TOTAL_BUDGET_MS = 110_000
+    const startedAt = Date.now()
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+    let geminiRes: Response | null = null
+    let geminiData: any = null
+
+    modelLoop:
+    for (let m = 0; m < GEMINI_MODELS.length; m++) {
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
+            const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt)
+            if (remaining < 5_000) break modelLoop
+
+            const controller = new AbortController()
+            const timer = setTimeout(() => controller.abort(), Math.min(PER_ATTEMPT_TIMEOUT_MS, remaining))
+            let retryAfterMs = 0
+            try {
+                geminiRes = await fetch(GEMINI_MODELS[m], {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: geminiBody,
+                    signal: controller.signal,
+                })
+                geminiData = await geminiRes.json().catch(() => ({ error: { code: geminiRes!.status, message: 'Invalid JSON from Gemini' } }))
+
+                if (geminiRes.ok && geminiData?.candidates?.length) break modelLoop
+                if (!RETRYABLE_STATUS.has(geminiRes.status) && geminiRes.ok) {
+                    // 200 aber leere Candidates (z.B. Safety-Block) – erneuter Versuch lohnt sich nicht
+                    break modelLoop
+                }
+                if (!geminiRes.ok && !RETRYABLE_STATUS.has(geminiRes.status)) {
+                    // 400/401/403/404 – nicht temporär. Bei 404 (Modell unbekannt) direkt Fallback-Modell probieren.
+                    if (geminiRes.status === 404) continue modelLoop
+                    break modelLoop
+                }
+                const ra = Number(geminiRes.headers.get('retry-after'))
+                if (Number.isFinite(ra) && ra > 0) retryAfterMs = ra * 1000
+                console.warn(`Gemini model #${m + 1} attempt ${attempt} failed with ${geminiRes.status}, retrying...`)
+            } catch (err) {
+                console.warn(`Gemini model #${m + 1} attempt ${attempt} network/timeout error:`, String(err))
+                geminiRes = null
+                geminiData = { error: { code: 504, message: `Network/timeout error: ${String(err)}` } }
+            } finally {
+                clearTimeout(timer)
+            }
+
+            if (attempt < MAX_ATTEMPTS_PER_MODEL) {
+                const backoff = Math.max(retryAfterMs, 1000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 500)
+                const remainingAfter = TOTAL_BUDGET_MS - (Date.now() - startedAt)
+                if (backoff > remainingAfter - 5_000) break
+                await sleep(backoff)
+            }
+        }
+    }
+
+    const geminiOk = !!(geminiRes?.ok && geminiData?.candidates?.length)
     console.log("Raw Gemini API response snippet:", JSON.stringify(geminiData).substring(0, 500));
 
     let geminiError = false;
     let apiErrorData: any = null;
 
     // HTTP-Fehler oder leere Candidates (Rate-Limit, ungültiger Key etc.)
-    if (!geminiRes.ok || !geminiData?.candidates?.length) {
+    if (!geminiOk) {
         console.error("Gemini API error or empty candidates:", JSON.stringify(geminiData).substring(0, 300));
         geminiError = true;
         apiErrorData = geminiData;
