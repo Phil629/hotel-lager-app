@@ -206,9 +206,14 @@ Antworte ausschließlich als JSON:
     // Retry + Fallback: 503 "high demand" / 429 / 5xx / Timeouts sind meist temporär.
     // Pro Modell mehrere Versuche mit exponentiellem Backoff, danach Fallback-Modell.
     // Gesamtbudget begrenzt, damit die Edge Function nicht ins Zeitlimit läuft.
-    const GEMINI_MODELS = [geminiUrl, `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`]
+    // Jedes Modell hat ein eigenes (Tages-)Kontingent – daher mehrere Fallbacks, wenige Versuche pro Modell.
+    const GEMINI_MODELS = [
+        geminiUrl,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${GEMINI_API_KEY}`,
+    ]
     const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
-    const MAX_ATTEMPTS_PER_MODEL = 3
+    const MAX_ATTEMPTS_PER_MODEL = 2
     const PER_ATTEMPT_TIMEOUT_MS = 40_000
     const TOTAL_BUDGET_MS = 110_000
     const startedAt = Date.now()
@@ -245,8 +250,20 @@ Antworte ausschließlich als JSON:
                     if (geminiRes.status === 404) continue modelLoop
                     break modelLoop
                 }
+                // 429 mit erschöpftem (Tages-)Kontingent: Wiederholen verbraucht nur weiteres Kontingent
+                // und bringt nichts – sofort zum nächsten Modell wechseln.
+                if (geminiRes.status === 429) {
+                    const errText = JSON.stringify(geminiData)
+                    const delayMatch = errText.match(/"retryDelay":"(\d+)s"/)
+                    const retryDelaySec = delayMatch ? Number(delayMatch[1]) : 0
+                    if (/PerDay|FreeTier|quota/i.test(errText) || retryDelaySec > 30) {
+                        console.warn(`Gemini model #${m + 1}: quota exhausted (retryDelay ${retryDelaySec}s) – switching model`)
+                        continue modelLoop
+                    }
+                }
                 const ra = Number(geminiRes.headers.get('retry-after'))
                 if (Number.isFinite(ra) && ra > 0) retryAfterMs = ra * 1000
+                if (retryAfterMs > 30_000) continue modelLoop
                 console.warn(`Gemini model #${m + 1} attempt ${attempt} failed with ${geminiRes.status}, retrying...`)
             } catch (err) {
                 console.warn(`Gemini model #${m + 1} attempt ${attempt} network/timeout error:`, String(err))
