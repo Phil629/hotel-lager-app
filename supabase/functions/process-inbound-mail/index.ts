@@ -795,8 +795,62 @@ Antworte ausschließlich als JSON:
         const productsList = prods || []
         const supNameById = new Map(suppliersList.map((s: any) => [s.id, s.name]))
 
-        // Vorfilter: Nur Produkte an die KI schicken, die mindestens ein signifikantes Wort (>= 4 Zeichen)
-        // mit einem anderen Produkt teilen. Das reduziert 130+ Produkte auf ~35 Kandidaten -> Antwort in 3-5 Sek.!
+        // --- A) Lieferanten-Vorfilter & Paar-Prüfung ---
+        const genericEmailDomains = new Set([
+          'gmail.com', 'googlemail.com', 'web.de', 'gmx.de', 'gmx.net',
+          't-online.de', 'outlook.com', 'hotmail.com', 'icloud.com', 'yahoo.com', 'unbekannt.com'
+        ])
+        const supplierStopWords = new Set([
+          'gmbh', 'mbh', 'deutschland', 'international', 'limited', 'emea',
+          'direktvertriebs', 'vertriebs', 'vertrieb', 'online', 'shop', 'service',
+          'handel', 'technik', 'bedarf', 'frischdienst', 'getraenke',
+          'reinigungsmittel', 'reinigungstechnik', 'reinigungs', 'reinigung',
+          'hygienebedarf', 'hygiene', 'hotel', 'gastro'
+        ])
+
+        const getSupplierEmail = (s: any): string => {
+          const e = (s?.email || '').trim().toLowerCase()
+          return (!e || e === 'hello@unbekannt.com' || !e.includes('@')) ? '' : e
+        }
+        const getSupplierDomain = (s: any): string => {
+          const e = getSupplierEmail(s)
+          if (!e) return ''
+          const dom = e.split('@')[1] || ''
+          return genericEmailDomains.has(dom) ? '' : dom
+        }
+        const extractSupplierTokens = (name: string): string[] => {
+          return (name || '')
+            .toLowerCase()
+            .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+            .split(/[^a-z0-9]+/)
+            .filter(w => w.length >= 4 && !supplierStopWords.has(w) && !/^\d+$/.test(w))
+        }
+
+        const areSuppliersRelated = (s1: any, s2: any): boolean => {
+          if (!s1 || !s2 || s1.id === s2.id) return false
+          const e1 = getSupplierEmail(s1)
+          const e2 = getSupplierEmail(s2)
+          if (e1 && e2 && e1 === e2) return true
+
+          const d1 = getSupplierDomain(s1)
+          const d2 = getSupplierDomain(s2)
+          if (d1 && d2 && d1 === d2) return true
+
+          const t1 = extractSupplierTokens(s1.name)
+          const t2 = new Set(extractSupplierTokens(s2.name))
+          if (t1.some(t => t2.has(t))) return true
+
+          const n1 = t1.join('')
+          const n2 = [...t2].join('')
+          if (n1.length >= 5 && n2.length >= 5 && (n1.includes(n2) || n2.includes(n1))) return true
+          return false
+        }
+
+        const candidateSuppliers = suppliersList.filter((s1: any) =>
+          suppliersList.some((s2: any) => areSuppliersRelated(s1, s2))
+        )
+
+        // --- B) Produkt-Vorfilter & Paar-Prüfung ---
         const stopWords = new Set(['stck', 'stueck', 'pack', 'paket', 'liter', 'glas', 'weiss', 'schwarz', 'blau', 'fuer', 'ohne', 'oder', 'karton', 'flasche', 'beutel', 'schale', 'eimer', 'rolle', 'rollen', 'blatt'])
         const extractTokens = (name: string): string[] => {
           return (name || '')
@@ -819,6 +873,16 @@ Antworte ausschließlich als JSON:
           normNameFreq.set(nName, (normNameFreq.get(nName) || 0) + 1)
         }
 
+        const areProductsRelated = (p1: any, p2: any): boolean => {
+          if (!p1 || !p2 || p1.id === p2.id) return false
+          const n1 = (p1.name || '').trim().toLowerCase()
+          const n2 = (p2.name || '').trim().toLowerCase()
+          if (n1 && n1 === n2) return true
+          const t1 = prodTokens.get(p1.id) || extractTokens(p1.name)
+          const t2 = new Set(prodTokens.get(p2.id) || extractTokens(p2.name))
+          return t1.some(t => t2.has(t))
+        }
+
         const candidateProducts = productsList.filter((p: any) => {
           const nName = (p.name || '').trim().toLowerCase()
           if ((normNameFreq.get(nName) || 0) > 1) return true
@@ -826,41 +890,56 @@ Antworte ausschließlich als JSON:
           return tokens.some(t => (tokenFreq.get(t) || 0) > 1)
         })
 
+        // Wenn weder bei Lieferanten noch bei Produkten Kandidaten existieren, sofort leer zurückgeben
+        if (candidateSuppliers.length === 0 && candidateProducts.length === 0) {
+          return new Response(JSON.stringify({
+            success: true,
+            duplicates: [],
+            stats: {
+              totalSuppliers: suppliersList.length,
+              totalProducts: productsList.length,
+              candidateSuppliers: 0,
+              candidateProducts: 0
+            }
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
         const dupPrompt = `
-Du prüfst die Datenbank eines Hotel-Bestellsystems auf doppelte Lieferanten und doppelte Produkte.
+Du prüfst vorselektierte Kandidaten eines Hotel-Bestellsystems auf ECHTE doppelte Lieferanten und ECHTE doppelte Produkte.
+
+STRENGE GRUNDREGEL (EXTREM WICHTIG):
+- Wenn unter den Kandidaten KEINE echten Duplikate sind, gib ZWINGEND ein leeres Array zurück: {"duplicates": []}
+- Erfinde NIEMALS Platzhalter-, Test- oder Verlegenheits-Einträge! Schlage niemals zwei verschiedene Firmen oder verschiedene Produkte vor, nur um die Liste zu füllen!
 
 REGELN FÜR LIEFERANTEN-DUPLIKATE:
-1. Zwei Lieferanten sind Duplikate, wenn sie dieselbe Firma meinen (z.B. gleiche E-Mail-Adresse/Domain wie "Reinigungsberater" und "Kruse Reinigungstechnik und Hygienebedarf GmbH" mit kontakt@reinigungsberater.de, oder Kurzname vs. GmbH-Name).
-2. 'keepId' soll bevorzugt der manuell gepflegte (auto=false) oder kürzere, sauberere Name sein. 'mergeId' ist das Duplikat, das in 'keepId' überführt und danach gelöscht wird.
+1. Zwei Lieferanten sind NUR DANN Duplikate, wenn sie eindeutig dieselbe Firma sind (z.B. exakt gleiche E-Mail-Adresse/Domain oder Kurzname vs. GmbH-Name derselben Firma).
+2. Zwei verschiedene Firmen mit unterschiedlichen E-Mail-Domains sind NIEMALS Duplikate!
+3. 'keepId' soll bevorzugt der manuell gepflegte (auto=false) oder kürzere, sauberere Name sein. 'mergeId' ist das Duplikat, das in 'keepId' überführt wird.
 
 REGELN FÜR PRODUKT-DUPLIKATE:
-1. Zwei Produkte sind Duplikate, wenn sie offensichtlich denselben Artikel bezeichnen, z.B.:
-   - Exakt gleicher Name ("Kosmetiktücher" & "Kosmetiktücher", "Milch- & Sahnereiniger" & "Milch- & Sahnereiniger")
-   - Kurzname vs. langer Shop-/Rechnungsname desselben Artikels ("Rothaus Pils Zäpfle 24x0,33L" & "Rothaus Tannenzäpfle Pils 24x0,33L", "Teavelope® English Breakfast" & "Teavelope® English Breakfast Schwarzer Tee", "MILIZID Kalklöser" & "DR.SCHNELL MILIZID Sanitärreiniger..." & "Sanitärreiniger Dr. Schnell Milizid Konzentrat 1 L", "Schlemmerrührei 1 kg Tetra Eifix" & "Schlemmerrührei aus Bodenhaltung 1 kg Tetra Eifix", "Samsung Galaxy A16 4GB+128GB (Gray)" & "Samsung Galaxy A16 4GB+128GB [Internationale Version] (Gray)", "Pattex Montagekleber...", "Essigreiniger" & "Essigreiniger Reinex Henkelflasche 1 L", "Toilettenpapier 3 lagig" & "Toilettenpapier 3 lagig Zellstoff...").
-2. STRENG VERBOTEN zusammenzuführen sind verschiedene Geschmacksrichtungen, Größen oder Varianten!
-   - "Coca Cola 24x0,33l", "Coca Cola light 24x0,33l" und "Coca Cola ZERO 24x0,33L" sind KEINE Duplikate!
-   - "Elisabethen PUR 12x0,75L Glas", "Elisabethen PUR 20x0,25L Gastro" und "Elisabethen SPRUDEL 12x0,75L Glas" sind KEINE Duplikate!
-   - "Bionade Holunder" und "Bionade Ingwer Orange" sind KEINE Duplikate!
+1. Zwei Produkte sind NUR DANN Duplikate, wenn sie offensichtlich denselben Artikel bezeichnen (exakt gleicher Name oder Kurzname vs. langer Rechnungsname desselben Artikels).
+2. STRENG VERBOTEN zusammenzuführen sind:
+   - Verschiedene Geschmacksrichtungen, Sorten oder Varianten (z.B. "Coca Cola" vs. "Coca Cola light" vs. "Coca Cola ZERO", "Elisabethen PUR" vs. "Elisabethen SPRUDEL", "Bionade Holunder" vs. "Bionade Ingwer Orange")
+   - Verschiedene Gebindegrößen oder Flaschengrößen (z.B. "12x0,75L" vs. "20x0,25L")
+   - Verschiedene Produkte derselben Marke (z.B. "Topfreiniger" vs. "Scheuerschwamm", "Gabel" vs. "Löffel", "Müllbeutel 30L" vs. "Müllbeutel 60L")
 3. Wenn es 3 Einträge für dasselbe Produkt gibt (A, B, C), erstelle zwei Merge-Einträge mit demselben 'keepId' (z.B. B -> A und C -> A).
 4. Bevorzuge als 'keepId' den Eintrag mit Bestand (stock > 0), manuell gepflegt (auto=false) oder mit dem klareren Namen.
 
-LIEFERANTEN (${suppliersList.length}):
-${suppliersList.map((s: any) => `${s.id} | ${s.name} | ${s.email || ''} | auto=${!!s.is_auto_generated}`).join('\n')}
+LIEFERANTEN-KANDIDATEN (${candidateSuppliers.length}):
+${candidateSuppliers.length > 0 ? candidateSuppliers.map((s: any) => `${s.id} | ${s.name} | ${s.email || ''} | auto=${!!s.is_auto_generated}`).join('\n') : '(keine Lieferanten-Kandidaten vorhanden – erstelle KEINE supplier-Duplikate!)'}
 
-PRODUKT-KANDIDATEN (${candidateProducts.length} von ${productsList.length}):
-${candidateProducts.map((p: any) => `${p.id} | ${p.name} | Kat:${p.category || '-'} | Bestand:${p.stock ?? 0} | Lief:${supNameById.get(p.supplier_id) || '-'} | auto=${!!p.is_auto_generated}`).join('\n')}
+PRODUKT-KANDIDATEN (${candidateProducts.length}):
+${candidateProducts.length > 0 ? candidateProducts.map((p: any) => `${p.id} | ${p.name} | Kat:${p.category || '-'} | Bestand:${p.stock ?? 0} | Lief:${supNameById.get(p.supplier_id) || '-'} | auto=${!!p.is_auto_generated}`).join('\n') : '(keine Produkt-Kandidaten vorhanden – erstelle KEINE product-Duplikate!)'}
 
-Antworte ausschließlich als JSON:
-{
-  "duplicates": [
-    {
-      "type": "supplier",
-      "keepId": "UUID des Eintrags, der behalten wird",
-      "mergeId": "UUID des Duplikats, das zusammengeführt und gelöscht wird",
-      "reason": "Kurze Begründung auf Deutsch (z.B. 'Gleiche E-Mail kontakt@reinigungsberater.de')"
-    }
-  ]
-}
+Antworte ausschließlich als JSON im Format {"duplicates": [...]} (oder {"duplicates": []}, falls keine echten Duplikate vorliegen).
+Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Felder:
+- "type": "supplier" oder "product"
+- "keepId": "UUID"
+- "mergeId": "UUID"
+- "reason": "Kurze konkrete Begründung auf Deutsch"
 `
         const res = await callGeminiJson([{ text: dupPrompt }], 80_000)
         if (!res.ok) {
@@ -879,15 +958,18 @@ Antworte ausschließlich als JSON:
         const rawDups = Array.isArray(res.parsedData?.duplicates) ? res.parsedData.duplicates : []
         const seenMergeIds = new Set<string>()
         const verifiedDups: any[] = []
+        const invalidReasonRegex = /keine?\s+(offensichtlichen\s+|echten\s+)?duplikat|nicht\s+zutreffend|falls\s+zutreffend|beispiel|platzhalter|kein\s+treffer/i
 
         for (const d of rawDups) {
           if (!d?.keepId || !d?.mergeId || d.keepId === d.mergeId) continue
           if (seenMergeIds.has(d.mergeId)) continue
+          if (d.reason && invalidReasonRegex.test(String(d.reason))) continue
 
           if (d.type === 'supplier') {
             const keep = supMap.get(d.keepId)
             const merge = supMap.get(d.mergeId)
-            if (keep && merge) {
+            // Harte Nachprüfung: Beide Lieferanten müssen tatsächlich verwandt sein (gleiche E-Mail/Domain/Markenwort)
+            if (keep && merge && areSuppliersRelated(keep, merge)) {
               seenMergeIds.add(d.mergeId)
               verifiedDups.push({
                 id: `sup-${d.keepId}-${d.mergeId}`,
@@ -904,7 +986,8 @@ Antworte ausschließlich als JSON:
           } else if (d.type === 'product') {
             const keep = prodMap.get(d.keepId)
             const merge = prodMap.get(d.mergeId)
-            if (keep && merge) {
+            // Harte Nachprüfung: Beide Produkte müssen mindestens ein signifikantes Wort oder den Namen teilen
+            if (keep && merge && areProductsRelated(keep, merge)) {
               seenMergeIds.add(d.mergeId)
               verifiedDups.push({
                 id: `prod-${d.keepId}-${d.mergeId}`,
@@ -927,6 +1010,7 @@ Antworte ausschließlich als JSON:
           stats: {
             totalSuppliers: suppliersList.length,
             totalProducts: productsList.length,
+            candidateSuppliers: candidateSuppliers.length,
             candidateProducts: candidateProducts.length
           }
         }), {
