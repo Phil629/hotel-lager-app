@@ -4,7 +4,8 @@ import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
-import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database } from 'lucide-react';
+import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database, Sparkles } from 'lucide-react';
+import { DuplicateCheckModal } from '../components/DuplicateCheckModal';
 import { useAppContext } from '../contexts/AppContext';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -24,6 +25,7 @@ export const Products: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [orders, setOrders] = useState<Order[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
     const [activeModalTab, setActiveModalTab] = useState<'basic' | 'inventory' | 'order' | 'analytics'>('basic');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -726,9 +728,14 @@ export const Products: React.FC = () => {
         <div>
             <div className="page-header">
                 <h2 className="page-title">Produkte</h2>
-                <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
-                    <Plus size={18} /> Neues Produkt
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button onClick={() => setIsDuplicateModalOpen(true)} className="btn btn-ghost" style={{ border: '1px solid var(--color-border)' }}>
+                        <Sparkles size={16} color="var(--color-primary)" /> KI-Duplikate prüfen
+                    </button>
+                    <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
+                        <Plus size={18} /> Neues Produkt
+                    </button>
+                </div>
             </div>
 
             {/* Dashboard Cards */}
@@ -2238,6 +2245,17 @@ export const Products: React.FC = () => {
                 isLoading={isLoading}
                 onClose={() => setIsQuickAddModalOpen(false)}
                 onSubmit={handleQuickAddSubmit}
+            />
+
+            <DuplicateCheckModal
+                isOpen={isDuplicateModalOpen}
+                onClose={() => setIsDuplicateModalOpen(false)}
+                onMerged={(msg) => {
+                    DataService.getProducts(true).then(setProducts);
+                    DataService.getSuppliers(true).then(setSuppliers);
+                    DataService.getOrders(true).then(setOrders);
+                    setNotification({ message: msg, type: 'success' });
+                }}
             />
         </div >
     );

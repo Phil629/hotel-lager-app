@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Bot, X, AlertTriangle } from 'lucide-react';
+import { Bot, X, AlertTriangle, RefreshCw } from 'lucide-react';
+import { supabase } from '../../services/supabase';
 
 export interface InboundEmail {
     id: string;
@@ -39,16 +40,42 @@ export const KiStatusBadge: React.FC<{ status: string }> = ({ status }) => {
     return <span className="badge badge-neutral">{status}</span>;
 };
 
-export const KiLogDetail: React.FC<{ email: InboundEmail }> = ({ email }) => {
+interface KiLogDetailProps {
+    email: InboundEmail;
+    onReprocess?: (email: InboundEmail) => void;
+    reprocessingId?: string | null;
+}
+
+export const KiLogDetail: React.FC<KiLogDetailProps> = ({ email, onReprocess, reprocessingId }) => {
     const d = email.extracted_data;
     const fmtPrice = (v: number) => v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+    const isBusy = reprocessingId === email.id;
+
+    const reprocessButton = onReprocess && email.body_text ? (
+        <button
+            type="button"
+            className={email.status === 'gemini_error' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost'}
+            disabled={!!reprocessingId}
+            onClick={(e) => {
+                e.stopPropagation();
+                onReprocess(email);
+            }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start' }}
+        >
+            <RefreshCw size={13} className={isBusy ? 'spin' : ''} />
+            {isBusy ? 'KI verarbeitet E-Mail…' : 'Mit KI erneut verarbeiten'}
+        </button>
+    ) : null;
 
     if (!d || email.status === 'gemini_error') {
         return (
-            <div style={{ color: 'var(--color-danger)', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <AlertTriangle size={14} />
-                    KI konnte die E-Mail nicht verarbeiten – kein JSON extrahiert.
+            <div style={{ color: 'var(--color-danger)', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <AlertTriangle size={14} />
+                        KI konnte die E-Mail nicht verarbeiten – kein JSON extrahiert.
+                    </div>
+                    {reprocessButton}
                 </div>
                 {d?.parse_error && (
                     <div style={{ padding: '8px', backgroundColor: 'var(--color-danger-bg)', borderRadius: '4px', border: '1px solid #fca5a5', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
@@ -61,20 +88,23 @@ export const KiLogDetail: React.FC<{ email: InboundEmail }> = ({ email }) => {
     }
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px', fontSize: '13px' }}>
-                {d.document_type && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Typ:</span> {d.document_type}</span>}
-                {d.supplier_name && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Lieferant:</span> {d.supplier_name}</span>}
-                {d.order_date && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Datum:</span> {d.order_date}</span>}
-                {d.invoice_number && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Belegnr.:</span> {d.invoice_number}</span>}
-                {d.total_price != null && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Gesamt:</span> {fmtPrice(d.total_price)}</span>}
-                {d.confidence != null && (
-                    <span>
-                        <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Konfidenz:</span>{' '}
-                        <span style={{ color: d.confidence >= 0.8 ? 'var(--color-success)' : d.confidence >= 0.5 ? 'var(--color-warning)' : 'var(--color-danger)', fontWeight: 600 }}>
-                            {(d.confidence * 100).toFixed(0)}%
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px', fontSize: '13px' }}>
+                    {d.document_type && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Typ:</span> {d.document_type}</span>}
+                    {d.supplier_name && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Lieferant:</span> {d.supplier_name}</span>}
+                    {d.order_date && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Datum:</span> {d.order_date}</span>}
+                    {d.invoice_number && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Belegnr.:</span> {d.invoice_number}</span>}
+                    {d.total_price != null && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Gesamt:</span> {fmtPrice(d.total_price)}</span>}
+                    {d.confidence != null && (
+                        <span>
+                            <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Konfidenz:</span>{' '}
+                            <span style={{ color: d.confidence >= 0.8 ? 'var(--color-success)' : d.confidence >= 0.5 ? 'var(--color-warning)' : 'var(--color-danger)', fontWeight: 600 }}>
+                                {(d.confidence * 100).toFixed(0)}%
+                            </span>
                         </span>
-                    </span>
-                )}
+                    )}
+                </div>
+                {reprocessButton}
             </div>
             {d.items?.length ? (
                 <div>
@@ -111,15 +141,54 @@ interface KiLogModalProps {
     isOpen: boolean;
     onClose: () => void;
     inboundEmails: InboundEmail[];
+    onReprocessed?: () => void;
 }
 
-export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inboundEmails }) => {
+export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inboundEmails, onReprocessed }) => {
     const [selectedKiLog, setSelectedKiLog] = useState<InboundEmail | null>(null);
+    const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+    const [statusMsg, setStatusMsg] = useState<{ text: string; isError?: boolean } | null>(null);
 
     if (!isOpen) return null;
 
+    const handleReprocess = async (email: InboundEmail) => {
+        if (!supabase || reprocessingId) return;
+        setReprocessingId(email.id);
+        setStatusMsg(null);
+        try {
+            const { data, error } = await supabase.functions.invoke('process-inbound-mail', {
+                body: {
+                    action: 'reprocess',
+                    inbound_email_id: email.id
+                }
+            });
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+
+            if (data?.success) {
+                setStatusMsg({ text: 'E-Mail wurde erfolgreich mit der KI neu verarbeitet!' });
+                if (data.extracted_data) {
+                    setSelectedKiLog({
+                        ...email,
+                        status: data.status || 'processed',
+                        extracted_data: data.extracted_data
+                    });
+                }
+                onReprocessed?.();
+            } else {
+                setStatusMsg({ text: data?.message || 'KI konnte die E-Mail nicht verarbeiten.', isError: true });
+                onReprocessed?.();
+            }
+        } catch (err: any) {
+            console.error('Error reprocessing email:', err);
+            setStatusMsg({ text: 'Fehler beim erneuten Verarbeiten: ' + (err?.message || String(err)), isError: true });
+        } finally {
+            setReprocessingId(null);
+        }
+    };
+
     return (
-        <div className="modal-overlay" onClick={() => { onClose(); setSelectedKiLog(null); }}>
+        <div className="modal-overlay" onClick={() => { onClose(); setSelectedKiLog(null); setStatusMsg(null); }}>
             <div
                 className="modal-box"
                 style={{ maxWidth: '720px', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
@@ -132,11 +201,24 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
                     <button
                         className="btn btn-ghost btn-sm"
                         style={{ padding: '4px 8px' }}
-                        onClick={() => { onClose(); setSelectedKiLog(null); }}
+                        onClick={() => { onClose(); setSelectedKiLog(null); setStatusMsg(null); }}
                     >
                         <X size={16} />
                     </button>
                 </div>
+
+                {statusMsg && (
+                    <div style={{
+                        padding: '8px 20px',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        backgroundColor: statusMsg.isError ? 'var(--color-danger-bg)' : '#f0fdf4',
+                        color: statusMsg.isError ? 'var(--color-danger)' : '#15803d',
+                        borderBottom: '1px solid var(--color-border)'
+                    }}>
+                        {statusMsg.text}
+                    </div>
+                )}
 
                 {/* Body */}
                 <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -158,6 +240,7 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
                             <tbody>
                                 {inboundEmails.map(email => {
                                     const isSelected = selectedKiLog?.id === email.id;
+                                    const currentEmail = isSelected && selectedKiLog ? selectedKiLog : email;
                                     return (
                                         <React.Fragment key={email.id}>
                                             <tr
@@ -177,13 +260,17 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
                                                     {email.subject || <span style={{ color: 'var(--color-text-faint)' }}>(kein Betreff)</span>}
                                                 </td>
                                                 <td style={{ textAlign: 'center' }}>
-                                                    <KiStatusBadge status={email.status} />
+                                                    <KiStatusBadge status={currentEmail.status} />
                                                 </td>
                                             </tr>
                                             {isSelected && (
                                                 <tr>
                                                     <td colSpan={4} style={{ padding: '14px 20px 16px', backgroundColor: 'var(--color-surface-elevated)', borderBottom: '1px solid var(--color-border)' }}>
-                                                        <KiLogDetail email={email} />
+                                                        <KiLogDetail
+                                                            email={currentEmail}
+                                                            onReprocess={handleReprocess}
+                                                            reprocessingId={reprocessingId}
+                                                        />
                                                     </td>
                                                 </tr>
                                             )}
@@ -200,7 +287,7 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
                     <span style={{ fontSize: '12px', color: 'var(--color-text-faint)', marginRight: 'auto' }}>
                         {inboundEmails.length} Einträge · Klick auf Zeile für Details
                     </span>
-                    <button className="btn btn-ghost" onClick={() => { onClose(); setSelectedKiLog(null); }}>
+                    <button className="btn btn-ghost" onClick={() => { onClose(); setSelectedKiLog(null); setStatusMsg(null); }}>
                         Schließen
                     </button>
                 </div>

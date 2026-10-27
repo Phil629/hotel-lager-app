@@ -1,6 +1,7 @@
 import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink, Sparkles } from 'lucide-react';
+import { DuplicateCheckModal } from '../components/DuplicateCheckModal';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAppContext } from '../contexts/AppContext';
 import type { Supplier, Product } from '../types';
@@ -19,6 +20,7 @@ export const Suppliers: React.FC = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
     const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
@@ -273,9 +275,16 @@ export const Suppliers: React.FC = () => {
 
             <div className="page-header">
                 <h2 className="page-title">Lieferanten Netzwerk</h2>
-                {canEdit && <button onClick={() => handleOpenModal()} className="btn btn-primary">
-                    <Plus size={18} /> Neuer Lieferant
-                </button>}
+                {canEdit && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button onClick={() => setIsDuplicateModalOpen(true)} className="btn btn-ghost" style={{ border: '1px solid var(--color-border)' }}>
+                            <Sparkles size={16} color="var(--color-primary)" /> KI-Duplikate prüfen
+                        </button>
+                        <button onClick={() => handleOpenModal()} className="btn btn-primary">
+                            <Plus size={18} /> Neuer Lieferant
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div style={{ position: 'relative', marginBottom: 'var(--spacing-2xl)' }}>
@@ -698,6 +707,16 @@ export const Suppliers: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            <DuplicateCheckModal
+                isOpen={isDuplicateModalOpen}
+                onClose={() => setIsDuplicateModalOpen(false)}
+                onMerged={(msg) => {
+                    DataService.getSuppliers(true).then(setSuppliers);
+                    DataService.getProducts(true).then(setProducts);
+                    setNotification({ message: msg, type: 'success' });
+                }}
+            />
         </div>
     );
 };

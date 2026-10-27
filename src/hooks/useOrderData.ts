@@ -155,6 +155,7 @@ export const useOrderData = () => {
     loadOrders,
     loadProducts,
     loadSuppliers,
+    loadInboundEmails,
     // Received-orders pagination
     receivedTotal,
     receivedLimit,
