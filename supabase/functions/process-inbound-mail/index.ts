@@ -30,14 +30,15 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
     }
   })
 
+  // Starte mit gemini-flash-lite-latest (antwortet in ~3-4 Sek. ohne Thinking-Verzögerung), danach Fallbacks
   const GEMINI_MODELS = [
-    geminiUrl,
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+    geminiUrl,
   ]
   const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
   const MAX_ATTEMPTS_PER_MODEL = 2
-  const PER_ATTEMPT_TIMEOUT_MS = 40_000
+  const PER_ATTEMPT_TIMEOUT_MS = 18_000
   const startedAt = Date.now()
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -48,7 +49,7 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
   for (let m = 0; m < GEMINI_MODELS.length; m++) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
       const remaining = totalBudgetMs - (Date.now() - startedAt)
-      if (remaining < 5_000) break modelLoop
+      if (remaining < 4_000) break modelLoop
 
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), Math.min(PER_ATTEMPT_TIMEOUT_MS, remaining))
@@ -92,9 +93,9 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
       }
 
       if (attempt < MAX_ATTEMPTS_PER_MODEL) {
-        const backoff = Math.max(retryAfterMs, 1000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 500)
+        const backoff = Math.max(retryAfterMs, 1000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 400)
         const remainingAfter = totalBudgetMs - (Date.now() - startedAt)
-        if (backoff > remainingAfter - 5_000) break
+        if (backoff > remainingAfter - 4_000) break
         await sleep(backoff)
       }
     }
@@ -473,7 +474,7 @@ Antworte ausschließlich als JSON:
       let existingOrder: any = null
       if (orderRef) {
         let q1 = supabase.from('orders')
-          .select('id, quantity, price, date, notes')
+          .select('id, status, quantity, price, date, notes')
         if (company_id) q1 = q1.eq('company_id', company_id)
         else q1 = q1.eq('user_id', user_id)
 
@@ -484,7 +485,7 @@ Antworte ausschließlich als JSON:
       // Stufe 2: Offene Bestellung desselben Produkts (manuell angelegt oder vor Versandbestätigung)
       if (!existingOrder) {
         let q2 = supabase.from('orders')
-          .select('id, quantity, price, date, notes, order_number')
+          .select('id, status, quantity, price, date, notes, order_number')
           .eq('status', 'open')
           .ilike('product_name', canonicalProductName)
         if (company_id) q2 = q2.eq('company_id', company_id)
@@ -492,42 +493,46 @@ Antworte ausschließlich als JSON:
 
         const { data: openOrders } = await q2.limit(5)
         if (openOrders && openOrders.length > 0) {
-          // Bevorzuge Bestellung ohne Belegnummer oder mit gleicher Belegnummer
           existingOrder = openOrders.find((o: any) => !o.order_number || o.order_number === orderRef) || (docType === 'delivery_note' ? openOrders[0] : null)
         }
       }
 
       if (existingOrder) {
         updatedOrdersCount++
-        console.log(`Open order for ${canonicalProductName} already exists. Updating it...`)
+        console.log(`Order for ${canonicalProductName} already exists (status=${existingOrder.status}). Updating it...`)
 
         const aiQuantity = Math.round(Number(item.quantity)) || 1
         const aiPrice = Number(item.price) || 0
         const aiDate = parsedData.order_date || new Date().toISOString().slice(0, 10)
 
-        const ai_revisions: any = {}
-        let hasRevisions = false
-
-        if (existingOrder.quantity !== aiQuantity) {
-          ai_revisions.quantity = { original: existingOrder.quantity, suggested: aiQuantity, reverted: false }
-          hasRevisions = true
-        }
-        if (existingOrder.price !== aiPrice && aiPrice > 0) {
-          ai_revisions.price = { original: existingOrder.price || 0, suggested: aiPrice, reverted: false }
-          hasRevisions = true
-        }
-        if (existingOrder.date !== aiDate) {
-          ai_revisions.date = { original: existingOrder.date, suggested: aiDate, reverted: false }
-          hasRevisions = true
-        }
-
         const updatePayload: any = {
-          quantity: aiQuantity,
-          price: aiPrice > 0 ? aiPrice : existingOrder.price,
-          date: aiDate,
           supplier_name: supName
         }
-        if (hasRevisions) updatePayload.ai_revisions = ai_revisions
+
+        // Nur bei noch offenen Bestellungen Menge/Datum/Revisions anpassen (bereits erhaltene Bestellungen nicht verändern)
+        if (existingOrder.status === 'open') {
+          const ai_revisions: any = {}
+          let hasRevisions = false
+
+          if (existingOrder.quantity !== aiQuantity) {
+            ai_revisions.quantity = { original: existingOrder.quantity, suggested: aiQuantity, reverted: false }
+            hasRevisions = true
+          }
+          if (existingOrder.price !== aiPrice && aiPrice > 0) {
+            ai_revisions.price = { original: existingOrder.price || 0, suggested: aiPrice, reverted: false }
+            hasRevisions = true
+          }
+          if (existingOrder.date !== aiDate) {
+            ai_revisions.date = { original: existingOrder.date, suggested: aiDate, reverted: false }
+            hasRevisions = true
+          }
+
+          updatePayload.quantity = aiQuantity
+          updatePayload.price = aiPrice > 0 ? aiPrice : existingOrder.price
+          updatePayload.date = aiDate
+          if (hasRevisions) updatePayload.ai_revisions = ai_revisions
+        }
+
         if (orderRef) updatePayload.order_number = orderRef
         if (parsedData.delivery_date) updatePayload.expected_delivery_date = parsedData.delivery_date
         if (parsedData.tracking_link) updatePayload.trackingLink = parsedData.tracking_link
@@ -627,10 +632,6 @@ serve(async (req) => {
 
     // =========================================================================
     // MODUS A: Authentifizierte App-Aktionen (JSON Body aus dem Frontend)
-    // - reprocess: Gespeicherte E-Mail aus dem KI-Log erneut verarbeiten
-    // - smart_paste: Freitext / E-Mail-Text für Einmalbestellung zerlegen
-    // - find_duplicates: KI-Prüfung auf Produkt- und Lieferanten-Duplikate
-    // - execute_merge: Ausgewählte Duplikate sauber zusammenführen
     // =========================================================================
     if (contentType.includes('application/json')) {
       const authHeader = req.headers.get('Authorization') || ''
@@ -734,7 +735,7 @@ Du extrahierst Bestelldaten aus einem vom Nutzer eingefügten Text (z.B. einer k
 
 WICHTIG:
 1. Entferne alle Begrüßungsfloskeln ("Vielen Dank für Ihre Bestellung...", "wir bestätigen...") aus 'product_name'!
-2. 'product_name' darf NUR den sauberen, menschenlesbaren Artikelnamen enthalten (z.B. "Teavelope Darjeeling Schwarzer Tee" oderfalls kein einzelner Artikel genannt ist, eine kurze treffende Bezeichnung wie "Ronnefeldt Tee-Bestellung").
+2. 'product_name' darf NUR den sauberen, menschenlesbaren Artikelnamen enthalten (z.B. "Teavelope Darjeeling Schwarzer Tee" oder falls kein einzelner Artikel genannt ist, eine kurze treffende Bezeichnung wie "Ronnefeldt Tee-Bestellung").
 3. Falls mehrere Artikel im Text stehen, liste alle in 'items' auf und setze das Hauptfeld 'product_name' auf den ersten Artikel (oder bei vielen Artikeln zusammenfassend).
 4. Prüfe die vorhandenen Lieferanten: Wenn einer passt, gib seine ID als 'matched_supplier_id' und seinen exakten Namen als 'supplier_name' zurück.
 5. Extrahiere Bestellnummer ('order_reference', ohne #), Menge ('quantity', Standard 1) und Einzelpreis ('price', als Zahl, sonst null).
@@ -766,8 +767,8 @@ Antworte ausschließlich als JSON:
 `
         const res = await callGeminiJson([{ text: pastePrompt }], 45_000)
         if (!res.ok) {
-          return new Response(JSON.stringify({ error: 'KI-Analyse fehlgeschlagen', details: res.parsedData }), {
-            status: 502,
+          return new Response(JSON.stringify({ success: false, error: 'KI-Analyse fehlgeschlagen', details: res.parsedData }), {
+            status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           })
         }
@@ -794,6 +795,37 @@ Antworte ausschließlich als JSON:
         const productsList = prods || []
         const supNameById = new Map(suppliersList.map((s: any) => [s.id, s.name]))
 
+        // Vorfilter: Nur Produkte an die KI schicken, die mindestens ein signifikantes Wort (>= 4 Zeichen)
+        // mit einem anderen Produkt teilen. Das reduziert 130+ Produkte auf ~35 Kandidaten -> Antwort in 3-5 Sek.!
+        const stopWords = new Set(['stck', 'stueck', 'pack', 'paket', 'liter', 'glas', 'weiss', 'schwarz', 'blau', 'fuer', 'ohne', 'oder', 'karton', 'flasche', 'beutel', 'schale', 'eimer', 'rolle', 'rollen', 'blatt'])
+        const extractTokens = (name: string): string[] => {
+          return (name || '')
+            .toLowerCase()
+            .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+            .split(/[^a-z0-9]+/)
+            .filter(w => w.length >= 4 && !stopWords.has(w) && !/^\d+$/.test(w))
+        }
+
+        const prodTokens = new Map<string, string[]>()
+        const tokenFreq = new Map<string, number>()
+        const normNameFreq = new Map<string, number>()
+        for (const p of productsList) {
+          const tokens = [...new Set(extractTokens(p.name))]
+          prodTokens.set(p.id, tokens)
+          for (const t of tokens) {
+            tokenFreq.set(t, (tokenFreq.get(t) || 0) + 1)
+          }
+          const nName = (p.name || '').trim().toLowerCase()
+          normNameFreq.set(nName, (normNameFreq.get(nName) || 0) + 1)
+        }
+
+        const candidateProducts = productsList.filter((p: any) => {
+          const nName = (p.name || '').trim().toLowerCase()
+          if ((normNameFreq.get(nName) || 0) > 1) return true
+          const tokens = prodTokens.get(p.id) || []
+          return tokens.some(t => (tokenFreq.get(t) || 0) > 1)
+        })
+
         const dupPrompt = `
 Du prüfst die Datenbank eines Hotel-Bestellsystems auf doppelte Lieferanten und doppelte Produkte.
 
@@ -804,7 +836,7 @@ REGELN FÜR LIEFERANTEN-DUPLIKATE:
 REGELN FÜR PRODUKT-DUPLIKATE:
 1. Zwei Produkte sind Duplikate, wenn sie offensichtlich denselben Artikel bezeichnen, z.B.:
    - Exakt gleicher Name ("Kosmetiktücher" & "Kosmetiktücher", "Milch- & Sahnereiniger" & "Milch- & Sahnereiniger")
-   - Kurzname vs. langer Shop-/Rechnungsname desselben Artikels ("Rothaus Pils Zäpfle 24x0,33L" & "Rothaus Tannenzäpfle Pils 24x0,33L", "Teavelope® English Breakfast" & "Teavelope® English Breakfast Schwarzer Tee", "MILIZID Kalklöser" & "DR.SCHNELL MILIZID Sanitärreiniger..." & "Sanitärreiniger Dr. Schnell Milizid Konzentrat 1 L", "Schlemmerrührei 1 kg Tetra Eifix" & "Schlemmerrührei aus Bodenhaltung 1 kg Tetra Eifix", "Samsung Galaxy A16 4GB+128GB (Gray)" & "Samsung Galaxy A16 4GB+128GB [Internationale Version] (Gray)", "Pattex Montagekleber...").
+   - Kurzname vs. langer Shop-/Rechnungsname desselben Artikels ("Rothaus Pils Zäpfle 24x0,33L" & "Rothaus Tannenzäpfle Pils 24x0,33L", "Teavelope® English Breakfast" & "Teavelope® English Breakfast Schwarzer Tee", "MILIZID Kalklöser" & "DR.SCHNELL MILIZID Sanitärreiniger..." & "Sanitärreiniger Dr. Schnell Milizid Konzentrat 1 L", "Schlemmerrührei 1 kg Tetra Eifix" & "Schlemmerrührei aus Bodenhaltung 1 kg Tetra Eifix", "Samsung Galaxy A16 4GB+128GB (Gray)" & "Samsung Galaxy A16 4GB+128GB [Internationale Version] (Gray)", "Pattex Montagekleber...", "Essigreiniger" & "Essigreiniger Reinex Henkelflasche 1 L", "Toilettenpapier 3 lagig" & "Toilettenpapier 3 lagig Zellstoff...").
 2. STRENG VERBOTEN zusammenzuführen sind verschiedene Geschmacksrichtungen, Größen oder Varianten!
    - "Coca Cola 24x0,33l", "Coca Cola light 24x0,33l" und "Coca Cola ZERO 24x0,33L" sind KEINE Duplikate!
    - "Elisabethen PUR 12x0,75L Glas", "Elisabethen PUR 20x0,25L Gastro" und "Elisabethen SPRUDEL 12x0,75L Glas" sind KEINE Duplikate!
@@ -813,10 +845,10 @@ REGELN FÜR PRODUKT-DUPLIKATE:
 4. Bevorzuge als 'keepId' den Eintrag mit Bestand (stock > 0), manuell gepflegt (auto=false) oder mit dem klareren Namen.
 
 LIEFERANTEN (${suppliersList.length}):
-${suppliersList.map((s: any) => JSON.stringify({ id: s.id, name: s.name, email: s.email, auto: !!s.is_auto_generated })).join('\n')}
+${suppliersList.map((s: any) => `${s.id} | ${s.name} | ${s.email || ''} | auto=${!!s.is_auto_generated}`).join('\n')}
 
-PRODUKTE (${productsList.length}):
-${productsList.map((p: any) => JSON.stringify({ id: p.id, name: p.name, category: p.category, stock: p.stock, price: p.price, supplier: supNameById.get(p.supplier_id) || null, auto: !!p.is_auto_generated })).join('\n')}
+PRODUKT-KANDIDATEN (${candidateProducts.length} von ${productsList.length}):
+${candidateProducts.map((p: any) => `${p.id} | ${p.name} | Kat:${p.category || '-'} | Bestand:${p.stock ?? 0} | Lief:${supNameById.get(p.supplier_id) || '-'} | auto=${!!p.is_auto_generated}`).join('\n')}
 
 Antworte ausschließlich als JSON:
 {
@@ -830,10 +862,14 @@ Antworte ausschließlich als JSON:
   ]
 }
 `
-        const res = await callGeminiJson([{ text: dupPrompt }], 60_000)
+        const res = await callGeminiJson([{ text: dupPrompt }], 80_000)
         if (!res.ok) {
-          return new Response(JSON.stringify({ error: 'KI-Duplikatprüfung fehlgeschlagen', details: res.parsedData }), {
-            status: 502,
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'KI-Duplikatprüfung vorübergehend nicht erreichbar. Bitte kurz erneut versuchen.',
+            details: res.parsedData
+          }), {
+            status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           })
         }
@@ -885,7 +921,15 @@ Antworte ausschließlich als JSON:
           }
         }
 
-        return new Response(JSON.stringify({ success: true, duplicates: verifiedDups }), {
+        return new Response(JSON.stringify({
+          success: true,
+          duplicates: verifiedDups,
+          stats: {
+            totalSuppliers: suppliersList.length,
+            totalProducts: productsList.length,
+            candidateProducts: candidateProducts.length
+          }
+        }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -1079,7 +1123,6 @@ Antworte ausschließlich als JSON:
       attachmentParts,
     })
 
-    // SendGrid erwartet 200, damit es nicht endlos wiederholt
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

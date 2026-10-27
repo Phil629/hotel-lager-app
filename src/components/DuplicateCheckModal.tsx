@@ -26,11 +26,42 @@ export const DuplicateCheckModal: React.FC<DuplicateCheckModalProps> = ({ isOpen
     const [error, setError] = useState<string | null>(null);
     const [duplicates, setDuplicates] = useState<DuplicateSuggestion[]>([]);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [elapsedMs, setElapsedMs] = useState(0);
+    const [catalogCounts, setCatalogCounts] = useState<{ suppliers: number; products: number } | null>(null);
+
+    useEffect(() => {
+        if (!loading) {
+            setElapsedMs(0);
+            return;
+        }
+        const start = Date.now();
+        const interval = setInterval(() => {
+            setElapsedMs(Date.now() - start);
+        }, 200);
+        return () => clearInterval(interval);
+    }, [loading]);
 
     const runCheck = async () => {
         if (!supabase) return;
         setLoading(true);
         setError(null);
+
+        // Fetch live counts in parallel so the loading animation shows exact catalog numbers
+        supabase
+            .from('suppliers')
+            .select('id', { count: 'exact', head: true })
+            .then(({ count: supCount }) => {
+                supabase!
+                    .from('products')
+                    .select('id', { count: 'exact', head: true })
+                    .then(({ count: prodCount }) => {
+                        setCatalogCounts({
+                            suppliers: supCount ?? 0,
+                            products: prodCount ?? 0
+                        });
+                    });
+            });
+
         try {
             const { data, error: fnErr } = await supabase.functions.invoke('process-inbound-mail', {
                 body: { action: 'find_duplicates' }
@@ -124,8 +155,35 @@ export const DuplicateCheckModal: React.FC<DuplicateCheckModalProps> = ({ isOpen
         }
     };
 
+    const loadingSteps = [
+        {
+            label: catalogCounts
+                ? `Lade Katalog (${catalogCounts.products} Produkte & ${catalogCounts.suppliers} Lieferanten)…`
+                : 'Lade Produkt- und Lieferantenkatalog aus der Datenbank…',
+            doneAfterMs: 900
+        },
+        {
+            label: 'Vorfilterung: Suche nach ähnlichen Artikelnamen, Marken & E-Mail-Domains…',
+            doneAfterMs: 2200
+        },
+        {
+            label: 'KI-Abgleich: Prüfe Kandidaten auf echte Duplikate (ignoriert Varianten wie Zero/Light)…',
+            doneAfterMs: 999999
+        }
+    ];
+
     return (
         <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
+            <style>{`
+                @keyframes agy-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes agy-progress-indeterminate {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(250%); }
+                }
+            `}</style>
             <div
                 className="modal-box"
                 style={{ maxWidth: '780px', width: '95%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
@@ -142,7 +200,10 @@ export const DuplicateCheckModal: React.FC<DuplicateCheckModalProps> = ({ isOpen
                         title="Erneut prüfen"
                         style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
-                        <RefreshCw size={14} className={loading ? 'spin' : ''} />
+                        <RefreshCw
+                            size={14}
+                            style={loading ? { animation: 'agy-spin 1s linear infinite' } : undefined}
+                        />
                         Neu prüfen
                     </button>
                     <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }} onClick={onClose}>
@@ -181,7 +242,7 @@ export const DuplicateCheckModal: React.FC<DuplicateCheckModalProps> = ({ isOpen
                 <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
                     {error && (
                         <div style={{
-                            padding: '12px',
+                            padding: '14px 16px',
                             marginBottom: '12px',
                             borderRadius: 'var(--radius-md)',
                             backgroundColor: 'var(--color-danger-bg)',
@@ -189,25 +250,133 @@ export const DuplicateCheckModal: React.FC<DuplicateCheckModalProps> = ({ isOpen
                             border: '1px solid #fca5a5',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
-                            fontSize: '13px'
+                            justifyContent: 'space-between',
+                            gap: '12px',
+                            fontSize: '13px',
+                            flexWrap: 'wrap'
                         }}>
-                            <AlertTriangle size={16} />
-                            <span>{error}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                                <span>{error}</span>
+                            </div>
+                            <button
+                                type="button"
+                                className="btn btn-sm btn-primary"
+                                onClick={runCheck}
+                                disabled={loading}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                            >
+                                <RefreshCw size={13} />
+                                Erneut versuchen
+                            </button>
                         </div>
                     )}
 
                     {loading ? (
-                        <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                            <RefreshCw size={32} style={{ margin: '0 auto 12px', display: 'block', color: 'var(--color-primary)', animation: 'spin 1.2s linear infinite' }} />
-                            <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>
-                                KI analysiert Produkte und Lieferanten auf Duplikate…
+                        <div style={{ padding: '32px 20px', maxWidth: '520px', margin: '0 auto' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                                <div style={{
+                                    width: '42px',
+                                    height: '42px',
+                                    borderRadius: '50%',
+                                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                }}>
+                                    <RefreshCw
+                                        size={22}
+                                        style={{ color: 'var(--color-primary)', animation: 'agy-spin 1s linear infinite' }}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--color-text-main)', fontSize: '15px' }}>
+                                        KI-Duplikatprüfung läuft… ({(elapsedMs / 1000).toFixed(1)}s)
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                                        Analysiere Schreibweisen, Packungsgrößen und Lieferanten-Einträge
+                                    </div>
+                                </div>
                             </div>
-                            <div style={{ fontSize: '13px' }}>
-                                Dauert ca. 5–10 Sekunden.
+
+                            {/* Animated Progress Bar */}
+                            <div style={{
+                                height: '6px',
+                                width: '100%',
+                                backgroundColor: 'var(--color-surface-elevated)',
+                                borderRadius: '999px',
+                                overflow: 'hidden',
+                                marginBottom: '18px',
+                                border: '1px solid var(--color-border)'
+                            }}>
+                                <div style={{
+                                    width: '45%',
+                                    height: '100%',
+                                    backgroundColor: 'var(--color-primary)',
+                                    borderRadius: '999px',
+                                    animation: 'agy-progress-indeterminate 1.4s ease-in-out infinite'
+                                }} />
+                            </div>
+
+                            {/* Live Step Checklist */}
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '10px',
+                                backgroundColor: 'var(--color-surface-elevated)',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '14px 16px'
+                            }}>
+                                {loadingSteps.map((step, idx) => {
+                                    const isDone = elapsedMs >= step.doneAfterMs;
+                                    const prevDone = idx === 0 || elapsedMs >= loadingSteps[idx - 1].doneAfterMs;
+                                    const isCurrent = !isDone && prevDone;
+                                    return (
+                                        <div
+                                            key={idx}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '10px',
+                                                fontSize: '13px',
+                                                color: isDone
+                                                    ? 'var(--color-success)'
+                                                    : isCurrent
+                                                        ? 'var(--color-text-main)'
+                                                        : 'var(--color-text-muted)',
+                                                fontWeight: isCurrent ? 600 : 400,
+                                                opacity: isDone || isCurrent ? 1 : 0.55
+                                            }}
+                                        >
+                                            {isDone ? (
+                                                <CheckCircle2 size={16} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+                                            ) : isCurrent ? (
+                                                <RefreshCw
+                                                    size={15}
+                                                    style={{
+                                                        color: 'var(--color-primary)',
+                                                        flexShrink: 0,
+                                                        animation: 'agy-spin 1s linear infinite'
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div style={{
+                                                    width: '15px',
+                                                    height: '15px',
+                                                    borderRadius: '50%',
+                                                    border: '1.5px solid var(--color-border)',
+                                                    flexShrink: 0
+                                                }} />
+                                            )}
+                                            <span>{step.label}</span>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
-                    ) : duplicates.length === 0 ? (
+                    ) : !error && duplicates.length === 0 ? (
                         <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                             <CheckCircle2 size={36} style={{ color: 'var(--color-success)', display: 'block', margin: '0 auto 12px' }} />
                             <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '4px' }}>
@@ -217,7 +386,7 @@ export const DuplicateCheckModal: React.FC<DuplicateCheckModalProps> = ({ isOpen
                                 Alle Produkte und Lieferanten sind aktuell eindeutig.
                             </div>
                         </div>
-                    ) : (
+                    ) : duplicates.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {duplicates.map(item => {
                                 const isChecked = selectedIds.has(item.id);
@@ -322,7 +491,7 @@ export const DuplicateCheckModal: React.FC<DuplicateCheckModalProps> = ({ isOpen
                                 );
                             })}
                         </div>
-                    )}
+                    ) : null}
                 </div>
 
                 {/* Footer */}

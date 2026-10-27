@@ -36,7 +36,7 @@ export const timeAgo = (dateStr: string): string => {
 export const KiStatusBadge: React.FC<{ status: string }> = ({ status }) => {
     if (status === 'processed') return <span className="badge badge-success">Erfolgreich</span>;
     if (status === 'gemini_error') return <span className="badge badge-danger">KI-Fehler</span>;
-    if (status === 'processed_duplicate') return <span className="badge badge-success" title="Bestellung wurde aktualisiert oder verknüpft">Aktualisiert</span>;
+    if (status === 'processed_duplicate') return <span className="badge badge-success" title="Bestellung existierte bereits und wurde verknüpft">Aktualisiert</span>;
     return <span className="badge badge-neutral">{status}</span>;
 };
 
@@ -62,7 +62,7 @@ export const KiLogDetail: React.FC<KiLogDetailProps> = ({ email, onReprocess, re
             }}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start' }}
         >
-            <RefreshCw size={13} className={isBusy ? 'spin' : ''} />
+            <RefreshCw size={13} style={isBusy ? { animation: 'agy-spin 1s linear infinite' } : undefined} />
             {isBusy ? 'KI verarbeitet E-Mail…' : 'Mit KI erneut verarbeiten'}
         </button>
     ) : null;
@@ -106,6 +106,11 @@ export const KiLogDetail: React.FC<KiLogDetailProps> = ({ email, onReprocess, re
                 </div>
                 {reprocessButton}
             </div>
+            {email.status === 'processed_duplicate' && (
+                <div style={{ fontSize: '12px', color: '#15803d', padding: '8px 12px', backgroundColor: '#f0fdf4', borderRadius: 'var(--radius-sm)', border: '1px solid #bbf7d0' }}>
+                    🔗 <strong>Mit bestehender Bestellung verknüpft:</strong> Diese Bestellung (bzw. Bestellnummer) existierte bereits im System (z. B. schon unter „Erhalten“ verbucht oder aus einer vorherigen E-Mail angelegt) und wurde deshalb aktualisiert statt doppelt neu angelegt.
+                </div>
+            )}
             {d.items?.length ? (
                 <div>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
@@ -126,7 +131,7 @@ export const KiLogDetail: React.FC<KiLogDetailProps> = ({ email, onReprocess, re
                 </div>
             ) : ((d as any).tracking_link || (d as any).delivery_date || (d as any).order_notes) ? (
                 <div style={{ fontSize: '13px', color: 'var(--color-success)', marginTop: '8px', padding: '12px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
-                    ✅ <strong>Versand-Informationen verarbeitet:</strong> Die Tracking- und Lieferdaten aus dieser E-Mail wurden erfolgreich zu deinen offenen Bestellungen hinzugefügt.
+                    ✅ <strong>Versand-Informationen verarbeitet:</strong> Die Tracking- und Lieferdaten aus dieser E-Mail wurden erfolgreich zu deinen Bestellungen hinzugefügt.
                 </div>
             ) : (
                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '8px', padding: '12px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
@@ -166,7 +171,18 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
             if (data?.error) throw new Error(data.error);
 
             if (data?.success) {
-                setStatusMsg({ text: 'E-Mail wurde erfolgreich mit der KI neu verarbeitet!' });
+                const newCount = Array.isArray(data?.createdOrders) ? data.createdOrders.length : 0;
+                if (data.status === 'processed_duplicate') {
+                    setStatusMsg({
+                        text: '✅ E-Mail erfolgreich verarbeitet! Die zugehörige Bestellung existierte bereits (z. B. schon als „Erhalten" verbucht) und wurde verknüpft statt doppelt angelegt.'
+                    });
+                } else if (newCount > 0) {
+                    setStatusMsg({
+                        text: `✅ E-Mail erfolgreich verarbeitet! ${newCount} neue Bestellung(en) angelegt.`
+                    });
+                } else {
+                    setStatusMsg({ text: '✅ E-Mail wurde erfolgreich mit der KI neu verarbeitet!' });
+                }
                 if (data.extracted_data) {
                     setSelectedKiLog({
                         ...email,
@@ -189,9 +205,15 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
 
     return (
         <div className="modal-overlay" onClick={() => { onClose(); setSelectedKiLog(null); setStatusMsg(null); }}>
+            <style>{`
+                @keyframes agy-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            `}</style>
             <div
                 className="modal-box"
-                style={{ maxWidth: '720px', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
+                style={{ maxWidth: '760px', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
@@ -209,7 +231,7 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
 
                 {statusMsg && (
                     <div style={{
-                        padding: '8px 20px',
+                        padding: '10px 20px',
                         fontSize: '13px',
                         fontWeight: 500,
                         backgroundColor: statusMsg.isError ? 'var(--color-danger-bg)' : '#f0fdf4',
@@ -231,16 +253,17 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
                         <table className="products-table">
                             <thead>
                                 <tr>
-                                    <th style={{ width: '130px' }}>Datum</th>
-                                    <th style={{ width: '160px' }}>Absender</th>
+                                    <th style={{ width: '125px' }}>Datum</th>
+                                    <th style={{ width: '150px' }}>Absender</th>
                                     <th>Betreff</th>
-                                    <th style={{ width: '120px', textAlign: 'center' }}>Status</th>
+                                    <th style={{ width: '195px', textAlign: 'center' }}>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {inboundEmails.map(email => {
                                     const isSelected = selectedKiLog?.id === email.id;
                                     const currentEmail = isSelected && selectedKiLog ? selectedKiLog : email;
+                                    const isRowBusy = reprocessingId === email.id;
                                     return (
                                         <React.Fragment key={email.id}>
                                             <tr
@@ -253,14 +276,42 @@ export const KiLogModal: React.FC<KiLogModalProps> = ({ isOpen, onClose, inbound
                                                         hour: '2-digit', minute: '2-digit',
                                                     })}
                                                 </td>
-                                                <td style={{ fontSize: '13px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                <td style={{ fontSize: '13px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     {email.supplier_name || '–'}
                                                 </td>
-                                                <td style={{ fontSize: '13px', color: 'var(--color-text-main)', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                <td style={{ fontSize: '13px', color: 'var(--color-text-main)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     {email.subject || <span style={{ color: 'var(--color-text-faint)' }}>(kein Betreff)</span>}
                                                 </td>
-                                                <td style={{ textAlign: 'center' }}>
-                                                    <KiStatusBadge status={currentEmail.status} />
+                                                <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                                        <KiStatusBadge status={currentEmail.status} />
+                                                        {currentEmail.status === 'gemini_error' && email.body_text && (
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-sm btn-primary"
+                                                                disabled={!!reprocessingId}
+                                                                title="Diese fehlgeschlagene E-Mail direkt mit der KI neu prüfen"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleReprocess(email);
+                                                                }}
+                                                                style={{
+                                                                    padding: '2px 8px',
+                                                                    fontSize: '11px',
+                                                                    height: '24px',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px'
+                                                                }}
+                                                            >
+                                                                <RefreshCw
+                                                                    size={11}
+                                                                    style={isRowBusy ? { animation: 'agy-spin 1s linear infinite' } : undefined}
+                                                                />
+                                                                {isRowBusy ? 'Prüft…' : 'KI prüfen'}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                             {isSelected && (
