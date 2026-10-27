@@ -145,8 +145,12 @@ async function processEmailWithAi(params: {
   bodyText: string;
   attachmentParts?: any[];
   existingLogId?: string;
+  emailCreatedAt?: string;
 }) {
-  const { user_id, company_id, valuation_method, fromAddress, subject, bodyText, attachmentParts = [], existingLogId } = params
+  const { user_id, company_id, valuation_method, fromAddress, subject, attachmentParts = [], existingLogId, emailCreatedAt } = params
+  // Entferne unsichtbare Preheader-Füllzeichen (z.B. aus Amazon-Mails), die sonst den Anfang des Textes aufblähen
+  const bodyText = (params.bodyText || '').replace(/[\u034f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u00ad\ufeff]+/g, ' ').replace(/[ \t]{3,}/g, ' ').trim()
+  const fallbackOrderDate = (emailCreatedAt ? String(emailCreatedAt).slice(0, 10) : '') || new Date().toISOString().slice(0, 10)
 
   // Vorhandene Lieferanten & Produkte dieser Firma laden (verhindert Duplikate direkt beim Import!)
   const [{ data: existingSuppliersData }, { data: existingProductsData }] = await Promise.all([
@@ -294,7 +298,11 @@ Antworte ausschließlich als JSON:
     }
   }
 
-  // Lieferant bestimmen oder anlegen
+  const shouldCreateOrder = parsedData.should_create_order === true
+  const docType = parsedData.document_type || 'unknown'
+  console.log(`Document type: ${docType}. Should create order? ${shouldCreateOrder}`)
+
+  // Lieferant bestimmen oder anlegen (nur wenn kein unbekannter/Newsletter-Beleg!)
   console.log("Processing supplier...")
   let supplier_id: string | null = null
   let supName: string = parsedData.supplier_name?.trim() || 'Unbekannter Lieferant (KI)'
@@ -333,8 +341,8 @@ Antworte ausschließlich als JSON:
   if (matchedSupplier) {
     supplier_id = matchedSupplier.id
     // WICHTIG: Verwende den kanonischen Lieferantennamen aus der Datenbank!
-    supName = matchedSupplier.name
-    parsedData.supplier_name = matchedSupplier.name
+    supName = matchedSupplier.name.trim()
+    parsedData.supplier_name = supName
     console.log("Matched existing supplier:", supplier_id, supName)
 
     const updatePayload: any = {}
@@ -351,10 +359,10 @@ Antworte ausschließlich als JSON:
       updatePayload.iban = parsedData.supplier_iban.trim()
     }
 
-    if (Object.keys(updatePayload).length > 0) {
+    if (Object.keys(updatePayload).length > 0 && docType !== 'unknown') {
       await supabase.from('suppliers').update(updatePayload).eq('id', supplier_id)
     }
-  } else if (supName !== 'Unbekannter Lieferant (KI)') {
+  } else if (supName !== 'Unbekannter Lieferant (KI)' && docType !== 'unknown') {
     const { data: newSupp, error: newSupErr } = await supabase.from('suppliers').insert({
       id: crypto.randomUUID(),
       user_id: user_id,
@@ -374,10 +382,6 @@ Antworte ausschließlich als JSON:
       console.log("Successfully created new supplier:", supplier_id)
     }
   }
-
-  const shouldCreateOrder = parsedData.should_create_order === true
-  const docType = parsedData.document_type || 'unknown'
-  console.log(`Document type: ${docType}. Should create order? ${shouldCreateOrder}`)
 
   let createdOrdersCount = 0
   let updatedOrdersCount = 0
@@ -435,11 +439,30 @@ Antworte ausschließlich als JSON:
   console.log(`Found ${items.length} items to process.`)
   const normProd = (s: string) => s.toLowerCase().replace(/[^a-z0-9äöüß]/gi, '').trim()
 
+  const isShippingEmail = docType === 'delivery_note' || /\b(versendet|versandt|in zustellung|versandbestätigung|unterwegs|spediteur)\b/i.test(subject || '')
+
   for (const item of items) {
     if (!item?.product_name) continue
 
     const lowerName = item.product_name.toLowerCase()
-    if (lowerName.includes('versand') || lowerName.includes('pfand') || lowerName.includes('porto') || lowerName.includes('gebühr') || lowerName.includes('logistik') || lowerName.includes('shipping') || lowerName.includes('insurance') || lowerName.includes('discount') || lowerName.includes('protection') || lowerName.includes('rabatt')) {
+    if (
+      lowerName.includes('versand') ||
+      lowerName.includes('pfand') ||
+      lowerName.includes('porto') ||
+      lowerName.includes('gebühr') ||
+      lowerName.includes('logistik') ||
+      lowerName.includes('shipping') ||
+      lowerName.includes('insurance') ||
+      lowerName.includes('discount') ||
+      lowerName.includes('protection') ||
+      lowerName.includes('rabatt') ||
+      lowerName.includes('dhl-paket') ||
+      lowerName.includes('dhl paket') ||
+      lowerName.includes('deutsche post') ||
+      lowerName.includes('lieferkosten') ||
+      lowerName.includes('fracht') ||
+      lowerName.includes('mindermengenzuschlag')
+    ) {
       console.log("Skipping non-product item:", item.product_name)
       continue
     }
@@ -503,21 +526,20 @@ Antworte ausschließlich als JSON:
 
         const aiQuantity = Math.round(Number(item.quantity)) || 1
         const aiPrice = Number(item.price) || 0
-        const aiDate = parsedData.order_date || new Date().toISOString().slice(0, 10)
 
         const updatePayload: any = {
           supplier_name: supName
         }
 
-        // Nur bei noch offenen Bestellungen Menge/Datum/Revisions anpassen (bereits erhaltene Bestellungen nicht verändern)
-        if (existingOrder.status === 'open') {
+        // Nur bei noch offenen Bestellungen und nur bei echten Bestellbestätigungen Menge/Preis prüfen.
+        // WICHTIG: Das ursprüngliche Bestelldatum (existingOrder.date) wird NIEMALS durch spätere Mails
+        // (z.B. Versandbestätigungen 2 Tage später) überschrieben, da das zu falschen Datums-Warnungen führt!
+        if (existingOrder.status === 'open' && !isShippingEmail) {
           const ai_revisions: any = {}
           let hasRevisions = false
 
           const existingQty = Math.round(Number(existingOrder.quantity)) || 1
           const existingPrice = Number(existingOrder.price) || 0
-          const existingDateDay = String(existingOrder.date || '').slice(0, 10)
-          const aiDateDay = String(aiDate || '').slice(0, 10)
 
           if (existingQty !== aiQuantity) {
             ai_revisions.quantity = { original: existingQty, suggested: aiQuantity, reverted: false }
@@ -527,17 +549,12 @@ Antworte ausschließlich als JSON:
             ai_revisions.price = { original: existingPrice, suggested: aiPrice, reverted: false }
             hasRevisions = true
           }
-          if (existingDateDay && aiDateDay && existingDateDay !== aiDateDay) {
-            ai_revisions.date = { original: existingDateDay, suggested: aiDateDay, reverted: false }
-            hasRevisions = true
-          }
 
           updatePayload.quantity = aiQuantity
           updatePayload.price = aiPrice > 0 ? aiPrice : existingOrder.price
-          if (existingDateDay !== aiDateDay && aiDateDay) {
-            updatePayload.date = aiDateDay
-          }
           if (hasRevisions) updatePayload.ai_revisions = ai_revisions
+        } else if (existingOrder.status === 'open' && (!existingOrder.price || Number(existingOrder.price) === 0) && aiPrice > 0) {
+          updatePayload.price = aiPrice
         }
 
         if (orderRef) updatePayload.order_number = orderRef
@@ -565,7 +582,7 @@ Antworte ausschließlich als JSON:
           product_name: canonicalProductName,
           quantity: Math.round(Number(item.quantity)) || 1,
           price: Number(item.price) || 0,
-          date: parsedData.order_date || new Date().toISOString().slice(0, 10),
+          date: parsedData.order_date || fallbackOrderDate,
           expected_delivery_date: parsedData.delivery_date || null,
           trackingLink: parsedData.tracking_link || null,
           status: orderStatus,
@@ -577,33 +594,35 @@ Antworte ausschließlich als JSON:
       }
     }
 
-    // Produkt aktualisieren oder neu anlegen (auf Firmen-Ebene!)
-    if (matchedProd) {
-      if (item.price && Number(item.price) > 0) {
-        let newPrice = Number(item.price)
-        if (valuation_method === 'average' && matchedProd.stock > 0 && matchedProd.price > 0) {
-          newPrice = ((matchedProd.stock * matchedProd.price) + ((item.quantity || 1) * newPrice)) / (matchedProd.stock + (item.quantity || 1))
+    // Produkt nur aktualisieren oder neu anlegen, wenn es KEIN unbekannter/Newsletter-Beleg ist!
+    if (docType !== 'unknown') {
+      if (matchedProd) {
+        if (item.price && Number(item.price) > 0) {
+          let newPrice = Number(item.price)
+          if (valuation_method === 'average' && matchedProd.stock > 0 && matchedProd.price > 0) {
+            newPrice = ((matchedProd.stock * matchedProd.price) + ((item.quantity || 1) * newPrice)) / (matchedProd.stock + (item.quantity || 1))
+          }
+          const prodUpdate: any = { price: newPrice }
+          if (!matchedProd.supplier_id && supplier_id) prodUpdate.supplier_id = supplier_id
+          await supabase.from('products').update(prodUpdate).eq('id', matchedProd.id)
         }
-        const prodUpdate: any = { price: newPrice }
-        if (!matchedProd.supplier_id && supplier_id) prodUpdate.supplier_id = supplier_id
-        await supabase.from('products').update(prodUpdate).eq('id', matchedProd.id)
-      }
-    } else if (supplier_id) {
-      const newProd = {
-        id: crypto.randomUUID(),
-        user_id: user_id,
-        company_id: company_id,
-        name: canonicalProductName,
-        category: item.category || 'Sonstiges',
-        price: Number(item.price) || 0,
-        supplier_id: supplier_id,
-        is_auto_generated: true,
-        stock: 0,
-        unit: 'Stk'
-      }
-      const { error: newProdErr } = await supabase.from('products').insert(newProd)
-      if (!newProdErr) {
-        allProducts.push(newProd)
+      } else if (supplier_id) {
+        const newProd = {
+          id: crypto.randomUUID(),
+          user_id: user_id,
+          company_id: company_id,
+          name: canonicalProductName,
+          category: item.category || 'Sonstiges',
+          price: Number(item.price) || 0,
+          supplier_id: supplier_id,
+          is_auto_generated: true,
+          stock: 0,
+          unit: 'Stk'
+        }
+        const { error: newProdErr } = await supabase.from('products').insert(newProd)
+        if (!newProdErr) {
+          allProducts.push(newProd)
+        }
       }
     }
   }
@@ -617,6 +636,16 @@ Antworte ausschließlich als JSON:
       status: finalStatus,
       extracted_data: parsedData
     }).eq('id', inboundLogId)
+
+    // Falls es zu genau diesem Betreff noch alte fehlgeschlagene Webhook-Retries (gemini_error) gibt, bereinige diese automatisch
+    if (subject) {
+      await supabase.from('inbound_emails')
+        .delete()
+        .eq('company_id', company_id)
+        .eq('status', 'gemini_error')
+        .eq('subject', subject)
+        .neq('id', inboundLogId)
+    }
   }
 
   return {
@@ -709,6 +738,7 @@ serve(async (req) => {
           subject: emailRow.subject || '',
           bodyText: emailRow.body_text || '',
           existingLogId: emailRow.id,
+          emailCreatedAt: emailRow.created_at,
         })
 
         return new Response(JSON.stringify(result), {
