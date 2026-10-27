@@ -514,22 +514,29 @@ Antworte ausschließlich als JSON:
           const ai_revisions: any = {}
           let hasRevisions = false
 
-          if (existingOrder.quantity !== aiQuantity) {
-            ai_revisions.quantity = { original: existingOrder.quantity, suggested: aiQuantity, reverted: false }
+          const existingQty = Math.round(Number(existingOrder.quantity)) || 1
+          const existingPrice = Number(existingOrder.price) || 0
+          const existingDateDay = String(existingOrder.date || '').slice(0, 10)
+          const aiDateDay = String(aiDate || '').slice(0, 10)
+
+          if (existingQty !== aiQuantity) {
+            ai_revisions.quantity = { original: existingQty, suggested: aiQuantity, reverted: false }
             hasRevisions = true
           }
-          if (existingOrder.price !== aiPrice && aiPrice > 0) {
-            ai_revisions.price = { original: existingOrder.price || 0, suggested: aiPrice, reverted: false }
+          if (existingPrice > 0 && aiPrice > 0 && Math.abs(existingPrice - aiPrice) >= 0.01) {
+            ai_revisions.price = { original: existingPrice, suggested: aiPrice, reverted: false }
             hasRevisions = true
           }
-          if (existingOrder.date !== aiDate) {
-            ai_revisions.date = { original: existingOrder.date, suggested: aiDate, reverted: false }
+          if (existingDateDay && aiDateDay && existingDateDay !== aiDateDay) {
+            ai_revisions.date = { original: existingDateDay, suggested: aiDateDay, reverted: false }
             hasRevisions = true
           }
 
           updatePayload.quantity = aiQuantity
           updatePayload.price = aiPrice > 0 ? aiPrice : existingOrder.price
-          updatePayload.date = aiDate
+          if (existingDateDay !== aiDateDay && aiDateDay) {
+            updatePayload.date = aiDateDay
+          }
           if (hasRevisions) updatePayload.ai_revisions = ai_revisions
         }
 

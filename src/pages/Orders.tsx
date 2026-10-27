@@ -878,9 +878,21 @@ export const Orders: React.FC = () => {
                             if (!order.aiRevisions) return null;
                             const revs = order.aiRevisions;
                             
-                            const hasPendingQty = revs.quantity && !revs.quantity.reverted;
-                            const hasPendingPrice = revs.price && !revs.price.reverted;
-                            const hasPendingDate = revs.date && !revs.date.reverted;
+                            const hasPendingQty = !!(
+                                revs.quantity &&
+                                !revs.quantity.reverted &&
+                                Number(revs.quantity.suggested) !== Number(revs.quantity.original)
+                            );
+                            const hasPendingPrice = !!(
+                                revs.price &&
+                                !revs.price.reverted &&
+                                Math.abs(Number(revs.price.suggested || 0) - Number(revs.price.original || 0)) >= 0.01
+                            );
+                            const hasPendingDate = !!(
+                                revs.date &&
+                                !revs.date.reverted &&
+                                String(revs.date.suggested || '').slice(0, 10) !== String(revs.date.original || '').slice(0, 10)
+                            );
                             
                             if (!hasPendingQty && !hasPendingPrice && !hasPendingDate) return null;
                             
