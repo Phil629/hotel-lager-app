@@ -29,7 +29,7 @@ export const Products: React.FC = () => {
     const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
     const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
     const [isExtractingUrlMeta, setIsExtractingUrlMeta] = useState(false);
-    const [urlMetaAlternatives, setUrlMetaAlternatives] = useState<{ image: string; orderUrl: string; title: string }[]>([]);
+    const [urlMetaAlternatives, setUrlMetaAlternatives] = useState<string[]>([]);
     const [activeModalTab, setActiveModalTab] = useState<'basic' | 'inventory' | 'order' | 'analytics'>('basic');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -379,18 +379,18 @@ export const Products: React.FC = () => {
                     supplierName: sup?.name || '',
                 }
             });
-            if (error || !data?.metadata) return;
-            const meta = data.metadata;
+            if (error || !data?.success) return;
+            const meta = data;
             if (Array.isArray(meta.alternatives) && meta.alternatives.length > 0) {
                 setUrlMetaAlternatives(meta.alternatives);
             }
             setNewProduct(prev => {
-                const updated = { ...prev, orderUrl: prev.orderUrl || normalizedUrl };
+                const updated = { ...prev, orderUrl: prev.orderUrl || meta.orderUrl || normalizedUrl };
                 if (meta.image && (!prev.image || forceOverwriteImage)) {
                     updated.image = meta.image;
                 }
-                if (meta.productNumber && !prev.productNumber) {
-                    updated.productNumber = meta.productNumber;
+                if ((meta.sku || meta.productNumber) && !prev.productNumber) {
+                    updated.productNumber = meta.sku || meta.productNumber;
                 }
                 if (meta.price && (!prev.price || Number(prev.price) === 0)) {
                     updated.price = Number(meta.price);
@@ -439,9 +439,9 @@ export const Products: React.FC = () => {
             const { data, error } = await client.functions.invoke('process-inbound-mail', {
                 body: {
                     action: 'suggest_completion',
-                    type: 'products',
                     items: [{
                         id: editingId || 'temp',
+                        type: 'product',
                         name: newProduct.name,
                         productNumber: newProduct.productNumber || '',
                         supplierId: newProduct.supplierId || '',
@@ -456,7 +456,7 @@ export const Products: React.FC = () => {
                 }
             });
             if (error) throw error;
-            const sug = data?.suggestions?.['temp'] || (editingId ? data?.suggestions?.[editingId] : null);
+            const sug = Array.isArray(data?.suggestions) ? data.suggestions[0] : null;
             if (sug) {
                 if (Array.isArray(sug.alternatives) && sug.alternatives.length > 0) {
                     setUrlMetaAlternatives(sug.alternatives);
@@ -1606,24 +1606,23 @@ export const Products: React.FC = () => {
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                                 <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Alternative Bilder (Klick zum Auswählen):</span>
                                                                 <div style={{ display: 'flex', gap: '6px' }}>
-                                                                    {urlMetaAlternatives.map((alt, idx) => (
+                                                                    {urlMetaAlternatives.map((altUrl, idx) => (
                                                                         <button
                                                                             key={idx}
                                                                             type="button"
-                                                                            onClick={() => setNewProduct(prev => ({ ...prev, image: alt.image, orderUrl: prev.orderUrl || alt.orderUrl }))}
-                                                                            title={alt.title}
+                                                                            onClick={() => setNewProduct(prev => ({ ...prev, image: altUrl }))}
                                                                             style={{
                                                                                 width: '40px',
                                                                                 height: '40px',
                                                                                 padding: 0,
                                                                                 borderRadius: '6px',
                                                                                 overflow: 'hidden',
-                                                                                border: newProduct.image === alt.image ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                                                border: newProduct.image === altUrl ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                                                                                 backgroundColor: '#fff',
                                                                                 cursor: 'pointer'
                                                                             }}
                                                                         >
-                                                                            <img src={alt.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                                                            <img src={altUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                                                         </button>
                                                                     ))}
                                                                 </div>

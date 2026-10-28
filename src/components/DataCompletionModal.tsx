@@ -92,7 +92,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
 
     const isSupplierNaturallyComplete = (s: Supplier): boolean => {
         const hasValidEmail = !!(s.email && s.email.trim() && s.email !== 'hello@unbekannt.com');
-        const hasUrl = !!((s.url && s.url.trim()) || (s.order_url && s.order_url.trim()));
+        const hasUrl = !!((s.url && s.url.trim()) || (s.orderUrl && s.orderUrl.trim()));
         const hasPhone = !!(s.phone && s.phone.trim());
         return hasValidEmail && hasUrl && hasPhone;
     };
@@ -123,8 +123,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 name: s.name || '',
                 email: s.email && s.email !== 'hello@unbekannt.com' ? s.email : '',
                 phone: s.phone || '',
-                url: s.url || s.order_url || '',
-                customerNumber: s.customer_number || '',
+                url: s.url || s.orderUrl || '',
+                customerNumber: s.customerNumber || '',
                 preferredOrderMethod: s.preferredOrderMethod
             };
         }
@@ -200,7 +200,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         image: d?.image || '',
                         orderUrl: d?.orderUrl || '',
                         supplierName: sup?.name || '',
-                        supplierUrl: sup?.url || sup?.order_url || '',
+                        supplierUrl: sup?.url || sup?.orderUrl || '',
                         supplierEmail: sup?.email || ''
                     };
                 });
@@ -239,8 +239,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         name: d?.name || s.name,
                         email: d?.email || s.email || '',
                         phone: d?.phone || s.phone || '',
-                        url: d?.url || s.url || s.order_url || '',
-                        customerNumber: d?.customerNumber || s.customer_number || ''
+                        url: d?.url || s.url || s.orderUrl || '',
+                        customerNumber: d?.customerNumber || s.customerNumber || ''
                     };
                 });
 
@@ -354,7 +354,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         category: d.category,
                         unit: d.unit,
                         supplierName: sup?.name || '',
-                        supplierUrl: sup?.url || sup?.order_url || '',
+                        supplierUrl: sup?.url || sup?.orderUrl || '',
                         supplierEmail: sup?.email || ''
                     }]
                 }
