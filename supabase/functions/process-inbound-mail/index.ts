@@ -1194,7 +1194,24 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         return ''
       }
 
-      const searchBingProductMeta = async (query: string, domainHint?: string) => {
+      const resolveWebshopDomain = (supplierName?: string, supplierUrl?: string, isWebshopMethod?: boolean): string => {
+        const lowerSup = (supplierName || '').toLowerCase().trim()
+        for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
+          if (lowerSup.includes(k)) return dom
+        }
+        if (supplierUrl) {
+          try {
+            const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
+            const host = u.hostname.replace(/^www\./i, '').toLowerCase()
+            if (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt/i.test(host)) {
+              return host
+            }
+          } catch {}
+        }
+        return ''
+      }
+
+      const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
         const controller = new AbortController()
         const timer = setTimeout(() => controller.abort(), 5000)
         try {
@@ -1217,16 +1234,26 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             })
             .filter(x => x && (x.murl || x.turl))
 
-          const preferred = domainHint
-            ? metas.find(x => (x.purl || '').toLowerCase().includes(domainHint))
+          // WICHTIG: Ein Shop-Bestell-Link (orderUrl) darf NUR dann vorgeschlagen werden,
+          // wenn die gefundene Seite tatsächlich zur Domain des zugeordneten Webshop-Lieferanten gehört!
+          // Niemals fremde Shops (z.B. getraenke-taxi-do.de bei HEWO) als Bestell-Link eintragen!
+          const preferred = webshopDomain
+            ? metas.find(x => {
+                try {
+                  const host = new URL(x.purl || '').hostname.replace(/^www\./i, '').toLowerCase()
+                  return host === webshopDomain || host.endsWith('.' + webshopDomain) || webshopDomain.endsWith('.' + host)
+                } catch {
+                  return false
+                }
+              })
             : null
           const best = preferred || metas[0] || null
           const alternatives = [...new Set(
-            metas.slice(0, 5).map(x => x.turl || x.murl).filter(Boolean)
+            metas.slice(0, 6).map(x => x.turl || x.murl).filter(Boolean)
           )]
 
           return {
-            orderUrl: best?.purl || '',
+            orderUrl: preferred?.purl || '',
             image: best?.turl || best?.murl || '',
             highResImage: best?.murl || '',
             title: (best?.t || '').replace(/[\ue000-\uf8ff]/g, '').trim(),
@@ -1514,15 +1541,17 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               customerNumber: item.customerNumber || fromMail.customer_number || ''
             }
           } else {
-            const domainHint = resolveSupplierDomainHint(item.supplierName, item.supplierUrl, item.supplierEmail)
-            const query = `${item.name} ${item.productNumber || ''} ${domainHint || item.supplierName || ''}`.trim()
-            const bingRes = await searchBingProductMeta(query, domainHint)
+            const webshopDomain = resolveWebshopDomain(item.supplierName, item.supplierUrl, item.isWebshopSupplier)
+            // Für die Bildersuche: Wenn es ein echter Webshop-Lieferant ist, nach dessen Domain mit-suchen;
+            // bei Großhändlern/E-Mail-Lieferanten (z.B. HEWO, Schwälbchen) nur nach Produktname + Artikelnr. suchen!
+            const query = `${item.name} ${item.productNumber || ''} ${webshopDomain}`.trim()
+            const bingRes = await searchBingProductMeta(query, webshopDomain)
             const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
             const mailSku = skuByProductName.get(String(item.name || '').trim().toLowerCase()) || ''
 
-            // Nur dann eine Bestell-URL vorschlagen, wenn sie nicht auf eine reine Bilddatei zeigt
+            // Nur dann eine Bestell-URL vorschlagen, wenn sie wirklich von der Webshop-Domain des Lieferanten stammt!
             let suggestedOrderUrl = item.orderUrl || ''
-            if (!suggestedOrderUrl && bingRes.orderUrl) {
+            if (!suggestedOrderUrl && webshopDomain && bingRes.orderUrl) {
               suggestedOrderUrl = bingRes.orderUrl
             }
 
