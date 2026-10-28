@@ -1148,6 +1148,504 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         })
       }
 
+      // =====================================================================
+      // HILFSFUNKTIONEN FÜR BILD-, LINK- & DATEN-VERVOLLSTÄNDIGUNG
+      // =====================================================================
+      const SUPPLIER_DOMAIN_HINTS: Record<string, string> = {
+        'amazon business': 'amazon.de',
+        'amazon': 'amazon.de',
+        'böttcher ag': 'bueromarkt-ag.de',
+        'böttcher': 'bueromarkt-ag.de',
+        'hygi.de': 'hygi.de',
+        'hygi': 'hygi.de',
+        'reinigungsberater': 'reinigungsberater.de',
+        'lusini': 'lusini.com',
+        'papstar': 'papstar.de',
+        'ronnefeldt': 'ronnefeldt.com',
+        'coffee perfect': 'coffee-perfect.de',
+        'porzellantreff': 'porzellantreff.de',
+        'deutsche post': 'shop.deutschepost.de',
+        'ada cosmetics': 'ada-cosmetics.com',
+        'eofficeshop': 'eofficeshop.de',
+        'tecserv': 'eofficeshop.de',
+        'gottron': 'gottron-hygiene.de',
+        'hamburgpapier': 'hamburgpapier-shop.de',
+        'kaeferling': 'kaeferlingpro.com',
+        'zoells': 'zoells.de',
+        'cent direktvertrieb': 'cent-online.de'
+      }
+
+      const resolveSupplierDomainHint = (supplierName?: string, supplierUrl?: string, supplierEmail?: string): string => {
+        if (supplierUrl) {
+          try {
+            const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
+            return u.hostname.replace(/^www\./i, '').toLowerCase()
+          } catch {}
+        }
+        const lowerSup = (supplierName || '').toLowerCase().trim()
+        for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
+          if (lowerSup.includes(k)) return dom
+        }
+        if (supplierEmail && supplierEmail.includes('@') && supplierEmail !== 'hello@unbekannt.com') {
+          const dom = supplierEmail.split('@')[1]?.trim().toLowerCase()
+          const generic = new Set(['gmail.com', 'googlemail.com', 'web.de', 'gmx.de', 'gmx.net', 't-online.de', 'outlook.com', 'hotmail.com', 'icloud.com', 'yahoo.com'])
+          if (dom && !generic.has(dom)) return dom
+        }
+        return ''
+      }
+
+      const searchBingProductMeta = async (query: string, domainHint?: string) => {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 5000)
+        try {
+          const bq = encodeURIComponent(query.trim())
+          const br = await fetch(`https://www.bing.com/images/search?q=${bq}&FORM=HDRSC2`, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept-Language': 'de-DE,de;q=0.9'
+            },
+            signal: controller.signal
+          })
+          const bhtml = await br.text()
+          const metas = [...bhtml.matchAll(/\bm="(\{[^"]+\})"/gi)]
+            .map(m => {
+              try {
+                return JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'))
+              } catch {
+                return null
+              }
+            })
+            .filter(x => x && (x.murl || x.turl))
+
+          const preferred = domainHint
+            ? metas.find(x => (x.purl || '').toLowerCase().includes(domainHint))
+            : null
+          const best = preferred || metas[0] || null
+          const alternatives = [...new Set(
+            metas.slice(0, 5).map(x => x.turl || x.murl).filter(Boolean)
+          )]
+
+          return {
+            orderUrl: best?.purl || '',
+            image: best?.turl || best?.murl || '',
+            highResImage: best?.murl || '',
+            title: (best?.t || '').replace(/[\ue000-\uf8ff]/g, '').trim(),
+            alternatives
+          }
+        } catch (err) {
+          console.warn('Bing search fallback error:', err)
+          return { orderUrl: '', image: '', highResImage: '', title: '', alternatives: [] as string[] }
+        } finally {
+          clearTimeout(timer)
+        }
+      }
+
+      const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: string) => {
+        const lower = (name || '').toLowerCase()
+        let category = currentCat && currentCat !== 'Sonstiges' && currentCat !== 'Ohne Kategorie' ? currentCat : ''
+        if (!category) {
+          if (/\b(pils|bier|cola|saft|schorle|wasser|sprudel|bionade|orangina|milch|kaffee|tee|teavelope|espresso|wein|sekt|zäpfle|getränk|flasche)\b/i.test(lower)) {
+            category = 'Getränke'
+          } else if (/\b(reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|toilettenpapier|kosmetiktücher|seife|shampoo|desinfektion|schwamm|entkalker|schaben|kakerlaken|mülleimer|handschuhe)\b/i.test(lower)) {
+            category = 'Reinigung'
+          } else if (/\b(papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|batterie|ordner|etiketten|rfid|briefumschlag|büro)\b/i.test(lower)) {
+            category = 'Bürobedarf'
+          } else if (/\b(käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre)\b/i.test(lower)) {
+            category = 'Lebensmittel'
+          }
+        }
+
+        let unit = currentUnit || 'Stück'
+        if (!currentUnit || currentUnit === 'Stk' || currentUnit === 'Stück') {
+          if (/\b(\d+\s*x\s*\d+[,\.]?\d*\s*l|kasten|kiste)\b/i.test(lower)) unit = 'Kasten'
+          else if (/\b(karton|kt:|paket|pakete)\b/i.test(lower)) unit = 'Karton'
+          else if (/\b(rolle|rollen)\b/i.test(lower)) unit = 'Rolle'
+          else if (/\b(kanister|5\s*l|10\s*l)\b/i.test(lower)) unit = 'Kanister'
+          else if (/\b(flasche|1\s*l|500\s*ml|750\s*ml)\b/i.test(lower)) unit = 'Flasche'
+          else if (/\b(pack|packung|beutel)\b/i.test(lower)) unit = 'Packung'
+        }
+        return { category: category || currentCat || 'Sonstiges', unit }
+      }
+
+      // 5. EXTRACT URL METADATA: Beim Einfügen eines Shop-Links Bild, Titel, Preis, Artikelnummer & Lieferant laden
+      if (action === 'extract_url_metadata') {
+        const rawUrl = String(body?.url || '').trim()
+        const productNameHint = String(body?.productName || '').trim()
+        const supplierNameHint = String(body?.supplierName || '').trim()
+        if (!rawUrl) {
+          return new Response(JSON.stringify({ success: false, error: 'Keine URL angegeben' }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
+        const normalizedUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`
+
+        // Falls es bereits ein direkter Bild-Link ist (.jpg, .png, .webp, etc.)
+        if (/\.(jpg|jpeg|png|webp|gif|avif|svg)(\?.*)?$/i.test(normalizedUrl)) {
+          return new Response(JSON.stringify({
+            success: true,
+            isDirectImage: true,
+            image: normalizedUrl,
+            alternatives: [normalizedUrl]
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
+        let extractedImage = ''
+        let extractedTitle = ''
+        let extractedSku = ''
+        let extractedPrice: number | null = null
+        const candidateImages: string[] = []
+
+        // 1. Versuche die Shop-Seite direkt abzurufen (og:image, JSON-LD, Amazon-Bild)
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 4500)
+        try {
+          const resp = await fetch(normalizedUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8'
+            },
+            signal: controller.signal
+          })
+          if (resp.ok) {
+            const html = await resp.text()
+            const ogImgMatch =
+              html.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i) ||
+              html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i)
+            if (ogImgMatch?.[1]) {
+              try {
+                extractedImage = new URL(ogImgMatch[1].replace(/&amp;/g, '&'), normalizedUrl).href
+                candidateImages.push(extractedImage)
+              } catch {}
+            }
+
+            // Amazon-spezifisches Produktbild
+            const amzImgMatch =
+              html.match(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
+              html.match(/"large"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
+              html.match(/id=["']landingImage["'][^>]+src=["'](https:\/\/[^"']+)["']/i)
+            if (amzImgMatch?.[1]) {
+              extractedImage = extractedImage || amzImgMatch[1]
+              if (!candidateImages.includes(amzImgMatch[1])) candidateImages.push(amzImgMatch[1])
+            }
+
+            // Titel
+            const ogTitleMatch =
+              html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+              html.match(/<title[^>]*>([^<]+)<\/title>/i)
+            if (ogTitleMatch?.[1]) {
+              extractedTitle = ogTitleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim()
+            }
+
+            // JSON-LD Product Schema
+            const ldMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
+            for (const m of ldMatches) {
+              try {
+                const parsed = JSON.parse(m[1].trim())
+                const nodes = Array.isArray(parsed) ? parsed : (parsed['@graph'] || [parsed])
+                for (const node of nodes) {
+                  if (node && (node['@type'] === 'Product' || node.sku || node.offers)) {
+                    if (!extractedTitle && node.name) extractedTitle = String(node.name).trim()
+                    if (!extractedSku && (node.sku || node.mpn || node.productID)) {
+                      extractedSku = String(node.sku || node.mpn || node.productID).trim()
+                    }
+                    const imgField = Array.isArray(node.image) ? node.image[0] : (node.image?.url || node.image)
+                    if (typeof imgField === 'string' && imgField) {
+                      const absImg = new URL(imgField, normalizedUrl).href
+                      if (!extractedImage) extractedImage = absImg
+                      if (!candidateImages.includes(absImg)) candidateImages.push(absImg)
+                    }
+                    const offer = Array.isArray(node.offers) ? node.offers[0] : node.offers
+                    const pVal = parseFloat(String(offer?.price || offer?.lowPrice || '').replace(',', '.'))
+                    if (!isNaN(pVal) && pVal > 0 && !extractedPrice) extractedPrice = pVal
+                  }
+                }
+              } catch {}
+            }
+          }
+        } catch (e) {
+          console.warn('Direct URL fetch blocked or timed out, falling back to search:', e)
+        } finally {
+          clearTimeout(timer)
+        }
+
+        // 2. Fallback / Ergänzung über Bing Image Search (funktioniert auch bei Bot-Schutz wie hygi.de oder Amazon!)
+        let hostname = ''
+        let slugQuery = ''
+        try {
+          const u = new URL(normalizedUrl)
+          hostname = u.hostname.replace(/^www\./i, '').toLowerCase()
+          slugQuery = u.pathname
+            .replace(/\.(html?|php|aspx?)$/i, '')
+            .replace(/[^a-zA-Z0-9äöüÄÖÜß]+/g, ' ')
+            .trim()
+        } catch {}
+
+        const searchQuery = productNameHint
+          ? `${productNameHint} ${hostname || supplierNameHint}`.trim()
+          : `${hostname} ${slugQuery}`.trim()
+
+        if (!extractedImage || candidateImages.length < 2) {
+          const bingRes = await searchBingProductMeta(searchQuery, hostname)
+          if (!extractedImage && bingRes.image) {
+            extractedImage = bingRes.image
+          }
+          if (!extractedTitle && bingRes.title) {
+            extractedTitle = bingRes.title
+          }
+          for (const alt of bingRes.alternatives) {
+            if (!candidateImages.includes(alt)) candidateImages.push(alt)
+          }
+        }
+
+        // 3. Passenden Lieferanten anhand der URL-Domain in der Datenbank suchen
+        let matchedSupplierId: string | null = null
+        let matchedSupplierName: string | null = null
+        if (hostname) {
+          const { data: sups } = await supabase
+            .from('suppliers')
+            .select('id, name, email, url, order_url')
+            .eq('company_id', company_id)
+          const brandPart = hostname.split('.')[0]
+          for (const s of (sups || [])) {
+            const sDom = resolveSupplierDomainHint(s.name, s.url || s.order_url, s.email)
+            if (
+              (sDom && (hostname.includes(sDom) || sDom.includes(hostname))) ||
+              (brandPart.length >= 4 && (s.name || '').toLowerCase().includes(brandPart))
+            ) {
+              matchedSupplierId = s.id
+              matchedSupplierName = s.name
+              break
+            }
+          }
+        }
+
+        const { category, unit } = inferCategoryAndUnit(productNameHint || extractedTitle)
+
+        return new Response(JSON.stringify({
+          success: true,
+          orderUrl: normalizedUrl,
+          image: extractedImage || null,
+          alternatives: candidateImages.slice(0, 4),
+          title: extractedTitle || null,
+          sku: extractedSku || null,
+          price: extractedPrice,
+          category,
+          unit,
+          matchedSupplierId,
+          matchedSupplierName
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // 6. GET COMPLETION STATE: Lade Liste der als "vollständig" abgehakten Produkte & Lieferanten
+      if (action === 'get_completion_state') {
+        const { data: comp } = await supabase
+          .from('companies')
+          .select('settings')
+          .eq('id', company_id)
+          .maybeSingle()
+        const settings = comp?.settings || {}
+        return new Response(JSON.stringify({
+          success: true,
+          completedProductIds: Array.isArray(settings.completedProductIds) ? settings.completedProductIds : [],
+          completedSupplierIds: Array.isArray(settings.completedSupplierIds) ? settings.completedSupplierIds : []
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // 7. SUGGEST COMPLETION: KI- & Web-Vorschläge für unvollständige Produkte und Lieferanten berechnen
+      if (action === 'suggest_completion') {
+        const items = Array.isArray(body?.items) ? body.items.slice(0, 12) : []
+
+        // Lade letzte E-Mails, um Kundennummern, Telefonnummern, Artikelnummern & Domains aus echten Belegen zu ziehen
+        const { data: recentEmails } = await supabase
+          .from('inbound_emails')
+          .select('supplier_name, extracted_data')
+          .eq('company_id', company_id)
+          .neq('status', 'gemini_error')
+          .order('created_at', { ascending: false })
+          .limit(60)
+
+        const emailMetaBySupplier = new Map<string, { email?: string; phone?: string; customer_number?: string }>()
+        const skuByProductName = new Map<string, string>()
+
+        for (const row of (recentEmails || [])) {
+          const ed = row.extracted_data as any
+          if (!ed) continue
+          const sName = (ed.supplier_name || row.supplier_name || '').trim().toLowerCase()
+          if (sName) {
+            const prev = emailMetaBySupplier.get(sName) || {}
+            if (!prev.email && ed.supplier_email && ed.supplier_email !== 'hello@unbekannt.com') prev.email = ed.supplier_email
+            if (!prev.phone && ed.supplier_phone) prev.phone = ed.supplier_phone
+            if (!prev.customer_number && ed.customer_number) prev.customer_number = ed.customer_number
+            emailMetaBySupplier.set(sName, prev)
+          }
+          for (const it of (ed.items || [])) {
+            if (it?.product_name && it?.sku) {
+              skuByProductName.set(String(it.product_name).trim().toLowerCase(), String(it.sku).trim())
+            }
+          }
+        }
+
+        const results = await Promise.all(items.map(async (item: any) => {
+          if (item.type === 'supplier') {
+            const lowerName = String(item.name || '').trim().toLowerCase()
+            const fromMail = emailMetaBySupplier.get(lowerName) || {}
+            const effectiveEmail = (item.email && item.email !== 'hello@unbekannt.com') ? item.email : (fromMail.email || '')
+            const domHint = resolveSupplierDomainHint(item.name, item.url, effectiveEmail)
+            const suggestedUrl = item.url || (domHint ? `https://www.${domHint.replace(/^www\./, '')}` : '')
+
+            return {
+              id: item.id,
+              type: 'supplier',
+              url: suggestedUrl,
+              email: effectiveEmail,
+              phone: item.phone || fromMail.phone || '',
+              customerNumber: item.customerNumber || fromMail.customer_number || ''
+            }
+          } else {
+            const domainHint = resolveSupplierDomainHint(item.supplierName, item.supplierUrl, item.supplierEmail)
+            const query = `${item.name} ${item.productNumber || ''} ${domainHint || item.supplierName || ''}`.trim()
+            const bingRes = await searchBingProductMeta(query, domainHint)
+            const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
+            const mailSku = skuByProductName.get(String(item.name || '').trim().toLowerCase()) || ''
+
+            // Nur dann eine Bestell-URL vorschlagen, wenn sie nicht auf eine reine Bilddatei zeigt
+            let suggestedOrderUrl = item.orderUrl || ''
+            if (!suggestedOrderUrl && bingRes.orderUrl) {
+              suggestedOrderUrl = bingRes.orderUrl
+            }
+
+            return {
+              id: item.id,
+              type: 'product',
+              image: item.image || bingRes.image || '',
+              alternatives: bingRes.alternatives || [],
+              orderUrl: suggestedOrderUrl,
+              productNumber: item.productNumber || mailSku || '',
+              category,
+              unit
+            }
+          }
+        }))
+
+        return new Response(JSON.stringify({
+          success: true,
+          suggestions: results
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // 8. SAVE COMPLETION: Speichere vervollständigte Produkte & Lieferanten und markiere sie als erledigt
+      if (action === 'save_completion') {
+        const prodUpdates = Array.isArray(body?.products) ? body.products : []
+        const supUpdates = Array.isArray(body?.suppliers) ? body.suppliers : []
+        const unmarkProductIds = new Set<string>(Array.isArray(body?.unmarkProductIds) ? body.unmarkProductIds : [])
+        const unmarkSupplierIds = new Set<string>(Array.isArray(body?.unmarkSupplierIds) ? body.unmarkSupplierIds : [])
+
+        const { data: comp } = await supabase
+          .from('companies')
+          .select('settings')
+          .eq('id', company_id)
+          .maybeSingle()
+
+        const currentSettings = (comp?.settings && typeof comp.settings === 'object') ? { ...comp.settings } : {}
+        const completedProdSet = new Set<string>(Array.isArray(currentSettings.completedProductIds) ? currentSettings.completedProductIds : [])
+        const completedSupSet = new Set<string>(Array.isArray(currentSettings.completedSupplierIds) ? currentSettings.completedSupplierIds : [])
+
+        for (const id of unmarkProductIds) completedProdSet.delete(id)
+        for (const id of unmarkSupplierIds) completedSupSet.delete(id)
+
+        let savedProducts = 0
+        let savedSuppliers = 0
+
+        for (const p of prodUpdates) {
+          if (!p?.id) continue
+          const patch: any = { is_auto_generated: false }
+          if (p.name !== undefined && String(p.name).trim()) patch.name = String(p.name).trim()
+          if (p.category !== undefined) patch.category = p.category
+          if (p.unit !== undefined) patch.unit = p.unit
+          if (p.price !== undefined && p.price !== null && p.price !== '') patch.price = Number(p.price) || 0
+          if (p.product_number !== undefined) patch.product_number = p.product_number || null
+          if (p.supplier_id !== undefined) patch.supplier_id = p.supplier_id || null
+          if (p.order_url !== undefined) {
+            patch.order_url = p.order_url || null
+            if (p.order_url && !p.preferred_order_method) {
+              patch.preferred_order_method = 'webshop'
+            }
+          }
+          if (p.preferred_order_method !== undefined) patch.preferred_order_method = p.preferred_order_method || null
+          if (p.image !== undefined) patch.image = p.image || null
+
+          const { error: uErr } = await supabase
+            .from('products')
+            .update(patch)
+            .eq('id', p.id)
+            .eq('company_id', company_id)
+
+          if (!uErr) {
+            savedProducts++
+            if (p.markComplete !== false) completedProdSet.add(p.id)
+          }
+        }
+
+        for (const s of supUpdates) {
+          if (!s?.id) continue
+          const patch: any = { is_auto_generated: false }
+          if (s.name !== undefined && String(s.name).trim()) patch.name = String(s.name).trim()
+          if (s.email !== undefined) patch.email = s.email || 'hello@unbekannt.com'
+          if (s.phone !== undefined) patch.phone = s.phone || null
+          if (s.url !== undefined) {
+            patch.url = s.url || null
+            if (s.url) patch.order_url = s.url
+          }
+          if (s.customer_number !== undefined) patch.customer_number = s.customer_number || null
+          if (s.preferred_order_method !== undefined) patch.preferred_order_method = s.preferred_order_method || null
+
+          const { error: sErr } = await supabase
+            .from('suppliers')
+            .update(patch)
+            .eq('id', s.id)
+            .eq('company_id', company_id)
+
+          if (!sErr) {
+            savedSuppliers++
+            if (s.markComplete !== false) completedSupSet.add(s.id)
+          }
+        }
+
+        currentSettings.completedProductIds = [...completedProdSet]
+        currentSettings.completedSupplierIds = [...completedSupSet]
+
+        await supabase
+          .from('companies')
+          .update({ settings: currentSettings })
+          .eq('id', company_id)
+
+        return new Response(JSON.stringify({
+          success: true,
+          savedProducts,
+          savedSuppliers,
+          completedProductIds: currentSettings.completedProductIds,
+          completedSupplierIds: currentSettings.completedSupplierIds
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
       return new Response(JSON.stringify({ error: `Unbekannte Aktion: ${action}` }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

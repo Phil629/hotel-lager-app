@@ -4,8 +4,9 @@ import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
-import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database, Sparkles } from 'lucide-react';
+import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database, Sparkles, Wand2, Loader2 } from 'lucide-react';
 import { DuplicateCheckModal } from '../components/DuplicateCheckModal';
+import { DataCompletionModal } from '../components/DataCompletionModal';
 import { useAppContext } from '../contexts/AppContext';
 import emailjs from '@emailjs/browser';
 import { Notification, type NotificationType } from '../components/Notification';
@@ -26,6 +27,9 @@ export const Products: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+    const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
+    const [isExtractingUrlMeta, setIsExtractingUrlMeta] = useState(false);
+    const [urlMetaAlternatives, setUrlMetaAlternatives] = useState<{ image: string; orderUrl: string; title: string }[]>([]);
     const [activeModalTab, setActiveModalTab] = useState<'basic' | 'inventory' | 'order' | 'analytics'>('basic');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -353,6 +357,130 @@ export const Products: React.FC = () => {
     const loadSuppliers = async () => {
         const data = await DataService.getSuppliers();
         setSuppliers(data);
+    };
+
+    const extractProductMetaFromUrl = async (rawUrl: string, forceOverwriteImage = false) => {
+        const trimmed = (rawUrl || '').trim();
+        if (!trimmed || trimmed.length < 6) return;
+        const normalizedUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+        if (!/^https?:\/\/[^\s]+\.[^\s]+/i.test(normalizedUrl)) return;
+
+        const client = getSupabaseClient();
+        if (!client) return;
+
+        setIsExtractingUrlMeta(true);
+        try {
+            const sup = suppliers.find(s => s.id === newProduct.supplierId);
+            const { data, error } = await client.functions.invoke('process-inbound-mail', {
+                body: {
+                    action: 'extract_url_metadata',
+                    url: normalizedUrl,
+                    productName: newProduct.name || '',
+                    supplierName: sup?.name || '',
+                }
+            });
+            if (error || !data?.metadata) return;
+            const meta = data.metadata;
+            if (Array.isArray(meta.alternatives) && meta.alternatives.length > 0) {
+                setUrlMetaAlternatives(meta.alternatives);
+            }
+            setNewProduct(prev => {
+                const updated = { ...prev, orderUrl: prev.orderUrl || normalizedUrl };
+                if (meta.image && (!prev.image || forceOverwriteImage)) {
+                    updated.image = meta.image;
+                }
+                if (meta.productNumber && !prev.productNumber) {
+                    updated.productNumber = meta.productNumber;
+                }
+                if (meta.price && (!prev.price || Number(prev.price) === 0)) {
+                    updated.price = Number(meta.price);
+                }
+                if (meta.matchedSupplierId && !prev.supplierId) {
+                    updated.supplierId = meta.matchedSupplierId;
+                }
+                if (meta.category && (!prev.category || prev.category === 'Sonstiges' || prev.category === 'Ohne Kategorie')) {
+                    updated.category = meta.category;
+                }
+                if (meta.unit && (!prev.unit || prev.unit === 'Stück')) {
+                    updated.unit = meta.unit;
+                }
+                if (!prev.preferredOrderMethod && normalizedUrl) {
+                    updated.preferredOrderMethod = 'webshop';
+                }
+                if (!prev.name && meta.title) {
+                    updated.name = meta.title;
+                }
+                return updated;
+            });
+            if (meta.image) {
+                setNotification({ message: 'Produktbild & Daten automatisch vom Link geladen!', type: 'success' });
+            }
+        } catch (err) {
+            console.warn('URL metadata extraction error:', err);
+        } finally {
+            setIsExtractingUrlMeta(false);
+        }
+    };
+
+    const autoFindProductImageAndLink = async () => {
+        if (newProduct.orderUrl && newProduct.orderUrl.trim().length > 5) {
+            await extractProductMetaFromUrl(newProduct.orderUrl, true);
+            return;
+        }
+        if (!newProduct.name || newProduct.name.trim().length < 2) {
+            setNotification({ message: 'Bitte zuerst einen Produktnamen oder Bestell-Link eingeben.', type: 'info' });
+            return;
+        }
+        const client = getSupabaseClient();
+        if (!client) return;
+        setIsExtractingUrlMeta(true);
+        try {
+            const sup = suppliers.find(s => s.id === newProduct.supplierId);
+            const { data, error } = await client.functions.invoke('process-inbound-mail', {
+                body: {
+                    action: 'suggest_completion',
+                    type: 'products',
+                    items: [{
+                        id: editingId || 'temp',
+                        name: newProduct.name,
+                        productNumber: newProduct.productNumber || '',
+                        supplierId: newProduct.supplierId || '',
+                        supplierName: sup?.name || '',
+                        supplierUrl: sup?.url || sup?.orderUrl || '',
+                        supplierEmail: sup?.email || '',
+                        category: newProduct.category || '',
+                        unit: newProduct.unit || '',
+                        image: newProduct.image || '',
+                        orderUrl: newProduct.orderUrl || '',
+                    }]
+                }
+            });
+            if (error) throw error;
+            const sug = data?.suggestions?.['temp'] || (editingId ? data?.suggestions?.[editingId] : null);
+            if (sug) {
+                if (Array.isArray(sug.alternatives) && sug.alternatives.length > 0) {
+                    setUrlMetaAlternatives(sug.alternatives);
+                }
+                setNewProduct(prev => ({
+                    ...prev,
+                    image: sug.image || prev.image,
+                    orderUrl: prev.orderUrl || sug.orderUrl || '',
+                    productNumber: prev.productNumber || sug.productNumber || '',
+                    category: (!prev.category || prev.category === 'Sonstiges' || prev.category === 'Ohne Kategorie') ? (sug.category || prev.category) : prev.category,
+                    unit: (!prev.unit || prev.unit === 'Stück') ? (sug.unit || prev.unit) : prev.unit,
+                    preferredOrderMethod: prev.preferredOrderMethod || (sug.orderUrl ? 'webshop' : prev.preferredOrderMethod),
+                }));
+                if (sug.image || sug.orderUrl) {
+                    setNotification({ message: 'KI hat passendes Produktbild & Shop-Link gefunden!', type: 'success' });
+                } else {
+                    setNotification({ message: 'Kein eindeutiges Bild gefunden.', type: 'info' });
+                }
+            }
+        } catch (err: any) {
+            setNotification({ message: 'Fehler bei der Bildersuche: ' + (err?.message || String(err)), type: 'error' });
+        } finally {
+            setIsExtractingUrlMeta(false);
+        }
     };
 
     const handleDeleteClick = (id: string) => {
@@ -729,10 +857,22 @@ export const Products: React.FC = () => {
             <div className="page-header">
                 <h2 className="page-title">Produkte</h2>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                        onClick={() => setIsCompletionModalOpen(true)}
+                        className="btn btn-ghost"
+                        style={{
+                            border: '1px solid #c7d2fe',
+                            backgroundColor: '#eef2ff',
+                            color: '#4338ca',
+                            fontWeight: 600,
+                        }}
+                    >
+                        <Wand2 size={16} color="#4f46e5" /> Daten vervollständigen
+                    </button>
                     <button onClick={() => setIsDuplicateModalOpen(true)} className="btn btn-ghost" style={{ border: '1px solid var(--color-border)' }}>
                         <Sparkles size={16} color="var(--color-primary)" /> KI-Duplikate prüfen
                     </button>
-                    <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
+                    <button onClick={() => { setUrlMetaAlternatives([]); setIsModalOpen(true); }} className="btn btn-primary">
                         <Plus size={18} /> Neues Produkt
                     </button>
                 </div>
@@ -1379,15 +1519,44 @@ export const Products: React.FC = () => {
 
                                             {/* Section: Produktbild */}
                                             <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)' }}>
-                                                <p style={{ margin: '0 0 var(--spacing-md) 0', fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Produktbild</p>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)', flexWrap: 'wrap', gap: '8px' }}>
+                                                    <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Produktbild</p>
+                                                    <button
+                                                        type="button"
+                                                        disabled={isExtractingUrlMeta}
+                                                        onClick={autoFindProductImageAndLink}
+                                                        style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '6px',
+                                                            padding: '5px 10px',
+                                                            borderRadius: '8px',
+                                                            border: '1px solid #c7d2fe',
+                                                            backgroundColor: '#eef2ff',
+                                                            color: '#4338ca',
+                                                            fontSize: '12px',
+                                                            fontWeight: 600,
+                                                            cursor: isExtractingUrlMeta ? 'wait' : 'pointer',
+                                                        }}
+                                                    >
+                                                        {isExtractingUrlMeta ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={13} />}
+                                                        {newProduct.orderUrl ? 'Bild vom Bestell-Link laden' : '✨ Bild & Link automatisch suchen'}
+                                                    </button>
+                                                </div>
                                                 <div className="form-group">
                                                 <label className="form-label" style={{ display: 'none' }}>Produktbild</label>
                                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                     <input
                                                         type="url"
-                                                        placeholder="https://... (URL einfügen)"
+                                                        placeholder="https://... (Bild-URL oder Shop-Link einfügen)"
                                                         value={newProduct.image || ''}
                                                         onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
+                                                        onPaste={e => {
+                                                            const pasted = e.clipboardData.getData('text').trim();
+                                                            if (/^https?:\/\//i.test(pasted) && !/\.(jpg|jpeg|png|webp|gif|svg|avif)(\?|$)/i.test(pasted)) {
+                                                                setTimeout(() => extractProductMetaFromUrl(pasted, true), 50);
+                                                            }
+                                                        }}
                                                         className="input-field"
                                                         style={{ flex: 1 }}
                                                     />
@@ -1428,9 +1597,38 @@ export const Products: React.FC = () => {
                                                         />
                                                     </label>
                                                 </div>
-                                                {newProduct.image && (
-                                                    <div style={{ marginTop: '8px' }}>
-                                                        <img src={newProduct.image} alt="Vorschau" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />
+                                                {(newProduct.image || urlMetaAlternatives.length > 0) && (
+                                                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                                        {newProduct.image && (
+                                                            <img src={newProduct.image} alt="Vorschau" style={{ width: '64px', height: '64px', objectFit: 'contain', backgroundColor: '#fff', borderRadius: 'var(--radius-sm)', border: '2px solid var(--color-primary)' }} />
+                                                        )}
+                                                        {urlMetaAlternatives.length > 1 && (
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Alternative Bilder (Klick zum Auswählen):</span>
+                                                                <div style={{ display: 'flex', gap: '6px' }}>
+                                                                    {urlMetaAlternatives.map((alt, idx) => (
+                                                                        <button
+                                                                            key={idx}
+                                                                            type="button"
+                                                                            onClick={() => setNewProduct(prev => ({ ...prev, image: alt.image, orderUrl: prev.orderUrl || alt.orderUrl }))}
+                                                                            title={alt.title}
+                                                                            style={{
+                                                                                width: '40px',
+                                                                                height: '40px',
+                                                                                padding: 0,
+                                                                                borderRadius: '6px',
+                                                                                overflow: 'hidden',
+                                                                                border: newProduct.image === alt.image ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                                                backgroundColor: '#fff',
+                                                                                cursor: 'pointer'
+                                                                            }}
+                                                                        >
+                                                                            <img src={alt.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                                 </div>
@@ -1606,8 +1804,62 @@ export const Products: React.FC = () => {
                                                         backgroundColor: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
                                                         border: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? '1px solid var(--color-primary)' : '1px solid transparent'
                                                     }}>
-                                                        <label className="form-label" style={{ color: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : 'inherit' }}>Webshop / Bestell-URL</label>
-                                                        <input type="url" value={newProduct.orderUrl || ''} onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })} onBlur={e => { const val = e.target.value; if (val && !/^https?:\/\//i.test(val)) setNewProduct({ ...newProduct, orderUrl: 'https://' + val }); }} placeholder="https://..." className="input-field" style={{ borderColor: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : '' }} />
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
+                                                            <label className="form-label" style={{ margin: 0, color: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : 'inherit' }}>Webshop / Bestell-URL</label>
+                                                            {newProduct.orderUrl && (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isExtractingUrlMeta}
+                                                                    onClick={() => extractProductMetaFromUrl(newProduct.orderUrl || '', true)}
+                                                                    style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px',
+                                                                        padding: '2px 8px',
+                                                                        borderRadius: '6px',
+                                                                        border: '1px solid #c7d2fe',
+                                                                        backgroundColor: '#eef2ff',
+                                                                        color: '#4338ca',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: 600,
+                                                                        cursor: isExtractingUrlMeta ? 'wait' : 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {isExtractingUrlMeta ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={11} />}
+                                                                    Bild vom Link laden
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <input
+                                                            type="url"
+                                                            value={newProduct.orderUrl || ''}
+                                                            onChange={e => setNewProduct({ ...newProduct, orderUrl: e.target.value })}
+                                                            onPaste={e => {
+                                                                const pasted = e.clipboardData.getData('text').trim();
+                                                                if (pasted.length > 6) {
+                                                                    const norm = /^https?:\/\//i.test(pasted) ? pasted : `https://${pasted}`;
+                                                                    setTimeout(() => extractProductMetaFromUrl(norm, false), 50);
+                                                                }
+                                                            }}
+                                                            onBlur={e => {
+                                                                const val = e.target.value.trim();
+                                                                if (val) {
+                                                                    const norm = /^https?:\/\//i.test(val) ? val : 'https://' + val;
+                                                                    if (norm !== val) setNewProduct(prev => ({ ...prev, orderUrl: norm }));
+                                                                    if (!newProduct.image) {
+                                                                        extractProductMetaFromUrl(norm, false);
+                                                                    }
+                                                                }
+                                                            }}
+                                                            placeholder="https://... (Lädt automatisch das Produktbild)"
+                                                            className="input-field"
+                                                            style={{ borderColor: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : '' }}
+                                                        />
+                                                        {isExtractingUrlMeta && (
+                                                            <div style={{ marginTop: '6px', fontSize: '11px', color: '#4f46e5', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                                <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Lade Produktbild & Artikeldaten vom Shop-Link...
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="form-group" style={{ 
                                                         transition: 'all 0.3s ease', 
@@ -2254,6 +2506,19 @@ export const Products: React.FC = () => {
                     DataService.getProducts(true).then(setProducts);
                     DataService.getSuppliers(true).then(setSuppliers);
                     DataService.getOrders(true).then(setOrders);
+                    setNotification({ message: msg, type: 'success' });
+                }}
+            />
+
+            <DataCompletionModal
+                isOpen={isCompletionModalOpen}
+                onClose={() => setIsCompletionModalOpen(false)}
+                products={products}
+                suppliers={suppliers}
+                initialTab="products"
+                onSaved={(msg) => {
+                    DataService.getProducts(true).then(setProducts);
+                    DataService.getSuppliers(true).then(setSuppliers);
                     setNotification({ message: msg, type: 'success' });
                 }}
             />

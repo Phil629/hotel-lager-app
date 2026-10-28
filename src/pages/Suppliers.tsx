@@ -1,7 +1,8 @@
 import { generateId } from "../utils";
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink, Sparkles } from 'lucide-react';
+import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink, Sparkles, Wand2 } from 'lucide-react';
 import { DuplicateCheckModal } from '../components/DuplicateCheckModal';
+import { DataCompletionModal } from '../components/DataCompletionModal';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAppContext } from '../contexts/AppContext';
 import type { Supplier, Product } from '../types';
@@ -21,6 +22,7 @@ export const Suppliers: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+    const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
     const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
@@ -277,6 +279,18 @@ export const Suppliers: React.FC = () => {
                 <h2 className="page-title">Lieferanten Netzwerk</h2>
                 {canEdit && (
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                            onClick={() => setIsCompletionModalOpen(true)}
+                            className="btn btn-ghost"
+                            style={{
+                                border: '1px solid #c7d2fe',
+                                backgroundColor: '#eef2ff',
+                                color: '#4338ca',
+                                fontWeight: 600,
+                            }}
+                        >
+                            <Wand2 size={16} color="#4f46e5" /> Daten vervollständigen
+                        </button>
                         <button onClick={() => setIsDuplicateModalOpen(true)} className="btn btn-ghost" style={{ border: '1px solid var(--color-border)' }}>
                             <Sparkles size={16} color="var(--color-primary)" /> KI-Duplikate prüfen
                         </button>
@@ -712,6 +726,19 @@ export const Suppliers: React.FC = () => {
                 isOpen={isDuplicateModalOpen}
                 onClose={() => setIsDuplicateModalOpen(false)}
                 onMerged={(msg) => {
+                    DataService.getSuppliers(true).then(setSuppliers);
+                    DataService.getProducts(true).then(setProducts);
+                    setNotification({ message: msg, type: 'success' });
+                }}
+            />
+
+            <DataCompletionModal
+                isOpen={isCompletionModalOpen}
+                onClose={() => setIsCompletionModalOpen(false)}
+                products={products}
+                suppliers={suppliers}
+                initialTab="suppliers"
+                onSaved={(msg) => {
                     DataService.getSuppliers(true).then(setSuppliers);
                     DataService.getProducts(true).then(setProducts);
                     setNotification({ message: msg, type: 'success' });
