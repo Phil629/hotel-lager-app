@@ -1294,11 +1294,118 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         return { category: category || currentCat || 'Sonstiges', unit }
       }
 
+      const formatEuro = (val: number) => val.toFixed(2).replace('.', ',')
+
+      const extractPriceFromHtml = (html: string): number | null => {
+        // 1. Meta-Tags (product:price:amount, og:price:amount)
+        const metaPrice =
+          html.match(/<meta[^>]+(?:property|name)=["'](?:product|og):price:amount["'][^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["']/i) ||
+          html.match(/<meta[^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["'][^>]+(?:property|name)=["'](?:product|og):price:amount["']/i) ||
+          html.match(/itemprop=["']price["'][^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["']/i)
+        if (metaPrice?.[1]) {
+          const v = parseFloat(metaPrice[1].replace(',', '.'))
+          if (!isNaN(v) && v > 0 && v < 10000) return v
+        }
+
+        // 2. JSON-LD Product Schema
+        const ldMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
+        for (const m of ldMatches) {
+          try {
+            const parsed = JSON.parse(m[1].trim())
+            const nodes = Array.isArray(parsed) ? parsed : (parsed['@graph'] || [parsed])
+            for (const node of nodes) {
+              if (node && (node['@type'] === 'Product' || node.sku || node.offers)) {
+                const offer = Array.isArray(node.offers) ? node.offers[0] : node.offers
+                const pVal = parseFloat(String(offer?.price || offer?.lowPrice || '').replace(',', '.'))
+                if (!isNaN(pVal) && pVal > 0 && pVal < 10000) return pVal
+              }
+            }
+          } catch {}
+        }
+
+        // 3. Typische Preis-Patterns im HTML (z.B. Amazon / B2B-Shops)
+        const inlinePrice =
+          html.match(/"priceAmount"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i) ||
+          html.match(/class=["'][^"']*price[^"']*["'][^>]*>\s*([0-9]{1,4},[0-9]{2})\s*(?:€|&euro;|EUR)/i)
+        if (inlinePrice?.[1]) {
+          const v = parseFloat(inlinePrice[1].replace(',', '.'))
+          if (!isNaN(v) && v > 0 && v < 10000) return v
+        }
+        return null
+      }
+
+      const evaluatePricePlausibility = (
+        shopPrice: number | null,
+        knownPrice: number | null | undefined
+      ): {
+        status: 'ok' | 'warning' | 'new_price' | 'none'
+        shopPrice: number | null
+        knownPrice: number | null
+        message: string
+      } => {
+        const kp = knownPrice && Number(knownPrice) > 0 ? Number(knownPrice) : null
+        if (!shopPrice || shopPrice <= 0) {
+          return { status: 'none', shopPrice: null, knownPrice: kp, message: '' }
+        }
+        if (shopPrice > 2500 || shopPrice < 0.05) {
+          return {
+            status: 'warning',
+            shopPrice,
+            knownPrice: kp,
+            message: `⚠️ Ungewöhnlicher Shop-Preis (${formatEuro(shopPrice)} €) – bitte Link prüfen!`
+          }
+        }
+        if (!kp) {
+          return {
+            status: 'new_price',
+            shopPrice,
+            knownPrice: null,
+            message: `✨ Shop-Preis erkannt: ${formatEuro(shopPrice)} € (als Artikelpreis vorgeschlagen)`
+          }
+        }
+
+        const ratio = shopPrice / kp
+        // Prüfe, ob Netto vs. Brutto (+7% oder +19% MwSt.)
+        if (ratio >= 1.16 && ratio <= 1.22) {
+          return {
+            status: 'ok',
+            shopPrice,
+            knownPrice: kp,
+            message: `✓ Preis plausibel: ${formatEuro(shopPrice)} € brutto im Shop passt zu ${formatEuro(kp)} € netto`
+          }
+        }
+        if (ratio >= 0.72 && ratio <= 1.35) {
+          return {
+            status: 'ok',
+            shopPrice,
+            knownPrice: kp,
+            message: `✓ Preis-Check OK: ${formatEuro(shopPrice)} € im Shop (bisher: ${formatEuro(kp)} €)`
+          }
+        }
+        // Prüfe, ob es wahrscheinlich ein Karton vs. Einzelstück ist (Faktor >= 2 oder <= 0.5)
+        const mult = ratio > 1 ? Math.round(ratio) : Math.round(1 / ratio)
+        if (mult >= 2 && mult <= 50) {
+          return {
+            status: 'warning',
+            shopPrice,
+            knownPrice: kp,
+            message: `⚠️ Preis-Warnung: Shop zeigt ${formatEuro(shopPrice)} € statt ${formatEuro(kp)} € (ca. Faktor ${mult}x – evtl. Karton vs. Einzelstück oder falscher Artikel!)`
+          }
+        }
+        return {
+          status: 'warning',
+          shopPrice,
+          knownPrice: kp,
+          message: `⚠️ Preis weicht stark ab: Shop zeigt ${formatEuro(shopPrice)} € statt bisher ${formatEuro(kp)} € – bitte Link prüfen!`
+        }
+      }
+
       // 5. EXTRACT URL METADATA: Beim Einfügen eines Shop-Links Bild, Titel, Preis, Artikelnummer & Lieferant laden
       if (action === 'extract_url_metadata') {
         const rawUrl = String(body?.url || '').trim()
         const productNameHint = String(body?.productName || '').trim()
         const supplierNameHint = String(body?.supplierName || '').trim()
+        const knownPriceHint = body?.knownPrice !== undefined ? Number(body.knownPrice) : null
         if (!rawUrl) {
           return new Response(JSON.stringify({ success: false, error: 'Keine URL angegeben' }), {
             status: 200,
@@ -1394,6 +1501,9 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
                 }
               } catch {}
             }
+            if (!extractedPrice) {
+              extractedPrice = extractPriceFromHtml(html)
+            }
           }
         } catch (e) {
           console.warn('Direct URL fetch blocked or timed out, falling back to search:', e)
@@ -1453,6 +1563,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         }
 
         const { category, unit } = inferCategoryAndUnit(productNameHint || extractedTitle)
+        const priceCheck = evaluatePricePlausibility(extractedPrice, knownPriceHint)
 
         return new Response(JSON.stringify({
           success: true,
@@ -1462,6 +1573,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           title: extractedTitle || null,
           sku: extractedSku || null,
           price: extractedPrice,
+          priceCheck,
           category,
           unit,
           matchedSupplierId,
@@ -1505,6 +1617,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
 
         const emailMetaBySupplier = new Map<string, { email?: string; phone?: string; customer_number?: string }>()
         const skuByProductName = new Map<string, string>()
+        const priceByProductName = new Map<string, number>()
 
         for (const row of (recentEmails || [])) {
           const ed = row.extracted_data as any
@@ -1518,8 +1631,15 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             emailMetaBySupplier.set(sName, prev)
           }
           for (const it of (ed.items || [])) {
-            if (it?.product_name && it?.sku) {
-              skuByProductName.set(String(it.product_name).trim().toLowerCase(), String(it.sku).trim())
+            if (it?.product_name) {
+              const pKey = String(it.product_name).trim().toLowerCase()
+              if (it?.sku && !skuByProductName.has(pKey)) {
+                skuByProductName.set(pKey, String(it.sku).trim())
+              }
+              const unitP = Number(it?.unit_price || it?.price || 0)
+              if (unitP > 0 && !priceByProductName.has(pKey)) {
+                priceByProductName.set(pKey, unitP)
+              }
             }
           }
         }
@@ -1547,13 +1667,43 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             const query = `${item.name} ${item.productNumber || ''} ${webshopDomain}`.trim()
             const bingRes = await searchBingProductMeta(query, webshopDomain)
             const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
-            const mailSku = skuByProductName.get(String(item.name || '').trim().toLowerCase()) || ''
+            const lowerProdName = String(item.name || '').trim().toLowerCase()
+            const mailSku = skuByProductName.get(lowerProdName) || ''
+            const mailPrice = priceByProductName.get(lowerProdName) || null
+            const knownPrice = (item.price && Number(item.price) > 0) ? Number(item.price) : mailPrice
 
             // Nur dann eine Bestell-URL vorschlagen, wenn sie wirklich von der Webshop-Domain des Lieferanten stammt!
             let suggestedOrderUrl = item.orderUrl || ''
             if (!suggestedOrderUrl && webshopDomain && bingRes.orderUrl) {
               suggestedOrderUrl = bingRes.orderUrl
             }
+
+            // Wenn eine Shop-URL vorliegt, versuche schnell den Preis auf der Zielseite zu prüfen
+            let shopPrice: number | null = null
+            if (suggestedOrderUrl) {
+              const ctrl = new AbortController()
+              const t = setTimeout(() => ctrl.abort(), 2800)
+              try {
+                const r = await fetch(suggestedOrderUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept-Language': 'de-DE,de;q=0.9'
+                  },
+                  signal: ctrl.signal
+                })
+                if (r.ok) {
+                  const html = await r.text()
+                  shopPrice = extractPriceFromHtml(html)
+                }
+              } catch {} finally {
+                clearTimeout(t)
+              }
+            }
+
+            const priceCheck = evaluatePricePlausibility(shopPrice, knownPrice)
+            const suggestedPrice = (!item.price || Number(item.price) === 0)
+              ? (shopPrice || mailPrice || 0)
+              : Number(item.price)
 
             return {
               id: item.id,
@@ -1562,6 +1712,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               alternatives: bingRes.alternatives || [],
               orderUrl: suggestedOrderUrl,
               productNumber: item.productNumber || mailSku || '',
+              price: suggestedPrice,
+              priceCheck,
               category,
               unit
             }

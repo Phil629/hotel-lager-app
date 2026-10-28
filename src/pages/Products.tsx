@@ -30,6 +30,7 @@ export const Products: React.FC = () => {
     const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
     const [isExtractingUrlMeta, setIsExtractingUrlMeta] = useState(false);
     const [urlMetaAlternatives, setUrlMetaAlternatives] = useState<string[]>([]);
+    const [urlPriceCheck, setUrlPriceCheck] = useState<{ status: string; message: string } | null>(null);
     const [activeModalTab, setActiveModalTab] = useState<'basic' | 'inventory' | 'order' | 'analytics'>('basic');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -377,12 +378,16 @@ export const Products: React.FC = () => {
                     url: normalizedUrl,
                     productName: newProduct.name || '',
                     supplierName: sup?.name || '',
+                    knownPrice: newProduct.price || 0,
                 }
             });
             if (error || !data?.success) return;
             const meta = data;
             if (Array.isArray(meta.alternatives) && meta.alternatives.length > 0) {
                 setUrlMetaAlternatives(meta.alternatives);
+            }
+            if (meta.priceCheck?.message) {
+                setUrlPriceCheck(meta.priceCheck);
             }
             setNewProduct(prev => {
                 const updated = { ...prev, orderUrl: prev.orderUrl || meta.orderUrl || normalizedUrl };
@@ -1856,7 +1861,21 @@ export const Products: React.FC = () => {
                                                         />
                                                         {isExtractingUrlMeta && (
                                                             <div style={{ marginTop: '6px', fontSize: '11px', color: '#4f46e5', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                                <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Lade Produktbild & Artikeldaten vom Shop-Link...
+                                                                <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Lade Produktbild & Preis-Check vom Shop-Link...
+                                                            </div>
+                                                        )}
+                                                        {!isExtractingUrlMeta && urlPriceCheck?.message && (
+                                                            <div style={{
+                                                                marginTop: '6px',
+                                                                padding: '5px 8px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: 600,
+                                                                backgroundColor: urlPriceCheck.status === 'warning' ? '#fffbeb' : urlPriceCheck.status === 'ok' ? '#f0fdf4' : '#f5f3ff',
+                                                                border: urlPriceCheck.status === 'warning' ? '1px solid #fcd34d' : urlPriceCheck.status === 'ok' ? '1px solid #bbf7d0' : '1px solid #ddd6fe',
+                                                                color: urlPriceCheck.status === 'warning' ? '#b45309' : urlPriceCheck.status === 'ok' ? '#15803d' : '#6d28d9'
+                                                            }}>
+                                                                {urlPriceCheck.message}
                                                             </div>
                                                         )}
                                                     </div>

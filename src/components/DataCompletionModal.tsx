@@ -50,6 +50,13 @@ interface ProductDraft {
         productNumber?: boolean;
         category?: boolean;
         unit?: boolean;
+        price?: boolean;
+    };
+    priceCheck?: {
+        status: 'ok' | 'warning' | 'new_price' | 'none';
+        shopPrice: number | null;
+        knownPrice: number | null;
+        message: string;
     };
 }
 
@@ -267,7 +274,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     }, [supplierPage, filteredSuppliers.length, showCompleted]);
 
     // Zurücksetzen eines einzelnen Produkts auf den Originalzustand (falls KI falsch lag)
-    const revertProductDraft = (productId: string, field?: 'image' | 'orderUrl' | 'productNumber' | 'category') => {
+    const revertProductDraft = (productId: string, field?: 'image' | 'orderUrl' | 'productNumber' | 'category' | 'price') => {
         const orig = products.find(p => p.id === productId);
         if (!orig) return;
         setProductDrafts(prev => {
@@ -289,7 +296,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         preferredOrderMethod: orig.preferredOrderMethod,
                         alternatives: orig.image ? [orig.image] : [],
                         aiSuggested: false,
-                        aiFields: {}
+                        aiFields: {},
+                        priceCheck: undefined
                     }
                 };
             }
@@ -299,9 +307,10 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 ...prev,
                 [productId]: {
                     ...cur,
-                    [field]: (orig as any)[field] || (field === 'category' ? 'Sonstiges' : ''),
+                    [field]: (orig as any)[field] || (field === 'category' ? 'Sonstiges' : field === 'price' ? 0 : ''),
                     aiFields: nextAiFields,
-                    aiSuggested: anyAiLeft
+                    aiSuggested: anyAiLeft,
+                    priceCheck: field === 'orderUrl' ? undefined : cur.priceCheck
                 }
             };
         });
@@ -341,6 +350,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         type: 'product',
                         name: d?.name || p.name,
                         productNumber: d?.productNumber || p.productNumber || '',
+                        price: d?.price ?? p.price ?? 0,
                         category: d?.category || p.category || '',
                         unit: d?.unit || p.unit || '',
                         image: d?.image || '',
@@ -370,6 +380,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         const newImage = !cur.image && s.image ? s.image : cur.image;
                         const newOrderUrl = allowShopLink && !cur.orderUrl && s.orderUrl ? s.orderUrl : cur.orderUrl;
                         const newProdNum = !cur.productNumber && s.productNumber ? s.productNumber : cur.productNumber;
+                        const newPrice = (!cur.price || Number(cur.price) === 0) && s.price && Number(s.price) > 0 ? Number(s.price) : cur.price;
                         const newCat = (!cur.category || cur.category === 'Sonstiges' || cur.category === 'Ohne Kategorie') && s.category && s.category !== 'Sonstiges'
                             ? s.category
                             : cur.category;
@@ -379,6 +390,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             image: !cur.image && !!s.image ? true : cur.aiFields?.image,
                             orderUrl: allowShopLink && !cur.orderUrl && !!s.orderUrl ? true : cur.aiFields?.orderUrl,
                             productNumber: !cur.productNumber && !!s.productNumber ? true : cur.aiFields?.productNumber,
+                            price: (!cur.price || Number(cur.price) === 0) && !!s.price && Number(s.price) > 0 ? true : cur.aiFields?.price,
                             category: (!cur.category || cur.category === 'Sonstiges' || cur.category === 'Ohne Kategorie') && !!s.category && s.category !== 'Sonstiges' ? true : cur.aiFields?.category,
                         };
 
@@ -387,6 +399,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             image: newImage,
                             orderUrl: newOrderUrl,
                             productNumber: newProdNum,
+                            price: newPrice,
+                            priceCheck: s.priceCheck || cur.priceCheck,
                             category: newCat,
                             alternatives: Array.isArray(s.alternatives) && s.alternatives.length > 0 ? s.alternatives : cur.alternatives,
                             aiFields,
@@ -466,7 +480,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     action: 'extract_url_metadata',
                     url: rawUrl.trim(),
                     productName: d.name,
-                    supplierName: sup?.name || ''
+                    supplierName: sup?.name || '',
+                    knownPrice: d.price || 0
                 }
             });
 
@@ -478,6 +493,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         ...(cur.aiFields || {}),
                         image: !!data.image ? true : cur.aiFields?.image,
                         productNumber: !cur.productNumber && !!data.sku ? true : cur.aiFields?.productNumber,
+                        price: (!cur.price || cur.price === 0) && !!data.price ? true : cur.aiFields?.price,
                         category: (!cur.category || cur.category === 'Sonstiges') && !!data.category && data.category !== 'Sonstiges' ? true : cur.aiFields?.category,
                     };
                     return {
@@ -488,6 +504,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             image: data.image || cur.image,
                             productNumber: cur.productNumber || data.sku || '',
                             price: (!cur.price || cur.price === 0) && data.price ? data.price : cur.price,
+                            priceCheck: data.priceCheck || cur.priceCheck,
                             supplierId: cur.supplierId || data.matchedSupplierId || '',
                             category: (!cur.category || cur.category === 'Sonstiges') && data.category ? data.category : cur.category,
                             alternatives: Array.isArray(data.alternatives) && data.alternatives.length > 0 ? data.alternatives : cur.alternatives,
@@ -1005,6 +1022,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                 }
                                 if (d.aiFields?.category && d.category) aiSummaryParts.push(`Kategorie → „${d.category}“`);
                                 if (d.aiFields?.productNumber && d.productNumber) aiSummaryParts.push(`Artikelnr. → „${d.productNumber}“`);
+                                if (d.aiFields?.price && d.price) aiSummaryParts.push(`Preis → ${Number(d.price).toFixed(2).replace('.', ',')} €`);
 
                                 // Was fehlt diesem Produkt aktuell noch?
                                 const missingParts: string[] = [];
@@ -1384,6 +1402,43 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                             }}
                                                         />
                                                     </div>
+
+                                                    {/* Preis (€) */}
+                                                    <div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                                                            <label style={{ fontSize: '11px', fontWeight: 600, color: d.aiFields?.price ? '#6d28d9' : '#64748b' }}>
+                                                                Einzelpreis (€) {d.aiFields?.price && '✨ KI'}
+                                                            </label>
+                                                            {d.aiFields?.price && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => revertProductDraft(p.id, 'price')}
+                                                                    style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: '#6d28d9', cursor: 'pointer', textDecoration: 'underline' }}
+                                                                >
+                                                                    ↩ Zurück
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            placeholder="0.00"
+                                                            value={d.price || ''}
+                                                            onChange={e => setProductDrafts(prev => ({
+                                                                ...prev,
+                                                                [p.id]: { ...prev[p.id], price: parseFloat(e.target.value) || 0 }
+                                                            }))}
+                                                            className="input-field"
+                                                            style={{
+                                                                width: '100%',
+                                                                padding: '6px 10px',
+                                                                fontSize: '12px',
+                                                                borderColor: d.aiFields?.price ? '#8b5cf6' : undefined,
+                                                                backgroundColor: d.aiFields?.price ? '#f5f3ff' : undefined
+                                                            }}
+                                                        />
+                                                    </div>
                                                 </div>
 
                                                 {/* Zeile 3: Bestellweg / Shop-Link (intelligent je nach Lieferant!) */}
@@ -1484,6 +1539,54 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                                 </>
                                                             )}
                                                         </div>
+                                                        {d.priceCheck?.message && (
+                                                            <div style={{
+                                                                marginTop: '6px',
+                                                                padding: '5px 10px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: 600,
+                                                                backgroundColor: d.priceCheck.status === 'warning'
+                                                                    ? '#fffbeb'
+                                                                    : d.priceCheck.status === 'ok'
+                                                                        ? '#f0fdf4'
+                                                                        : '#f5f3ff',
+                                                                border: d.priceCheck.status === 'warning'
+                                                                    ? '1px solid #fcd34d'
+                                                                    : d.priceCheck.status === 'ok'
+                                                                        ? '1px solid #bbf7d0'
+                                                                        : '1px solid #ddd6fe',
+                                                                color: d.priceCheck.status === 'warning'
+                                                                    ? '#b45309'
+                                                                    : d.priceCheck.status === 'ok'
+                                                                        ? '#15803d'
+                                                                        : '#6d28d9',
+                                                                display: 'flex',
+                                                                justifyContent: 'space-between',
+                                                                alignItems: 'center',
+                                                                gap: '8px'
+                                                            }}>
+                                                                <span>{d.priceCheck.message}</span>
+                                                                {d.priceCheck.status === 'warning' && d.orderUrl && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => revertProductDraft(p.id, 'orderUrl')}
+                                                                        style={{
+                                                                            background: '#ffffff',
+                                                                            border: '1px solid #f59e0b',
+                                                                            borderRadius: '4px',
+                                                                            padding: '2px 8px',
+                                                                            fontSize: '10px',
+                                                                            fontWeight: 700,
+                                                                            color: '#b45309',
+                                                                            cursor: 'pointer'
+                                                                        }}
+                                                                    >
+                                                                        ✕ Link verwerfen
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <div style={{
