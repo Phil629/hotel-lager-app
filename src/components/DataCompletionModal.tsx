@@ -216,10 +216,10 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     const isSupplierWebshop = (sup?: Supplier | null, prod?: Product | ProductDraft | null): boolean => {
         if (isEmailOnlySupplier(sup)) return false;
         if (prod?.preferredOrderMethod === 'webshop' || prod?.preferredOrderMethod === 'link') return true;
-        if (prod?.orderUrl && prod.orderUrl.trim()) return true;
+        if (isDeepProductUrl(prod?.orderUrl)) return true;
         if (!sup) return false;
         if (sup.preferredOrderMethod === 'webshop' || sup.preferredOrderMethod === 'link') return true;
-        if (sup.orderUrl && sup.orderUrl.trim()) return true;
+        if (isDeepProductUrl(sup.orderUrl)) return true;
         const lowerName = (sup.name || '').toLowerCase();
         if (KNOWN_WEBSHOP_KEYWORDS.some(k => lowerName.includes(k))) return true;
         const lowerUrl = (sup.url || '').toLowerCase();
@@ -227,12 +227,23 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         return false;
     };
 
+    const isDeepProductUrl = (url?: string): boolean => {
+        if (!url || !url.trim()) return false;
+        try {
+            const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+            const cleanPath = u.pathname.replace(/^\/(de|en)?\/?$/i, '').trim();
+            return cleanPath.length > 1;
+        } catch {
+            return false;
+        }
+    };
+
     const isProductNaturallyComplete = (p: Product): boolean => {
         const hasImage = !!(p.image && p.image.trim());
         const hasSupplier = !!p.supplierId;
         const sup = suppliers.find(s => s.id === p.supplierId);
         const needsShopLink = isSupplierWebshop(sup, p);
-        const hasOrderLinkOrEmailMethod = !needsShopLink || !!(p.orderUrl && p.orderUrl.trim());
+        const hasOrderLinkOrEmailMethod = !needsShopLink || isDeepProductUrl(p.orderUrl);
         const hasCategory = !!(p.category && p.category !== 'Sonstiges' && p.category !== 'Ohne Kategorie');
         return hasImage && hasSupplier && hasOrderLinkOrEmailMethod && hasCategory;
     };
@@ -312,6 +323,13 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     useEffect(() => {
         onCountsChange?.({ openProducts: openProductsCount, openSuppliers: openSuppliersCount });
     }, [openProductsCount, openSuppliersCount]);
+
+    const availableCategories = useMemo(() => {
+        const set = new Set([...STANDARD_CATEGORIES]);
+        products.forEach(p => { if (p.category) set.add(p.category); });
+        suppliers.forEach(s => { if (s.defaultCategory) set.add(s.defaultCategory); });
+        return Array.from(set).filter(Boolean);
+    }, [products, suppliers]);
 
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
@@ -469,7 +487,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         const newCat = (!cur.category || cur.category === 'Sonstiges' || cur.category === 'Ohne Kategorie') && s.category && s.category !== 'Sonstiges'
                             ? s.category
                             : cur.category;
-                        const newUnit = (!cur.unit || cur.unit === 'Stück') && s.unit && s.unit !== cur.unit
+                        const newUnit = (!cur.unit || cur.unit === 'Stück' || cur.unit === 'Stk') && s.unit && s.unit !== cur.unit
                             ? s.unit
                             : cur.unit;
 
@@ -1343,7 +1361,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                         className="input-field"
                                                         style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
                                                     >
-                                                        {STANDARD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                        {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
                                                     </select>
                                                 </div>
                                                 <div>
@@ -1918,7 +1936,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                         className="input-field"
                                                         style={{ padding: '6px 8px', fontSize: '12px' }}
                                                     >
-                                                        {STANDARD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                        {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
                                                     </select>
                                                     <input
                                                         type="url"

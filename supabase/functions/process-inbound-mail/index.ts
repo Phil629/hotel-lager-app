@@ -1207,6 +1207,10 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         // 1. Großhandels-Zusätze wie "Kl.I CR", "Kl. I", "HKL A", "1 Stück" am Ende bereinigen
         s = s
           .replace(/\bKl\.?\s*(?:I{1,3}|1|2)\b(?:\s+[A-Z]{2,3})?/gi, '')
+          .replace(/\b(?:HKL|Handelsklasse)\s*[A-Z1-3]+\b/gi, '')
+          .replace(/\s+\b(?:CR|ES|IT|NL|FR|BE|GR|PL|TR|MA|PE|CL|ZA|BR|EC|WS)\b$/g, '')
+          .replace(/[-–\s]*Kt:\s*\d+\s*St\.?[-–\s]*/gi, ' ')
+          .replace(/\b1\s+(?:Stück|Stk\.?|Karton|Kasten|Packung|Pack|Beutel|Flasche|Rolle|Kanister)\b/gi, '')
           .replace(/\bStück\s+(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
           .replace(/\b(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
 
@@ -1347,14 +1351,21 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         const lower = (name || '').toLowerCase()
         let category = currentCat && currentCat !== 'Sonstiges' && currentCat !== 'Ohne Kategorie' ? currentCat : ''
         if (!category) {
-          if (/\b(pils|bier|cola|saft|schorle|wasser|sprudel|bionade|orangina|milch|kaffee|tee|teavelope|espresso|wein|sekt|zäpfle|getränk|flasche)\b/i.test(lower)) {
-            category = 'Getränke'
-          } else if (/\b(reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|toilettenpapier|kosmetiktücher|seife|shampoo|desinfektion|schwamm|entkalker|schaben|kakerlaken|mülleimer|handschuhe)\b/i.test(lower)) {
-            category = 'Reinigung'
-          } else if (/\b(papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|batterie|ordner|etiketten|rfid|briefumschlag|büro)\b/i.test(lower)) {
-            category = 'Bürobedarf'
-          } else if (/\b(käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre)\b/i.test(lower)) {
+          // 0. Handwerk / Instandhaltung / Technik
+          if (/(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|kühlschrank|türfach|filter|lampe|leuchtmittel|led|batterie)/i.test(lower)) {
+            category = 'Instandhaltung'
+          } else if (/(?:melone|käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre)/i.test(lower)) {
+            // 1. Lebensmittel (z.B. Melone "Wasser" vor Getränke prüfen)
             category = 'Lebensmittel'
+          } else if (/(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|toilettenpapier|kosmetiktücher|seife|shampoo|desinfektion|schwamm|entkalker|schaben|kakerlaken|ungeziefer|mülleimer|handschuhe)/i.test(lower)) {
+            // 2. Reinigung (erkennt auch Komposita wie Glasreiniger, Sanitärreiniger, Essigreiniger)
+            category = 'Reinigung'
+          } else if (/(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|milch|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk)/i.test(lower)) {
+            // 3. Getränke (wasser nur als eigenständiges Wort, nicht in wasserresistent)
+            category = 'Getränke'
+          } else if (/(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro)/i.test(lower)) {
+            // 4. Bürobedarf
+            category = 'Bürobedarf'
           }
         }
 
@@ -1363,8 +1374,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           if (/\b(\d+\s*x\s*\d+[,\.]?\d*\s*l|kasten|kiste)\b/i.test(lower)) unit = 'Kasten'
           else if (/\b(karton|kt:|paket|pakete)\b/i.test(lower)) unit = 'Karton'
           else if (/\b(rolle|rollen)\b/i.test(lower)) unit = 'Rolle'
-          else if (/\b(kanister|5\s*l|10\s*l)\b/i.test(lower)) unit = 'Kanister'
-          else if (/\b(flasche|1\s*l|500\s*ml|750\s*ml)\b/i.test(lower)) unit = 'Flasche'
+          else if (/\bkanister\b|(?<![\d,\.])(?:5|10)\s*l\b/i.test(lower)) unit = 'Kanister'
+          else if (/\bflasche\b|(?<![\d,\.])(?:1\s*l|500\s*ml|750\s*ml)\b/i.test(lower)) unit = 'Flasche'
           else if (/\b(pack|packung|beutel)\b/i.test(lower)) unit = 'Packung'
         }
         return { category: category || currentCat || 'Sonstiges', unit }
@@ -1529,9 +1540,19 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i)
             if (ogImgMatch?.[1]) {
               try {
-                extractedImage = new URL(ogImgMatch[1].replace(/&amp;/g, '&'), normalizedUrl).href
-                candidateImages.push(extractedImage)
+                const cand = new URL(ogImgMatch[1].replace(/&amp;/g, '&'), normalizedUrl).href
+                if (!/manifest|favicon|icon[-_.]|apple-touch|logo/i.test(cand)) {
+                  extractedImage = cand
+                  candidateImages.push(cand)
+                }
               } catch {}
+            }
+
+            // Fallback für Reinigungsberater CDN
+            const rbCdnMatch = html.match(/src=["'](https:\/\/cdn\.reinigungsberater\.de\/products\/[^"']+)["']/i)
+            if (rbCdnMatch?.[1]) {
+              extractedImage = extractedImage || rbCdnMatch[1]
+              if (!candidateImages.includes(rbCdnMatch[1])) candidateImages.push(rbCdnMatch[1])
             }
 
             // Amazon-spezifisches Produktbild
@@ -1641,11 +1662,16 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         const { category, unit } = inferCategoryAndUnit(productNameHint || extractedTitle)
         const priceCheck = evaluatePricePlausibility(extractedPrice, knownPriceHint)
 
+        const filteredCandidates = candidateImages.filter(img => img && !/manifest|favicon|icon[-_.]|apple-touch|logo/i.test(img))
+        if (extractedImage && !filteredCandidates.includes(extractedImage)) {
+          filteredCandidates.unshift(extractedImage)
+        }
+
         return new Response(JSON.stringify({
           success: true,
           orderUrl: normalizedUrl,
-          image: extractedImage || null,
-          alternatives: candidateImages.slice(0, 4),
+          image: extractedImage || filteredCandidates[0] || null,
+          alternatives: filteredCandidates.slice(0, 4),
           title: extractedTitle || null,
           sku: extractedSku || null,
           price: extractedPrice,
@@ -1859,7 +1885,11 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
                 })
                 if (r.ok && r.url && /-p-[A-Za-z0-9_-]+/i.test(r.url)) {
                   const html = await r.text()
-                  const ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
+                  let ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
+                  if (!ogImg || /manifest|favicon|icon[-_.]|apple-touch|logo/i.test(ogImg)) {
+                    const cdnImg = html.match(/src=["'](https:\/\/cdn\.reinigungsberater\.de\/products\/[^"']+)["']/i)?.[1]
+                    ogImg = cdnImg || ''
+                  }
                   const sp = extractPriceFromHtml(html)
                   return { orderUrl: r.url, image: ogImg, shopPrice: sp }
                 }
@@ -1905,7 +1935,24 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
 
           // 2. Amazon ASIN Direkt-Link
           if (webshopDomain === 'amazon.de' && sku && /^B0[A-Z0-9]{8}$/i.test(sku)) {
-            return { orderUrl: `https://www.amazon.de/dp/${sku.toUpperCase()}`, image: '', shopPrice: null }
+            const amzUrl = `https://www.amazon.de/dp/${sku.toUpperCase()}`
+            let amzImg = ''
+            try {
+              const ctrl = new AbortController()
+              const t = setTimeout(() => ctrl.abort(), 2400)
+              const r = await fetch(amzUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
+                signal: ctrl.signal
+              })
+              clearTimeout(t)
+              if (r.ok) {
+                const html = await r.text()
+                const m = html.match(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
+                  html.match(/src=["'](https:\/\/m\.media-amazon\.com\/images\/I\/[^"']+)["']/i)
+                if (m?.[1]) amzImg = m[1]
+              }
+            } catch {}
+            return { orderUrl: amzUrl, image: amzImg, shopPrice: null }
           }
 
           // 3. Gezielte site:-Suche über Bing mit bereinigtem Kern-Produktnamen + Artikelnummer
@@ -2042,8 +2089,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
 
             const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
 
-            // Wenn eine Shop-URL vorliegt und der Preis noch nicht beim Direkt-Check geladen wurde, versuche den Preis auf der Zielseite zu prüfen
-            if (suggestedOrderUrl && !shopPrice) {
+            // Wenn eine Shop-URL vorliegt, versuche den Preis sowie Bild & Artikelnummer direkt von der Zielseite zu laden
+            if (suggestedOrderUrl) {
               const ctrl = new AbortController()
               const t = setTimeout(() => ctrl.abort(), 2800)
               try {
@@ -2056,7 +2103,23 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
                 })
                 if (r.ok) {
                   const html = await r.text()
-                  shopPrice = extractPriceFromHtml(html)
+                  if (!shopPrice) shopPrice = extractPriceFromHtml(html)
+                  if (!directImage && !item.image) {
+                    let ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
+                    if (ogImg && !/manifest|favicon|icon[-_.]|apple-touch|logo/i.test(ogImg)) {
+                      directImage = ogImg
+                    } else {
+                      const cdnImg = html.match(/src=["'](https:\/\/cdn\.reinigungsberater\.de\/products\/[^"']+)["']/i)?.[1]
+                      const amzImg = html.match(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i)?.[1]
+                      if (cdnImg) directImage = cdnImg
+                      else if (amzImg) directImage = amzImg
+                    }
+                  }
+                  if (!effectiveSku) {
+                    const skuFromUrl = suggestedOrderUrl.match(/,p-([a-zA-Z0-9_-]+)\.html/i)?.[1] ||
+                      suggestedOrderUrl.match(/\/dp\/([A-Z0-9]{10})/i)?.[1]
+                    if (skuFromUrl) effectiveSku = skuFromUrl
+                  }
                 }
               } catch {} finally {
                 clearTimeout(t)

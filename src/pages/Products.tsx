@@ -733,6 +733,16 @@ export const Products: React.FC = () => {
         // setIsEmailSectionOpen(false); // Removed
         setIsCustomCategoryMode(false);
         setActiveModalTab('basic');
+        setUrlMetaAlternatives([]);
+        setUrlPriceCheck(null);
+    };
+
+    const startEditProduct = (product: Product) => {
+        setEditingId(product.id);
+        setNewProduct(product);
+        setUrlMetaAlternatives(product.image ? [product.image] : []);
+        setUrlPriceCheck(null);
+        setIsModalOpen(true);
     };
 
     const getIoTLink = (product: Product) => {
@@ -1226,7 +1236,7 @@ export const Products: React.FC = () => {
                                                                 )}
                                                             </div>
                                                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-                                                                <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
+                                                                <button onClick={() => startEditProduct(product)} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
                                                                     <Edit2 size={16} /> Edit
                                                                 </button>
                                                                 <button onClick={() => handleDeleteClick(product.id)} style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1364,7 +1374,7 @@ export const Products: React.FC = () => {
                                                                     <td style={{ textAlign: 'right' }}>
                                                                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
                                                                             <button onClick={() => { const links = getIoTLink(product); if (links) { setShowIoTLink(links); } }} className="btn btn-ghost btn-icon" title="IoT Setup / QR"><Wifi size={15} /></button>
-                                                                            <button onClick={() => { setEditingId(product.id); setNewProduct(product); setIsModalOpen(true); }} className="btn btn-ghost btn-icon" title="Bearbeiten"><Edit2 size={15} /></button>
+                                                                            <button onClick={() => startEditProduct(product)} className="btn btn-ghost btn-icon" title="Bearbeiten"><Edit2 size={15} /></button>
                                                                             <button onClick={() => handleDeleteClick(product.id)} className="btn btn-ghost btn-icon" style={{ color: '#ef4444' }} title="Löschen"><Trash2 size={15} /></button>
                                                                         </div>
                                                                     </td>
