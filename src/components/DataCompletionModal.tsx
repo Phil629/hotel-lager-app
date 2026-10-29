@@ -50,6 +50,7 @@ interface ProductDraft {
         image?: boolean;
         orderUrl?: boolean;
         productNumber?: boolean;
+        supplierId?: boolean;
         category?: boolean;
         unit?: boolean;
         price?: boolean;
@@ -219,7 +220,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         const hasValidEmail = !!(s.email && s.email.trim() && s.email !== 'hello@unbekannt.com');
         const hasUrl = !!((s.url && s.url.trim()) || (s.orderUrl && s.orderUrl.trim()));
         const hasPhone = !!(s.phone && s.phone.trim());
-        return hasValidEmail && hasUrl && hasPhone;
+        if (s.preferredOrderMethod === 'phone') return hasPhone;
+        return hasValidEmail && hasUrl;
     };
 
     const initDraftsAndState = async () => {
@@ -362,15 +364,16 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
 
     // Hauptaktion: Klick auf den riesigen Button "KI Daten ergänzen lassen"
     // Lädt die KI-Vorschläge und öffnet automatisch das Prüffenster ('review')!
-    const startAiCompletionAndOpenReview = async () => {
+    const startAiCompletionAndOpenReview = async (excludeIds?: Set<string>) => {
         if (!supabase || aiLoading) return;
         setAiLoading(true);
         setError(null);
         try {
             if (activeTab === 'products') {
-                const targetBatch = pagedOverviewProducts.length > 0
-                    ? pagedOverviewProducts
-                    : filteredProducts.slice(0, BATCH_SIZE);
+                const availableProducts = excludeIds
+                    ? filteredProducts.filter(p => !excludeIds.has(p.id))
+                    : (pagedOverviewProducts.length > 0 ? pagedOverviewProducts : filteredProducts);
+                const targetBatch = availableProducts.slice(0, BATCH_SIZE);
                 if (targetBatch.length === 0) return;
 
                 const itemsPayload = targetBatch.map(p => {
@@ -382,6 +385,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         type: 'product',
                         name: d?.name || p.name,
                         productNumber: d?.productNumber || p.productNumber || '',
+                        supplierId: d?.supplierId || p.supplierId || '',
                         price: d?.price ?? p.price ?? 0,
                         minStock: d?.minStock ?? p.minStock ?? 0,
                         standardOrderQuantity: d?.standardOrderQuantity ?? p.standardOrderQuantity ?? 0,
@@ -411,7 +415,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     for (const s of suggestions) {
                         const cur = next[s.id];
                         if (!cur) continue;
-                        const sup = suppliers.find(supItem => supItem.id === cur.supplierId);
+                        const newSupplierId = !cur.supplierId && s.supplierId ? s.supplierId : cur.supplierId;
+                        const sup = suppliers.find(supItem => supItem.id === newSupplierId);
                         const allowShopLink = !isEmailOnlySupplier(sup);
 
                         const newName = s.cleanName && s.cleanName !== cur.name ? s.cleanName : cur.name;
@@ -441,6 +446,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             image: !cur.image && !!s.image ? true : cur.aiFields?.image,
                             orderUrl: allowShopLink && !cur.orderUrl && !!s.orderUrl ? true : cur.aiFields?.orderUrl,
                             productNumber: !cur.productNumber && !!s.productNumber ? true : cur.aiFields?.productNumber,
+                            supplierId: !cur.supplierId && !!s.supplierId ? true : cur.aiFields?.supplierId,
                             price: (!cur.price || Number(cur.price) === 0) && !!s.price && Number(s.price) > 0 ? true : cur.aiFields?.price,
                             minStock: (!cur.minStock || Number(cur.minStock) === 0) && !!s.minStock && Number(s.minStock) > 0 ? true : cur.aiFields?.minStock,
                             standardOrderQuantity: (!cur.standardOrderQuantity || Number(cur.standardOrderQuantity) === 0) && !!s.standardOrderQuantity && Number(s.standardOrderQuantity) > 0 ? true : cur.aiFields?.standardOrderQuantity,
@@ -455,6 +461,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             image: newImage,
                             orderUrl: newOrderUrl,
                             productNumber: newProdNum,
+                            supplierId: newSupplierId,
                             price: newPrice,
                             minStock: newMinStock,
                             standardOrderQuantity: newStdQty,
@@ -474,9 +481,10 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 setSelectedReviewIds(new Set(batchIds));
                 setViewMode('review');
             } else {
-                const targetBatch = pagedOverviewSuppliers.length > 0
-                    ? pagedOverviewSuppliers
-                    : filteredSuppliers.slice(0, BATCH_SIZE);
+                const availableSuppliers = excludeIds
+                    ? filteredSuppliers.filter(s => !excludeIds.has(s.id))
+                    : (pagedOverviewSuppliers.length > 0 ? pagedOverviewSuppliers : filteredSuppliers);
+                const targetBatch = availableSuppliers.slice(0, BATCH_SIZE);
                 if (targetBatch.length === 0) return;
 
                 const itemsPayload = targetBatch.map(s => {
@@ -693,7 +701,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         }
     };
 
-    const handleDeleteProductImage = async (productId: string) => {
+    const handleDeleteProductImage = async (productId: string, persistImmediately = false) => {
         const cur = productDrafts[productId];
         if (!cur) return;
         const removedUrl = cur.image;
@@ -714,7 +722,9 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             };
         });
 
-        if (!supabase) return;
+        // Im Prüffenster ('review') wird erst beim Abhaken / Übernehmen gespeichert,
+        // damit man mit "Zurücksetzen" jederzeit zum Originalbild zurückkehren kann.
+        if (!persistImmediately || !supabase) return;
         try {
             await supabase.functions.invoke('process-inbound-mail', {
                 body: {
@@ -782,7 +792,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         }
     };
 
-    const handleBulkAcceptReview = async () => {
+    const handleBulkAcceptReview = async (continueNextBatch = false) => {
         setSavingBulk(true);
         setError(null);
         try {
@@ -791,9 +801,23 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             if (activeTab === 'products') {
                 await saveProductRows(ids, true);
                 onSaved(`${ids.length} ${ids.length === 1 ? 'Produkt' : 'Produkte'} übernommen & als erledigt abgehakt!`);
+                const doneSet = new Set([...completedProductIds, ...ids]);
+                const remaining = filteredProducts.filter(p => !doneSet.has(p.id));
+                if (continueNextBatch && remaining.length > 0) {
+                    setSavingBulk(false);
+                    await startAiCompletionAndOpenReview(doneSet);
+                    return;
+                }
             } else {
                 await saveSupplierRows(ids, true);
                 onSaved(`${ids.length} ${ids.length === 1 ? 'Lieferant' : 'Lieferanten'} übernommen & als erledigt abgehakt!`);
+                const doneSet = new Set([...completedSupplierIds, ...ids]);
+                const remaining = filteredSuppliers.filter(s => !doneSet.has(s.id));
+                if (continueNextBatch && remaining.length > 0) {
+                    setSavingBulk(false);
+                    await startAiCompletionAndOpenReview(doneSet);
+                    return;
+                }
             }
             setViewMode('overview');
         } catch (err: any) {
@@ -1008,7 +1032,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                 {d.image && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleDeleteProductImage(p.id)}
+                                                        onClick={() => handleDeleteProductImage(p.id, false)}
                                                         style={{
                                                             padding: '2px 8px',
                                                             borderRadius: '6px',
@@ -1085,8 +1109,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                     </div>
                                                 )}
                                                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', fontSize: '12px', color: '#475569' }}>
-                                                    <span style={{ backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
-                                                        Lieferant: {sup?.name || 'Nicht zugeordnet'}
+                                                    <span style={{ backgroundColor: d.aiFields?.supplierId ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.supplierId ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                        Lieferant: {sup?.name || 'Nicht zugeordnet'} {d.aiFields?.supplierId && '✨'}
                                                     </span>
                                                     <span style={{ backgroundColor: d.aiFields?.category ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.category ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
                                                         Kategorie: {d.category} {d.aiFields?.category && '✨'}
@@ -1463,36 +1487,70 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             ← Zurück zur Übersicht
                         </button>
 
-                        <button
-                            type="button"
-                            onClick={handleBulkAcceptReview}
-                            disabled={savingBulk || selectedReviewIds.size === 0}
-                            style={{
-                                padding: '12px 24px',
-                                borderRadius: '10px',
-                                border: 'none',
-                                backgroundColor: '#16a34a',
-                                color: '#fff',
-                                fontWeight: 800,
-                                fontSize: '14px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)'
-                            }}
-                        >
-                            {savingBulk ? (
-                                <>
-                                    <Loader2 size={18} className="spin" /> Speichert...
-                                </>
-                            ) : (
-                                <>
-                                    <CheckCircle2 size={18} />
-                                    ✓ Alle ausgewählten übernehmen & abhaken ({selectedReviewIds.size})
-                                </>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            {((activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length) > reviewedIds.length) && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleBulkAcceptReview(true)}
+                                    disabled={savingBulk || aiLoading || selectedReviewIds.size === 0}
+                                    style={{
+                                        padding: '12px 20px',
+                                        borderRadius: '10px',
+                                        border: '1px solid #7c3aed',
+                                        backgroundColor: '#f5f3ff',
+                                        color: '#6d28d9',
+                                        fontWeight: 800,
+                                        fontSize: '13px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}
+                                >
+                                    {aiLoading ? (
+                                        <>
+                                            <Loader2 size={16} className="spin" /> Lädt nächste...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles size={16} />
+                                            ✓ Übernehmen & nächste mit KI prüfen →
+                                        </>
+                                    )}
+                                </button>
                             )}
-                        </button>
+
+                            <button
+                                type="button"
+                                onClick={() => handleBulkAcceptReview(false)}
+                                disabled={savingBulk || aiLoading || selectedReviewIds.size === 0}
+                                style={{
+                                    padding: '12px 24px',
+                                    borderRadius: '10px',
+                                    border: 'none',
+                                    backgroundColor: '#16a34a',
+                                    color: '#fff',
+                                    fontWeight: 800,
+                                    fontSize: '14px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)'
+                                }}
+                            >
+                                {savingBulk ? (
+                                    <>
+                                        <Loader2 size={18} className="spin" /> Speichert...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 size={18} />
+                                        ✓ Alle ausgewählten übernehmen & abhaken ({selectedReviewIds.size})
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1573,7 +1631,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 }}>
                     <button
                         type="button"
-                        onClick={startAiCompletionAndOpenReview}
+                        onClick={() => startAiCompletionAndOpenReview()}
                         disabled={aiLoading || (activeTab === 'products' ? filteredProducts.length === 0 : filteredSuppliers.length === 0)}
                         style={{
                             width: '100%',
@@ -1745,7 +1803,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                 {d.image && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleDeleteProductImage(p.id)}
+                                                        onClick={() => handleDeleteProductImage(p.id, true)}
                                                         style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', fontSize: '12px', cursor: 'pointer', color: '#dc2626', fontWeight: 600 }}
                                                     >
                                                         ✕ Bild löschen

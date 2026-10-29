@@ -1712,12 +1712,17 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         const skuByProductName = new Map<string, string>()
         const priceByProductName = new Map<string, number>()
         const quantitiesByProductName = new Map<string, number[]>()
+        const supplierNameByProductName = new Map<string, string>()
         const shopDomainBySupplierName = new Map<string, string>()
         const existingProductOrderUrlByName = new Map<string, string>()
 
         const supplierById = new Map<string, any>()
+        const supplierIdByLowerName = new Map<string, string>()
         for (const sup of (existingSuppliers || [])) {
           supplierById.set(sup.id, sup)
+          if (sup.name) {
+            supplierIdByLowerName.set(String(sup.name).trim().toLowerCase(), sup.id)
+          }
           const rawUrl = sup.order_url || sup.url || ''
           if (rawUrl) {
             try {
@@ -1725,6 +1730,31 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               if (host && sup.name) shopDomainBySupplierName.set(String(sup.name).trim().toLowerCase(), host)
             } catch {}
           }
+        }
+
+        const findMatchingSupplierId = (rawSupName?: string, domainHint?: string): string => {
+          if (rawSupName) {
+            const lower = rawSupName.trim().toLowerCase()
+            if (supplierIdByLowerName.has(lower)) return supplierIdByLowerName.get(lower)!
+            for (const sup of (existingSuppliers || [])) {
+              const sLow = String(sup.name || '').trim().toLowerCase()
+              if (sLow && (sLow.includes(lower) || lower.includes(sLow))) return sup.id
+            }
+          }
+          if (domainHint) {
+            const cleanDom = domainHint.replace(/^www\./i, '').toLowerCase()
+            const brand = cleanDom.split('.')[0]
+            for (const sup of (existingSuppliers || [])) {
+              const sDom = resolveSupplierDomainHint(sup.name, sup.url || sup.order_url, sup.email)
+              if (
+                (sDom && (cleanDom.includes(sDom) || sDom.includes(cleanDom))) ||
+                (brand.length >= 4 && String(sup.name || '').toLowerCase().includes(brand))
+              ) {
+                return sup.id
+              }
+            }
+          }
+          return ''
         }
 
         for (const prod of (existingProducts || [])) {
@@ -1746,11 +1776,18 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           }
         }
 
-        const recordQuantity = (rawName: string, qtyVal: any) => {
+        const recordQuantity = (rawName: string, qtyVal: any, supName?: string) => {
+          const k1 = String(rawName || '').trim().toLowerCase()
+          const k2 = cleanProductName(String(rawName || '')).toLowerCase()
+          if (supName && String(supName).trim()) {
+            for (const k of new Set([k1, k2])) {
+              if (k && !supplierNameByProductName.has(k)) {
+                supplierNameByProductName.set(k, String(supName).trim())
+              }
+            }
+          }
           const q = Math.round(Number(qtyVal || 0))
           if (!rawName || q <= 0 || q > 500) return
-          const k1 = String(rawName).trim().toLowerCase()
-          const k2 = cleanProductName(String(rawName)).toLowerCase()
           for (const k of new Set([k1, k2])) {
             if (!k) continue
             const arr = quantitiesByProductName.get(k) || []
@@ -1761,7 +1798,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
 
         for (const o of (recentOrders || [])) {
           if (o?.product_name) {
-            recordQuantity(o.product_name, o.quantity)
+            recordQuantity(o.product_name, o.quantity, o.supplier_name)
           }
         }
 
@@ -1790,7 +1827,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
                 if (!priceByProductName.has(pKey)) priceByProductName.set(pKey, unitP)
                 if (cKey && !priceByProductName.has(cKey)) priceByProductName.set(cKey, unitP)
               }
-              recordQuantity(it.product_name, it.quantity)
+              recordQuantity(it.product_name, it.quantity, ed.supplier_name || row.supplier_name)
             }
           }
         }
@@ -1900,7 +1937,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           if (item.type === 'supplier') {
             const lowerName = String(item.name || '').trim().toLowerCase()
             const fromMail = emailMetaBySupplier.get(lowerName) || {}
-            const effectiveEmail = (item.email && item.email !== 'hello@unbekannt.com') ? item.email : (fromMail.email || '')
+            let effectiveEmail = (item.email && item.email !== 'hello@unbekannt.com') ? item.email : (fromMail.email || '')
+            let effectivePhone = item.phone || fromMail.phone || ''
             const domHint = resolveSupplierDomainHint(item.name, item.url, effectiveEmail) || shopDomainBySupplierName.get(lowerName) || ''
             const suggestedUrl = item.url || (domHint ? (domHint.startsWith('shop.') || domHint.startsWith('cloud.') ? `https://${domHint}` : `https://www.${domHint.replace(/^www\./, '')}`) : '')
             const isEmailOnly = isEmailOnlyWholesaler(item.name, effectiveEmail)
@@ -1908,12 +1946,40 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               ? 'email'
               : (suggestedUrl || domHint ? 'webshop' : 'email')
 
+            // Falls Telefon oder E-Mail noch fehlen und eine Webseite bekannt ist, kurz nach tel: / mailto: auf der Seite schauen
+            if (suggestedUrl && (!effectivePhone || !effectiveEmail)) {
+              const ctrl = new AbortController()
+              const t = setTimeout(() => ctrl.abort(), 2400)
+              try {
+                const r = await fetch(suggestedUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept-Language': 'de-DE,de;q=0.9'
+                  },
+                  signal: ctrl.signal
+                })
+                if (r.ok) {
+                  const html = await r.text()
+                  if (!effectivePhone) {
+                    const telMatch = html.match(/href=["']tel:([+0-9\s()/.-]{7,22})["']/i)
+                    if (telMatch?.[1]) effectivePhone = telMatch[1].trim()
+                  }
+                  if (!effectiveEmail) {
+                    const mailMatch = html.match(/href=["']mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/i)
+                    if (mailMatch?.[1]) effectiveEmail = mailMatch[1].trim()
+                  }
+                }
+              } catch {} finally {
+                clearTimeout(t)
+              }
+            }
+
             return {
               id: item.id,
               type: 'supplier',
               url: suggestedUrl,
               email: effectiveEmail,
-              phone: item.phone || fromMail.phone || '',
+              phone: effectivePhone,
               customerNumber: item.customerNumber || fromMail.customer_number || '',
               preferredOrderMethod: item.preferredOrderMethod || suggestedOrderMethod
             }
@@ -1926,10 +1992,15 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             const mailPrice = priceByProductName.get(lowerProdName) || priceByProductName.get(lowerCleanName) || null
             const knownPrice = (item.price && Number(item.price) > 0) ? Number(item.price) : mailPrice
 
-            const isEmailWholesaler = isEmailOnlyWholesaler(item.supplierName, item.supplierEmail)
-            const lowerSupName = String(item.supplierName || '').trim().toLowerCase()
+            // Punkt 3: Falls dem Produkt noch kein Lieferant zugeordnet ist, aus vergangenen Bestellungen/Mails ermitteln
+            const historicalSupName = supplierNameByProductName.get(lowerProdName) || supplierNameByProductName.get(lowerCleanName) || ''
+            const effectiveSupName = item.supplierName || historicalSupName
+            let suggestedSupplierId = item.supplierId || (historicalSupName ? findMatchingSupplierId(historicalSupName) : '')
+
+            const isEmailWholesaler = isEmailOnlyWholesaler(effectiveSupName, item.supplierEmail)
+            const lowerSupName = String(effectiveSupName || '').trim().toLowerCase()
             const learnedSupDomain = !isEmailWholesaler && lowerSupName ? (shopDomainBySupplierName.get(lowerSupName) || '') : ''
-            const webshopDomain = resolveWebshopDomain(item.supplierName, item.supplierUrl || learnedSupDomain, item.isWebshopSupplier, item.supplierEmail) || learnedSupDomain
+            const webshopDomain = resolveWebshopDomain(effectiveSupName, item.supplierUrl || learnedSupDomain, item.isWebshopSupplier, item.supplierEmail) || learnedSupDomain
 
             // 1. Zuerst prüfen, ob genau dieses Produkt (oder die direkte Artikelnummer im Shop) schon einen Link hat
             let suggestedOrderUrl = item.orderUrl || existingProductOrderUrlByName.get(lowerProdName) || ''
@@ -1960,6 +2031,15 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               }
             }
 
+            if (!suggestedSupplierId && (suggestedOrderUrl || webshopDomain)) {
+              try {
+                const dom = suggestedOrderUrl
+                  ? new URL(suggestedOrderUrl.startsWith('http') ? suggestedOrderUrl : `https://${suggestedOrderUrl}`).hostname
+                  : webshopDomain
+                suggestedSupplierId = findMatchingSupplierId(effectiveSupName, dom)
+              } catch {}
+            }
+
             const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
 
             // Wenn eine Shop-URL vorliegt und der Preis noch nicht beim Direkt-Check geladen wurde, versuche den Preis auf der Zielseite zu prüfen
@@ -1988,9 +2068,11 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               ? (shopPrice || mailPrice || 0)
               : Number(item.price)
 
-            // Typische Bestellmenge & Mindestbestand aus bisherigen Bestellungen oder sinnvollen Kategorie-Standards ableiten
+            // Punkt 2: Typische Bestellmenge immer vorschlagen, aber Mindestbestand (minStock > 0) NUR dann vorschlagen,
+            // wenn das Produkt in der Vergangenheit mindestens 2x bestellt wurde (also ein wiederkehrender Verbrauchsartikel ist!).
+            // Bei Einmal-Käufen bleibt minStock = 0 (keine falschen "Niedriger Bestand"-Alarme!).
             const pastQtys = quantitiesByProductName.get(lowerProdName) || quantitiesByProductName.get(lowerCleanName) || []
-            let defaultOrderQty = 2
+            let defaultOrderQty = 1
             if (pastQtys.length > 0) {
               const sorted = [...pastQtys].sort((a, b) => a - b)
               defaultOrderQty = Math.max(1, sorted[Math.floor(sorted.length / 2)])
@@ -2005,7 +2087,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               : defaultOrderQty
             const suggestedMinStock = (item.minStock && Number(item.minStock) > 0)
               ? Number(item.minStock)
-              : Math.max(1, Math.floor(suggestedStandardOrderQuantity / 2))
+              : (pastQtys.length >= 2 ? Math.max(1, Math.floor(suggestedStandardOrderQuantity / 2)) : 0)
 
             // Bestellweg: Webshop bei Shop-Link oder Webshop-Lieferant, E-Mail bei Großhändlern wie HEWO / Schwälbchen
             const suggestedPreferredOrderMethod: 'email' | 'webshop' | 'phone' = isEmailWholesaler
@@ -2018,6 +2100,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               id: item.id,
               type: 'product',
               cleanName: cleanedName && cleanedName !== item.name ? cleanedName : undefined,
+              supplierId: suggestedSupplierId || undefined,
               image: item.image || directImage || bingRes.image || '',
               alternatives: allAlternatives,
               orderUrl: suggestedOrderUrl,
@@ -2062,6 +2145,34 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         for (const id of unmarkProductIds) completedProdSet.delete(id)
         for (const id of unmarkSupplierIds) completedSupSet.delete(id)
 
+        // Punkt 1: Vor dem Umbenennen die bisherigen Namen laden, damit bestehende Bestellungen (orders.product_name / orders.supplier_name)
+        // automatisch mit-aktualisiert werden und die Bestell-/Preishistorie nicht abreißt!
+        const prodIdsToFetch = prodUpdates.map((p: any) => p?.id).filter(Boolean)
+        const oldProdNameById = new Map<string, string>()
+        if (prodIdsToFetch.length > 0) {
+          const { data: oldProds } = await supabase
+            .from('products')
+            .select('id, name')
+            .eq('company_id', company_id)
+            .in('id', prodIdsToFetch)
+          for (const op of (oldProds || [])) {
+            if (op?.id && op?.name) oldProdNameById.set(op.id, String(op.name))
+          }
+        }
+
+        const supIdsToFetch = supUpdates.map((s: any) => s?.id).filter(Boolean)
+        const oldSupNameById = new Map<string, string>()
+        if (supIdsToFetch.length > 0) {
+          const { data: oldSups } = await supabase
+            .from('suppliers')
+            .select('id, name')
+            .eq('company_id', company_id)
+            .in('id', supIdsToFetch)
+          for (const os of (oldSups || [])) {
+            if (os?.id && os?.name) oldSupNameById.set(os.id, String(os.name))
+          }
+        }
+
         let savedProducts = 0
         let savedSuppliers = 0
 
@@ -2087,6 +2198,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           if (p.preferred_order_method !== undefined) patch.preferred_order_method = p.preferred_order_method || null
           if (p.image !== undefined) patch.image = p.image || null
 
+          const oldName = oldProdNameById.get(p.id)
           const { error: uErr } = await supabase
             .from('products')
             .update(patch)
@@ -2096,6 +2208,14 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           if (!uErr) {
             savedProducts++
             if (p.markComplete !== false) completedProdSet.add(p.id)
+            // Falls der Produktname geändert/bereinigt wurde, alle Bestellungen mit dem alten Produktnamen synchronisieren!
+            if (oldName && patch.name && oldName !== patch.name) {
+              await supabase
+                .from('orders')
+                .update({ product_name: patch.name })
+                .eq('company_id', company_id)
+                .eq('product_name', oldName)
+            }
           }
         }
 
@@ -2112,6 +2232,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           if (s.customer_number !== undefined) patch.customer_number = s.customer_number || null
           if (s.preferred_order_method !== undefined) patch.preferred_order_method = s.preferred_order_method || null
 
+          const oldSupName = oldSupNameById.get(s.id)
           const { error: sErr } = await supabase
             .from('suppliers')
             .update(patch)
@@ -2121,6 +2242,13 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           if (!sErr) {
             savedSuppliers++
             if (s.markComplete !== false) completedSupSet.add(s.id)
+            if (oldSupName && patch.name && oldSupName !== patch.name) {
+              await supabase
+                .from('orders')
+                .update({ supplier_name: patch.name })
+                .eq('company_id', company_id)
+                .eq('supplier_name', oldSupName)
+            }
           }
         }
 
