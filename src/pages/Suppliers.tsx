@@ -23,6 +23,7 @@ export const Suppliers: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
     const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
+    const [openCompletionCount, setOpenCompletionCount] = useState<number | null>(null);
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
     const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
     const [notification, setNotification] = useState<{ message: string, type: NotificationType } | null>(null);
@@ -289,7 +290,21 @@ export const Suppliers: React.FC = () => {
                                 fontWeight: 600,
                             }}
                         >
-                            <Wand2 size={16} color="#4f46e5" /> Daten vervollständigen
+                            <Wand2 size={16} color="#4f46e5" />
+                            <span>Daten vervollständigen</span>
+                            {openCompletionCount !== null && (
+                                <span style={{
+                                    marginLeft: '4px',
+                                    padding: '1px 7px',
+                                    borderRadius: '999px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    backgroundColor: openCompletionCount > 0 ? '#4f46e5' : '#dcfce7',
+                                    color: openCompletionCount > 0 ? '#ffffff' : '#15803d'
+                                }}>
+                                    {openCompletionCount > 0 ? `${openCompletionCount} offen` : '✓'}
+                                </span>
+                            )}
                         </button>
                         <button onClick={() => setIsDuplicateModalOpen(true)} className="btn btn-ghost" style={{ border: '1px solid var(--color-border)' }}>
                             <Sparkles size={16} color="var(--color-primary)" /> KI-Duplikate prüfen
@@ -738,6 +753,7 @@ export const Suppliers: React.FC = () => {
                 products={products}
                 suppliers={suppliers}
                 initialTab="suppliers"
+                onCountsChange={({ openSuppliers }) => setOpenCompletionCount(openSuppliers)}
                 onSaved={(msg) => {
                     DataService.getSuppliers(true).then(setSuppliers);
                     DataService.getProducts(true).then(setProducts);

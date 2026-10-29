@@ -25,6 +25,7 @@ interface DataCompletionModalProps {
     suppliers: Supplier[];
     initialTab?: 'products' | 'suppliers';
     onSaved: (message: string) => void;
+    onCountsChange?: (counts: { openProducts: number; openSuppliers: number }) => void;
 }
 
 interface ProductDraft {
@@ -151,7 +152,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     products,
     suppliers,
     initialTab = 'products',
-    onSaved
+    onSaved,
+    onCountsChange
 }) => {
     const [activeTab, setActiveTab] = useState<'products' | 'suppliers'>(initialTab);
     // Zwei getrennte Fenster-Zustände:
@@ -176,6 +178,25 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(new Set());
 
     const [overviewPage, setOverviewPage] = useState(0);
+
+    const loadCompletionIdsOnly = async () => {
+        if (!supabase) return;
+        try {
+            const { data } = await supabase.functions.invoke('process-inbound-mail', {
+                body: { action: 'get_completion_state' }
+            });
+            const cProds = new Set<string>(Array.isArray(data?.completedProductIds) ? data.completedProductIds : []);
+            const cSups = new Set<string>(Array.isArray(data?.completedSupplierIds) ? data.completedSupplierIds : []);
+            setCompletedProductIds(cProds);
+            setCompletedSupplierIds(cSups);
+        } catch (e) {
+            console.warn('Could not load completion state:', e);
+        }
+    };
+
+    useEffect(() => {
+        loadCompletionIdsOnly();
+    }, []);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -279,6 +300,18 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             setLoadingState(false);
         }
     };
+
+    const openProductsCount = useMemo(() => {
+        return products.filter(p => !(completedProductIds.has(p.id) || isProductNaturallyComplete(p))).length;
+    }, [products, suppliers, completedProductIds]);
+
+    const openSuppliersCount = useMemo(() => {
+        return suppliers.filter(s => !(completedSupplierIds.has(s.id) || isSupplierNaturallyComplete(s))).length;
+    }, [suppliers, completedSupplierIds]);
+
+    useEffect(() => {
+        onCountsChange?.({ openProducts: openProductsCount, openSuppliers: openSuppliersCount });
+    }, [openProductsCount, openSuppliersCount]);
 
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
@@ -955,14 +988,35 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                 <div style={{ fontSize: '17px', fontWeight: 700, color: 'var(--color-text-main)' }}>
                                     Alle Vorschläge aus diesem Durchgang sind erledigt!
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setViewMode('overview')}
-                                    className="btn btn-primary"
-                                    style={{ marginTop: '16px' }}
-                                >
-                                    Zurück zur Übersicht
-                                </button>
+                                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '16px', flexWrap: 'wrap' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setViewMode('overview')}
+                                        className="btn btn-ghost"
+                                    >
+                                        Zurück zur Übersicht
+                                    </button>
+                                    {((activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length) > 0) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => startAiCompletionAndOpenReview()}
+                                            disabled={aiLoading}
+                                            className="btn btn-primary"
+                                            style={{ background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', border: 'none' }}
+                                        >
+                                            {aiLoading ? (
+                                                <>
+                                                    <Loader2 size={16} className="spin" /> Lädt nächste...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Sparkles size={16} />
+                                                    ✨ Nächste {Math.min(BATCH_SIZE, activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length)} mit KI prüfen →
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         ) : activeTab === 'products' ? (
                             visibleReviewProducts.map(p => {
@@ -1514,7 +1568,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                     ) : (
                                         <>
                                             <Sparkles size={16} />
-                                            ✓ Übernehmen & nächste mit KI prüfen →
+                                            ✓ Übernehmen & nächste {Math.min(BATCH_SIZE, Math.max(1, (activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length) - reviewedIds.length))} mit KI prüfen →
                                         </>
                                     )}
                                 </button>
