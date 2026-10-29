@@ -1682,9 +1682,9 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
       if (action === 'suggest_completion') {
         const items = Array.isArray(body?.items) ? body.items.slice(0, 12) : []
 
-        // Lade letzte E-Mails & vergangene Bestellungen, um Kundennummern, Telefonnummern, Artikelnummern,
-        // typische Bestellmengen & Domains aus echten Belegen zu ziehen
-        const [{ data: recentEmails }, { data: recentOrders }] = await Promise.all([
+        // Lade letzte E-Mails, vergangene Bestellungen sowie bestehende Produkte & Lieferanten
+        // (damit bereits hinterlegte Links beim Lieferanten oder bei anderen Produkten desselben Lieferanten genutzt werden!)
+        const [{ data: recentEmails }, { data: recentOrders }, { data: existingProducts }, { data: existingSuppliers }] = await Promise.all([
           supabase
             .from('inbound_emails')
             .select('supplier_name, extracted_data')
@@ -1697,13 +1697,54 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             .select('product_name, supplier_name, quantity')
             .eq('company_id', company_id)
             .order('date', { ascending: false })
-            .limit(200)
+            .limit(200),
+          supabase
+            .from('products')
+            .select('id, name, product_number, supplier_id, order_url')
+            .eq('company_id', company_id),
+          supabase
+            .from('suppliers')
+            .select('id, name, email, url, order_url')
+            .eq('company_id', company_id)
         ])
 
         const emailMetaBySupplier = new Map<string, { email?: string; phone?: string; customer_number?: string }>()
         const skuByProductName = new Map<string, string>()
         const priceByProductName = new Map<string, number>()
         const quantitiesByProductName = new Map<string, number[]>()
+        const shopDomainBySupplierName = new Map<string, string>()
+        const existingProductOrderUrlByName = new Map<string, string>()
+
+        const supplierById = new Map<string, any>()
+        for (const sup of (existingSuppliers || [])) {
+          supplierById.set(sup.id, sup)
+          const rawUrl = sup.order_url || sup.url || ''
+          if (rawUrl) {
+            try {
+              const host = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`).hostname.replace(/^www\./i, '').toLowerCase()
+              if (host && sup.name) shopDomainBySupplierName.set(String(sup.name).trim().toLowerCase(), host)
+            } catch {}
+          }
+        }
+
+        for (const prod of (existingProducts || [])) {
+          if (prod?.order_url && String(prod.order_url).trim()) {
+            const pUrl = String(prod.order_url).trim()
+            if (prod.name) {
+              existingProductOrderUrlByName.set(String(prod.name).trim().toLowerCase(), pUrl)
+            }
+            if (prod.supplier_id && supplierById.has(prod.supplier_id)) {
+              const sup = supplierById.get(prod.supplier_id)
+              const sNameKey = String(sup?.name || '').trim().toLowerCase()
+              if (sNameKey && !shopDomainBySupplierName.has(sNameKey)) {
+                try {
+                  const host = new URL(pUrl.startsWith('http') ? pUrl : `https://${pUrl}`).hostname.replace(/^www\./i, '').toLowerCase()
+                  if (host) shopDomainBySupplierName.set(sNameKey, host)
+                } catch {}
+              }
+            }
+          }
+        }
 
         const recordQuantity = (rawName: string, qtyVal: any) => {
           const q = Math.round(Number(qtyVal || 0))
@@ -1738,16 +1779,121 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           for (const it of (ed.items || [])) {
             if (it?.product_name) {
               const pKey = String(it.product_name).trim().toLowerCase()
-              if (it?.sku && !skuByProductName.has(pKey)) {
-                skuByProductName.set(pKey, String(it.sku).trim())
+              const cKey = cleanProductName(String(it.product_name)).toLowerCase()
+              if (it?.sku) {
+                const skuStr = String(it.sku).trim()
+                if (!skuByProductName.has(pKey)) skuByProductName.set(pKey, skuStr)
+                if (cKey && !skuByProductName.has(cKey)) skuByProductName.set(cKey, skuStr)
               }
               const unitP = Number(it?.unit_price || it?.price || 0)
-              if (unitP > 0 && !priceByProductName.has(pKey)) {
-                priceByProductName.set(pKey, unitP)
+              if (unitP > 0) {
+                if (!priceByProductName.has(pKey)) priceByProductName.set(pKey, unitP)
+                if (cKey && !priceByProductName.has(cKey)) priceByProductName.set(cKey, unitP)
               }
               recordQuantity(it.product_name, it.quantity)
             }
           }
+        }
+
+        // Hilfsfunktion: Direkte Shop-Produktseite über Artikelnummer oder Shop-Suche ermitteln
+        const resolveDirectShopProduct = async (
+          webshopDomain: string,
+          sku: string,
+          productName: string
+        ): Promise<{ orderUrl: string; image: string; shopPrice: number | null }> => {
+          if (!webshopDomain) return { orderUrl: '', image: '', shopPrice: null }
+          const normalizedName = productName.replace(/[×]/g, 'x').trim()
+          const coreName = normalizedName.replace(/\b\d+\s*x\s*\d+\b.*$/i, '').trim() || normalizedName
+
+          // 1. Böttcher AG & Reinigungsberater.de: Direkte Artikelnummer-Auflösung (/artikel-p-{SKU}) oder Shop-Suche (/suche?q=...)
+          if (webshopDomain === 'reinigungsberater.de' || webshopDomain === 'bueromarkt-ag.de') {
+            if (sku) {
+              const ctrl = new AbortController()
+              const t = setTimeout(() => ctrl.abort(), 3200)
+              try {
+                const directSkuUrl = `https://www.${webshopDomain}/artikel-p-${encodeURIComponent(sku)}`
+                const r = await fetch(directSkuUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept-Language': 'de-DE,de;q=0.9'
+                  },
+                  redirect: 'follow',
+                  signal: ctrl.signal
+                })
+                if (r.ok && r.url && /-p-[A-Za-z0-9_-]+/i.test(r.url)) {
+                  const html = await r.text()
+                  const ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
+                  const sp = extractPriceFromHtml(html)
+                  return { orderUrl: r.url, image: ogImg, shopPrice: sp }
+                }
+              } catch {} finally {
+                clearTimeout(t)
+              }
+            }
+
+            // Fallback über die direkte Shop-Suche von reinigungsberater.de / bueromarkt-ag.de
+            const ctrl2 = new AbortController()
+            const t2 = setTimeout(() => ctrl2.abort(), 3200)
+            try {
+              const qStr = sku ? `${sku} ${coreName}` : coreName
+              const searchUrl = `https://www.${webshopDomain}/suche?q=${encodeURIComponent(qStr)}`
+              const r2 = await fetch(searchUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                  'Accept-Language': 'de-DE,de;q=0.9'
+                },
+                redirect: 'follow',
+                signal: ctrl2.signal
+              })
+              if (r2.ok) {
+                if (r2.url && /-p-[A-Za-z0-9_-]+/i.test(r2.url)) {
+                  const html = await r2.text()
+                  const ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
+                  return { orderUrl: r2.url, image: ogImg, shopPrice: extractPriceFromHtml(html) }
+                }
+                const html = await r2.text()
+                const absMatches = [...html.matchAll(/href=["'](https?:\/\/www\.(?:reinigungsberater|bueromarkt-ag)\.de\/[^"'?]*-p-[A-Za-z0-9_-]+)["']/gi)].map(m => m[1])
+                const relMatches = [...html.matchAll(/href=["'](\/[^"'?]*-p-[A-Za-z0-9_-]+)["']/gi)].map(m => `https://www.${webshopDomain}${m[1]}`)
+                const candidates = [...new Set([...absMatches, ...relMatches])]
+                const skuMatch = sku ? candidates.find(u => u.toLowerCase().includes(sku.toLowerCase())) : null
+                const bestUrl = skuMatch || candidates[0] || ''
+                if (bestUrl) {
+                  return { orderUrl: bestUrl, image: '', shopPrice: null }
+                }
+              }
+            } catch {} finally {
+              clearTimeout(t2)
+            }
+          }
+
+          // 2. Amazon ASIN Direkt-Link
+          if (webshopDomain === 'amazon.de' && sku && /^B0[A-Z0-9]{8}$/i.test(sku)) {
+            return { orderUrl: `https://www.amazon.de/dp/${sku.toUpperCase()}`, image: '', shopPrice: null }
+          }
+
+          // 3. Gezielte site:-Suche über Bing mit bereinigtem Kern-Produktnamen + Artikelnummer
+          const siteQuery = `site:${webshopDomain} ${sku ? sku + ' ' : ''}${coreName}`.trim()
+          const siteBing = await searchBingProductMeta(siteQuery, webshopDomain)
+          if (siteBing.orderUrl) {
+            return { orderUrl: siteBing.orderUrl, image: siteBing.image || '', shopPrice: null }
+          }
+
+          // 4. Falls in keiner Suchmaschine eine Einzel-Unterseite indexiert ist, aber der Webshop bekannt ist:
+          // Direkten Such-Link im Webshop des Lieferanten generieren (damit man mit 1 Klick direkt beim Artikel im Shop landet!)
+          const searchParam = encodeURIComponent(sku || coreName)
+          if (webshopDomain === 'reinigungsberater.de' || webshopDomain === 'bueromarkt-ag.de') {
+            return { orderUrl: `https://www.${webshopDomain}/suche?q=${searchParam}`, image: '', shopPrice: null }
+          }
+          if (webshopDomain === 'hygi.de') {
+            return { orderUrl: `https://www.hygi.de/catalogsearch/result/?q=${searchParam}`, image: '', shopPrice: null }
+          }
+          if (webshopDomain === 'amazon.de') {
+            return { orderUrl: `https://www.amazon.de/s?k=${searchParam}`, image: '', shopPrice: null }
+          }
+          if (webshopDomain === 'lusini.com') {
+            return { orderUrl: `https://www.lusini.com/de-de/search/?q=${searchParam}`, image: '', shopPrice: null }
+          }
+          return { orderUrl: '', image: '', shopPrice: null }
         }
 
         const results = await Promise.all(items.map(async (item: any) => {
@@ -1755,7 +1901,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             const lowerName = String(item.name || '').trim().toLowerCase()
             const fromMail = emailMetaBySupplier.get(lowerName) || {}
             const effectiveEmail = (item.email && item.email !== 'hello@unbekannt.com') ? item.email : (fromMail.email || '')
-            const domHint = resolveSupplierDomainHint(item.name, item.url, effectiveEmail)
+            const domHint = resolveSupplierDomainHint(item.name, item.url, effectiveEmail) || shopDomainBySupplierName.get(lowerName) || ''
             const suggestedUrl = item.url || (domHint ? (domHint.startsWith('shop.') || domHint.startsWith('cloud.') ? `https://${domHint}` : `https://www.${domHint.replace(/^www\./, '')}`) : '')
             const isEmailOnly = isEmailOnlyWholesaler(item.name, effectiveEmail)
             const suggestedOrderMethod: 'email' | 'webshop' = isEmailOnly
@@ -1773,27 +1919,51 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             }
           } else {
             const cleanedName = cleanProductName(item.name || '')
-            const isEmailWholesaler = isEmailOnlyWholesaler(item.supplierName, item.supplierEmail)
-            const webshopDomain = resolveWebshopDomain(item.supplierName, item.supplierUrl, item.isWebshopSupplier, item.supplierEmail)
-            // Für die Bildersuche: Wenn es ein echter Webshop-Lieferant ist, nach dessen Domain mit-suchen;
-            // bei Großhändlern/E-Mail-Lieferanten (z.B. HEWO, Schwälbchen) nur nach bereinigtem Produktnamen + Artikelnr. suchen!
-            const query = `${cleanedName || item.name} ${item.productNumber || ''} ${webshopDomain}`.trim()
-            const bingRes = await searchBingProductMeta(query, webshopDomain)
-            const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
             const lowerProdName = String(item.name || '').trim().toLowerCase()
-            const mailSku = skuByProductName.get(lowerProdName) || ''
-            const mailPrice = priceByProductName.get(lowerProdName) || null
+            const lowerCleanName = cleanedName.toLowerCase()
+            const mailSku = skuByProductName.get(lowerProdName) || skuByProductName.get(lowerCleanName) || ''
+            const effectiveSku = String(item.productNumber || mailSku || '').trim()
+            const mailPrice = priceByProductName.get(lowerProdName) || priceByProductName.get(lowerCleanName) || null
             const knownPrice = (item.price && Number(item.price) > 0) ? Number(item.price) : mailPrice
 
-            // Nur dann eine Bestell-URL vorschlagen, wenn sie wirklich von der Webshop-Domain des Lieferanten stammt!
-            let suggestedOrderUrl = item.orderUrl || ''
+            const isEmailWholesaler = isEmailOnlyWholesaler(item.supplierName, item.supplierEmail)
+            const lowerSupName = String(item.supplierName || '').trim().toLowerCase()
+            const learnedSupDomain = !isEmailWholesaler && lowerSupName ? (shopDomainBySupplierName.get(lowerSupName) || '') : ''
+            const webshopDomain = resolveWebshopDomain(item.supplierName, item.supplierUrl || learnedSupDomain, item.isWebshopSupplier, item.supplierEmail) || learnedSupDomain
+
+            // 1. Zuerst prüfen, ob genau dieses Produkt (oder die direkte Artikelnummer im Shop) schon einen Link hat
+            let suggestedOrderUrl = item.orderUrl || existingProductOrderUrlByName.get(lowerProdName) || ''
+            let directImage = ''
+            let shopPrice: number | null = null
+
+            // 2. Bildersuche über Bing (mit Artikelnummer + bereinigtem Namen!)
+            const normalizedSearchName = (cleanedName || item.name || '').replace(/[×]/g, 'x')
+            const query = `${normalizedSearchName} ${effectiveSku} ${webshopDomain}`.trim()
+            const bingRes = await searchBingProductMeta(query, webshopDomain)
+
             if (!suggestedOrderUrl && webshopDomain && bingRes.orderUrl) {
               suggestedOrderUrl = bingRes.orderUrl
             }
 
-            // Wenn eine Shop-URL vorliegt, versuche schnell den Preis auf der Zielseite zu prüfen
-            let shopPrice: number | null = null
-            if (suggestedOrderUrl) {
+            // 3. Falls über die reine Bildersuche noch kein Shop-Link auf der Lieferanten-Domain gefunden wurde,
+            // direkt über Artikelnummer / Shop-Suche / site:-Suche auf der Lieferanten-Domain auflösen!
+            if (!suggestedOrderUrl && webshopDomain) {
+              const directRes = await resolveDirectShopProduct(webshopDomain, effectiveSku, cleanedName || item.name || '')
+              if (directRes.orderUrl) {
+                suggestedOrderUrl = directRes.orderUrl
+              }
+              if (directRes.image) {
+                directImage = directRes.image
+              }
+              if (directRes.shopPrice) {
+                shopPrice = directRes.shopPrice
+              }
+            }
+
+            const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
+
+            // Wenn eine Shop-URL vorliegt und der Preis noch nicht beim Direkt-Check geladen wurde, versuche den Preis auf der Zielseite zu prüfen
+            if (suggestedOrderUrl && !shopPrice) {
               const ctrl = new AbortController()
               const t = setTimeout(() => ctrl.abort(), 2800)
               try {
@@ -1819,7 +1989,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               : Number(item.price)
 
             // Typische Bestellmenge & Mindestbestand aus bisherigen Bestellungen oder sinnvollen Kategorie-Standards ableiten
-            const pastQtys = quantitiesByProductName.get(lowerProdName) || quantitiesByProductName.get(cleanedName.toLowerCase()) || []
+            const pastQtys = quantitiesByProductName.get(lowerProdName) || quantitiesByProductName.get(lowerCleanName) || []
             let defaultOrderQty = 2
             if (pastQtys.length > 0) {
               const sorted = [...pastQtys].sort((a, b) => a - b)
@@ -1842,14 +2012,16 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               ? 'email'
               : (suggestedOrderUrl || webshopDomain || item.isWebshopSupplier ? 'webshop' : (item.preferredOrderMethod || 'webshop'))
 
+            const allAlternatives = [...new Set([directImage, ...(bingRes.alternatives || [])].filter(Boolean))]
+
             return {
               id: item.id,
               type: 'product',
               cleanName: cleanedName && cleanedName !== item.name ? cleanedName : undefined,
-              image: item.image || bingRes.image || '',
-              alternatives: bingRes.alternatives || [],
+              image: item.image || directImage || bingRes.image || '',
+              alternatives: allAlternatives,
               orderUrl: suggestedOrderUrl,
-              productNumber: item.productNumber || mailSku || '',
+              productNumber: effectiveSku,
               price: suggestedPrice,
               priceCheck,
               category,
