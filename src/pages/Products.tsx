@@ -1605,7 +1605,28 @@ export const Products: React.FC = () => {
                                                 {(newProduct.image || urlMetaAlternatives.length > 0) && (
                                                     <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                                                         {newProduct.image && (
-                                                            <img src={newProduct.image} alt="Vorschau" style={{ width: '64px', height: '64px', objectFit: 'contain', backgroundColor: '#fff', borderRadius: 'var(--radius-sm)', border: '2px solid var(--color-primary)' }} />
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <img src={newProduct.image} alt="Vorschau" style={{ width: '64px', height: '64px', objectFit: 'contain', backgroundColor: '#fff', borderRadius: 'var(--radius-sm)', border: '2px solid var(--color-primary)' }} />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setNewProduct(prev => ({ ...prev, image: '' }))}
+                                                                    style={{
+                                                                        padding: '5px 10px',
+                                                                        borderRadius: '6px',
+                                                                        border: '1px solid #fecaca',
+                                                                        backgroundColor: '#fef2f2',
+                                                                        color: '#dc2626',
+                                                                        fontSize: '12px',
+                                                                        fontWeight: 600,
+                                                                        cursor: 'pointer',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px'
+                                                                    }}
+                                                                >
+                                                                    <Trash2 size={13} /> Bild löschen
+                                                                </button>
+                                                            </div>
                                                         )}
                                                         {urlMetaAlternatives.length > 1 && (
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

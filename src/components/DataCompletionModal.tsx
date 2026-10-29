@@ -159,7 +159,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         setOverviewPage(0);
         setReviewedIds([]);
         initDraftsAndState();
-    }, [isOpen, initialTab, products, suppliers]);
+    }, [isOpen, initialTab]);
 
     const isSupplierWebshop = (sup?: Supplier | null, prod?: Product | ProductDraft | null): boolean => {
         if (prod?.preferredOrderMethod === 'webshop' || prod?.preferredOrderMethod === 'link') return true;
@@ -623,6 +623,39 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         }
     };
 
+    const handleDeleteProductImage = async (productId: string) => {
+        setProductDrafts(prev => {
+            const cur = prev[productId];
+            if (!cur) return prev;
+            return {
+                ...prev,
+                [productId]: {
+                    ...cur,
+                    image: '',
+                    aiFields: { ...(cur.aiFields || {}), image: false }
+                }
+            };
+        });
+        if (!supabase) return;
+        try {
+            const d = productDrafts[productId];
+            await supabase.functions.invoke('process-inbound-mail', {
+                body: {
+                    action: 'save_completion',
+                    products: [{
+                        id: productId,
+                        name: d?.name,
+                        image: null,
+                        markComplete: false
+                    }]
+                }
+            });
+            onSaved('Produktbild wurde gelöscht.');
+        } catch (err) {
+            console.warn('Could not delete product image:', err);
+        }
+    };
+
     const handleSaveSingleRow = async (id: string, type: 'product' | 'supplier') => {
         setSavingRowId(id);
         setError(null);
@@ -872,7 +905,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                 {isChecked ? <CheckSquare size={22} /> : <Square size={22} />}
                                             </button>
 
-                                            {/* Gefundenes Produktbild + Alternativen */}
+                                            {/* Gefundenes Produktbild + Alternativen + Löschen */}
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
                                                 <div style={{
                                                     width: '76px',
@@ -887,39 +920,33 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                     position: 'relative'
                                                 }}>
                                                     {d.image ? (
-                                                        <>
-                                                            <img src={d.image} alt={d.name} style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#fff' }} />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setProductDrafts(prev => ({
-                                                                    ...prev,
-                                                                    [p.id]: { ...prev[p.id], image: '' }
-                                                                }))}
-                                                                title="Bild entfernen"
-                                                                style={{
-                                                                    position: 'absolute',
-                                                                    top: '3px',
-                                                                    right: '3px',
-                                                                    width: '18px',
-                                                                    height: '18px',
-                                                                    borderRadius: '50%',
-                                                                    border: 'none',
-                                                                    backgroundColor: 'rgba(220,38,38,0.9)',
-                                                                    color: '#fff',
-                                                                    cursor: 'pointer',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center',
-                                                                    padding: 0
-                                                                }}
-                                                            >
-                                                                <X size={11} />
-                                                            </button>
-                                                        </>
+                                                        <img src={d.image} alt={d.name} style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#fff' }} />
                                                     ) : (
                                                         <span style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'center' }}>Kein Bild</span>
                                                     )}
                                                 </div>
+
+                                                {d.image && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteProductImage(p.id)}
+                                                        style={{
+                                                            padding: '2px 8px',
+                                                            borderRadius: '6px',
+                                                            border: '1px solid #fecaca',
+                                                            backgroundColor: '#fef2f2',
+                                                            color: '#dc2626',
+                                                            fontSize: '11px',
+                                                            fontWeight: 600,
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '3px'
+                                                        }}
+                                                    >
+                                                        <X size={11} /> Bild löschen
+                                                    </button>
+                                                )}
 
                                                 {d.alternatives && d.alternatives.length > 1 && (
                                                     <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
@@ -1538,6 +1565,15 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                             </div>
 
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                                {d.image && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteProductImage(p.id)}
+                                                        style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', fontSize: '12px', cursor: 'pointer', color: '#dc2626', fontWeight: 600 }}
+                                                    >
+                                                        ✕ Bild löschen
+                                                    </button>
+                                                )}
                                                 <button
                                                     type="button"
                                                     onClick={() => setProductDrafts(prev => ({ ...prev, [p.id]: { ...prev[p.id], isEditing: !prev[p.id].isEditing } }))}
