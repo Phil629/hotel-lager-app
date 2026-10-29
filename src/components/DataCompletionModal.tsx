@@ -694,35 +694,44 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     };
 
     const handleDeleteProductImage = async (productId: string) => {
+        const cur = productDrafts[productId];
+        if (!cur) return;
+        const removedUrl = cur.image;
+        const remainingAlts = (cur.alternatives || []).filter(u => u && u !== removedUrl);
+        const nextImage = remainingAlts[0] || '';
+
         setProductDrafts(prev => {
-            const cur = prev[productId];
-            if (!cur) return prev;
+            const draft = prev[productId];
+            if (!draft) return prev;
             return {
                 ...prev,
                 [productId]: {
-                    ...cur,
-                    image: '',
-                    aiFields: { ...(cur.aiFields || {}), image: false }
+                    ...draft,
+                    image: nextImage,
+                    alternatives: remainingAlts,
+                    aiFields: { ...(draft.aiFields || {}), image: !!nextImage }
                 }
             };
         });
+
         if (!supabase) return;
         try {
-            const d = productDrafts[productId];
             await supabase.functions.invoke('process-inbound-mail', {
                 body: {
                     action: 'save_completion',
                     products: [{
                         id: productId,
-                        name: d?.name,
-                        image: null,
+                        name: cur.name,
+                        image: nextImage || null,
                         markComplete: false
                     }]
                 }
             });
-            onSaved('Produktbild wurde gelöscht.');
+            if (!nextImage) {
+                onSaved('Produktbild wurde gelöscht.');
+            }
         } catch (err) {
-            console.warn('Could not delete product image:', err);
+            console.warn('Could not update product image:', err);
         }
     };
 
@@ -1020,9 +1029,9 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
 
                                                 {d.alternatives && d.alternatives.length > 1 && (
                                                     <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
-                                                        {d.alternatives.slice(0, 4).map((altUrl, idx) => (
+                                                        {d.alternatives.slice(0, 4).map((altUrl) => (
                                                             <img
-                                                                key={idx}
+                                                                key={altUrl}
                                                                 src={altUrl}
                                                                 alt=""
                                                                 onClick={() => setProductDrafts(prev => ({

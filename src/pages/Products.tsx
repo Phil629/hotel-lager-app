@@ -1609,7 +1609,12 @@ export const Products: React.FC = () => {
                                                                 <img src={newProduct.image} alt="Vorschau" style={{ width: '64px', height: '64px', objectFit: 'contain', backgroundColor: '#fff', borderRadius: 'var(--radius-sm)', border: '2px solid var(--color-primary)' }} />
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => setNewProduct(prev => ({ ...prev, image: '' }))}
+                                                                    onClick={() => {
+                                                                        const removed = newProduct.image;
+                                                                        const remaining = urlMetaAlternatives.filter(u => u && u !== removed);
+                                                                        setUrlMetaAlternatives(remaining);
+                                                                        setNewProduct(prev => ({ ...prev, image: remaining[0] || '' }));
+                                                                    }}
                                                                     style={{
                                                                         padding: '5px 10px',
                                                                         borderRadius: '6px',
@@ -1632,9 +1637,9 @@ export const Products: React.FC = () => {
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                                 <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Alternative Bilder (Klick zum Auswählen):</span>
                                                                 <div style={{ display: 'flex', gap: '6px' }}>
-                                                                    {urlMetaAlternatives.map((altUrl, idx) => (
+                                                                    {urlMetaAlternatives.map((altUrl) => (
                                                                         <button
-                                                                            key={idx}
+                                                                            key={altUrl}
                                                                             type="button"
                                                                             onClick={() => setNewProduct(prev => ({ ...prev, image: altUrl }))}
                                                                             style={{
