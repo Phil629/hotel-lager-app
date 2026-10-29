@@ -12,8 +12,8 @@ import {
     Square,
     RotateCcw,
     AlertCircle,
-    Mail,
-    Phone
+    ArrowLeft,
+    Edit2
 } from 'lucide-react';
 import type { Product, Supplier } from '../types';
 import { supabase } from '../services/supabase';
@@ -41,9 +41,7 @@ interface ProductDraft {
     alternatives: string[];
     loadingRow?: boolean;
     aiSuggested?: boolean;
-    showCustomImageInput?: boolean;
-    showOptionalShopLink?: boolean;
-    // Welche Felder wurden konkret von der KI vorgeschlagen?
+    isEditing?: boolean;
     aiFields?: {
         image?: boolean;
         orderUrl?: boolean;
@@ -70,6 +68,7 @@ interface SupplierDraft {
     preferredOrderMethod?: 'email' | 'webshop' | 'link' | 'phone';
     loadingRow?: boolean;
     aiSuggested?: boolean;
+    isEditing?: boolean;
     aiFields?: {
         url?: boolean;
         email?: boolean;
@@ -119,7 +118,7 @@ const KNOWN_WEBSHOP_KEYWORDS = [
     'intergastro'
 ];
 
-const PAGE_SIZE = 6;
+const BATCH_SIZE = 8;
 
 export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     isOpen,
@@ -130,6 +129,10 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     onSaved
 }) => {
     const [activeTab, setActiveTab] = useState<'products' | 'suppliers'>(initialTab);
+    // Zwei getrennte Fenster-Zustände:
+    // 1. 'overview': Übersicht mit dem riesigen Button "KI Daten ergänzen lassen"
+    // 2. 'review': Separates Prüffenster, das sich nach dem KI-Durchlauf öffnet, um die Ergebnisse einfach abzuhaken
+    const [viewMode, setViewMode] = useState<'overview' | 'review'>('overview');
     const [showCompleted, setShowCompleted] = useState(false);
     const [loadingState, setLoadingState] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
@@ -143,21 +146,21 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     const [productDrafts, setProductDrafts] = useState<Record<string, ProductDraft>>({});
     const [supplierDrafts, setSupplierDrafts] = useState<Record<string, SupplierDraft>>({});
 
-    const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
-    const [selectedSupplierIds, setSelectedSupplierIds] = useState<Set<string>>(new Set());
+    // Welche Einträge wurden gerade von der KI geprüft und liegen im Prüffenster?
+    const [reviewedIds, setReviewedIds] = useState<string[]>([]);
+    const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(new Set());
 
-    const [productPage, setProductPage] = useState(0);
-    const [supplierPage, setSupplierPage] = useState(0);
+    const [overviewPage, setOverviewPage] = useState(0);
 
     useEffect(() => {
         if (!isOpen) return;
         setActiveTab(initialTab);
-        setProductPage(0);
-        setSupplierPage(0);
+        setViewMode('overview');
+        setOverviewPage(0);
+        setReviewedIds([]);
         initDraftsAndState();
     }, [isOpen, initialTab, products, suppliers]);
 
-    // Prüft, ob ein Lieferant ein echter Online-Shop ist (oder ob per E-Mail / Telefon bestellt wird)
     const isSupplierWebshop = (sup?: Supplier | null, prod?: Product | ProductDraft | null): boolean => {
         if (prod?.preferredOrderMethod === 'webshop' || prod?.preferredOrderMethod === 'link') return true;
         if (prod?.orderUrl && prod.orderUrl.trim()) return true;
@@ -255,64 +258,43 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         });
     }, [suppliers, completedSupplierIds, showCompleted]);
 
-    const pagedProducts = useMemo(() => {
-        const start = productPage * PAGE_SIZE;
-        return filteredProducts.slice(start, start + PAGE_SIZE);
-    }, [filteredProducts, productPage]);
+    const pagedOverviewProducts = useMemo(() => {
+        const start = overviewPage * BATCH_SIZE;
+        return filteredProducts.slice(start, start + BATCH_SIZE);
+    }, [filteredProducts, overviewPage]);
 
-    const pagedSuppliers = useMemo(() => {
-        const start = supplierPage * PAGE_SIZE;
-        return filteredSuppliers.slice(start, start + PAGE_SIZE);
-    }, [filteredSuppliers, supplierPage]);
+    const pagedOverviewSuppliers = useMemo(() => {
+        const start = overviewPage * BATCH_SIZE;
+        return filteredSuppliers.slice(start, start + BATCH_SIZE);
+    }, [filteredSuppliers, overviewPage]);
 
-    useEffect(() => {
-        setSelectedProductIds(new Set(pagedProducts.map(p => p.id)));
-    }, [productPage, filteredProducts.length, showCompleted]);
-
-    useEffect(() => {
-        setSelectedSupplierIds(new Set(pagedSuppliers.map(s => s.id)));
-    }, [supplierPage, filteredSuppliers.length, showCompleted]);
-
-    // Zurücksetzen eines einzelnen Produkts auf den Originalzustand (falls KI falsch lag)
-    const revertProductDraft = (productId: string, field?: 'image' | 'orderUrl' | 'productNumber' | 'category' | 'price') => {
+    const revertProductDraft = (productId: string) => {
         const orig = products.find(p => p.id === productId);
         if (!orig) return;
-        setProductDrafts(prev => {
-            const cur = prev[productId];
-            if (!cur) return prev;
-            if (!field) {
-                return {
-                    ...prev,
-                    [productId]: {
-                        id: orig.id,
-                        name: orig.name || '',
-                        category: orig.category || 'Sonstiges',
-                        unit: orig.unit || 'Stück',
-                        price: orig.price || 0,
-                        productNumber: orig.productNumber || '',
-                        supplierId: orig.supplierId || '',
-                        orderUrl: orig.orderUrl || '',
-                        image: orig.image || '',
-                        preferredOrderMethod: orig.preferredOrderMethod,
-                        alternatives: orig.image ? [orig.image] : [],
-                        aiSuggested: false,
-                        aiFields: {},
-                        priceCheck: undefined
-                    }
-                };
+        setProductDrafts(prev => ({
+            ...prev,
+            [productId]: {
+                id: orig.id,
+                name: orig.name || '',
+                category: orig.category || 'Sonstiges',
+                unit: orig.unit || 'Stück',
+                price: orig.price || 0,
+                productNumber: orig.productNumber || '',
+                supplierId: orig.supplierId || '',
+                orderUrl: orig.orderUrl || '',
+                image: orig.image || '',
+                preferredOrderMethod: orig.preferredOrderMethod,
+                alternatives: orig.image ? [orig.image] : [],
+                aiSuggested: false,
+                isEditing: false,
+                aiFields: {},
+                priceCheck: undefined
             }
-            const nextAiFields = { ...(cur.aiFields || {}), [field]: false };
-            const anyAiLeft = Object.values(nextAiFields).some(Boolean);
-            return {
-                ...prev,
-                [productId]: {
-                    ...cur,
-                    [field]: (orig as any)[field] || (field === 'category' ? 'Sonstiges' : field === 'price' ? 0 : ''),
-                    aiFields: nextAiFields,
-                    aiSuggested: anyAiLeft,
-                    priceCheck: field === 'orderUrl' ? undefined : cur.priceCheck
-                }
-            };
+        }));
+        setSelectedReviewIds(prev => {
+            const next = new Set(prev);
+            next.delete(productId);
+            return next;
         });
     };
 
@@ -330,18 +312,31 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 customerNumber: orig.customerNumber || '',
                 preferredOrderMethod: orig.preferredOrderMethod,
                 aiSuggested: false,
+                isEditing: false,
                 aiFields: {}
             }
         }));
+        setSelectedReviewIds(prev => {
+            const next = new Set(prev);
+            next.delete(supplierId);
+            return next;
+        });
     };
 
-    const fetchAiSuggestionsForVisible = async () => {
+    // Hauptaktion: Klick auf den riesigen Button "KI Daten ergänzen lassen"
+    // Lädt die KI-Vorschläge und öffnet automatisch das Prüffenster ('review')!
+    const startAiCompletionAndOpenReview = async () => {
         if (!supabase || aiLoading) return;
         setAiLoading(true);
         setError(null);
         try {
             if (activeTab === 'products') {
-                const itemsPayload = pagedProducts.map(p => {
+                const targetBatch = pagedOverviewProducts.length > 0
+                    ? pagedOverviewProducts
+                    : filteredProducts.slice(0, BATCH_SIZE);
+                if (targetBatch.length === 0) return;
+
+                const itemsPayload = targetBatch.map(p => {
                     const d = productDrafts[p.id];
                     const sup = suppliers.find(s => s.id === (d?.supplierId || p.supplierId));
                     const webshop = isSupplierWebshop(sup, d || p);
@@ -369,6 +364,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 if (data?.error) throw new Error(data.error);
 
                 const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
+                const batchIds = targetBatch.map(p => p.id);
+
                 setProductDrafts(prev => {
                     const next = { ...prev };
                     for (const s of suggestions) {
@@ -409,8 +406,17 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     }
                     return next;
                 });
+
+                setReviewedIds(batchIds);
+                setSelectedReviewIds(new Set(batchIds));
+                setViewMode('review');
             } else {
-                const itemsPayload = pagedSuppliers.map(s => {
+                const targetBatch = pagedOverviewSuppliers.length > 0
+                    ? pagedOverviewSuppliers
+                    : filteredSuppliers.slice(0, BATCH_SIZE);
+                if (targetBatch.length === 0) return;
+
+                const itemsPayload = targetBatch.map(s => {
                     const d = supplierDrafts[s.id];
                     return {
                         id: s.id,
@@ -430,6 +436,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 if (data?.error) throw new Error(data.error);
 
                 const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
+                const batchIds = targetBatch.map(s => s.id);
+
                 setSupplierDrafts(prev => {
                     const next = { ...prev };
                     for (const s of suggestions) {
@@ -454,6 +462,10 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     }
                     return next;
                 });
+
+                setReviewedIds(batchIds);
+                setSelectedReviewIds(new Set(batchIds));
+                setViewMode('review');
             }
         } catch (err: any) {
             console.error('AI suggestion error:', err);
@@ -528,77 +540,6 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         }
     };
 
-    const handleSingleSearchProduct = async (productId: string) => {
-        if (!supabase) return;
-        const d = productDrafts[productId];
-        if (!d) return;
-
-        setProductDrafts(prev => ({
-            ...prev,
-            [productId]: { ...prev[productId], loadingRow: true }
-        }));
-
-        try {
-            const sup = suppliers.find(s => s.id === d.supplierId);
-            const allowShopLink = isSupplierWebshop(sup, d);
-            const { data } = await supabase.functions.invoke('process-inbound-mail', {
-                body: {
-                    action: 'suggest_completion',
-                    items: [{
-                        id: productId,
-                        type: 'product',
-                        name: d.name,
-                        productNumber: d.productNumber,
-                        category: d.category,
-                        unit: d.unit,
-                        supplierName: sup?.name || '',
-                        supplierUrl: sup?.url || sup?.orderUrl || '',
-                        supplierEmail: sup?.email || '',
-                        isWebshopSupplier: allowShopLink
-                    }]
-                }
-            });
-            const s = data?.suggestions?.[0];
-            if (s) {
-                setProductDrafts(prev => {
-                    const cur = prev[productId];
-                    if (!cur) return prev;
-                    const aiFields = {
-                        ...(cur.aiFields || {}),
-                        image: !!s.image ? true : cur.aiFields?.image,
-                        orderUrl: allowShopLink && !cur.orderUrl && !!s.orderUrl ? true : cur.aiFields?.orderUrl,
-                        productNumber: !cur.productNumber && !!s.productNumber ? true : cur.aiFields?.productNumber,
-                        category: (!cur.category || cur.category === 'Sonstiges') && !!s.category && s.category !== 'Sonstiges' ? true : cur.aiFields?.category,
-                    };
-                    return {
-                        ...prev,
-                        [productId]: {
-                            ...cur,
-                            image: s.image || cur.image || '',
-                            orderUrl: allowShopLink ? (cur.orderUrl || s.orderUrl || '') : cur.orderUrl,
-                            productNumber: cur.productNumber || s.productNumber || '',
-                            category: (!cur.category || cur.category === 'Sonstiges') && s.category ? s.category : cur.category,
-                            alternatives: Array.isArray(s.alternatives) && s.alternatives.length > 0 ? s.alternatives : cur.alternatives,
-                            loadingRow: false,
-                            aiFields,
-                            aiSuggested: Object.values(aiFields).some(Boolean)
-                        }
-                    };
-                });
-            } else {
-                setProductDrafts(prev => ({
-                    ...prev,
-                    [productId]: { ...prev[productId], loadingRow: false }
-                }));
-            }
-        } catch {
-            setProductDrafts(prev => ({
-                ...prev,
-                [productId]: { ...prev[productId], loadingRow: false }
-            }));
-        }
-    };
-
     const saveProductRows = async (idsToSave: string[], markComplete = true) => {
         if (!supabase || idsToSave.length === 0) return;
         const payloadProducts = idsToSave.map(id => {
@@ -631,6 +572,12 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             setCompletedProductIds(prev => {
                 const next = new Set(prev);
                 idsToSave.forEach(id => next.add(id));
+                return next;
+            });
+            setReviewedIds(prev => prev.filter(id => !idsToSave.includes(id)));
+            setSelectedReviewIds(prev => {
+                const next = new Set(prev);
+                idsToSave.forEach(id => next.delete(id));
                 return next;
             });
         }
@@ -667,6 +614,12 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 idsToSave.forEach(id => next.add(id));
                 return next;
             });
+            setReviewedIds(prev => prev.filter(id => !idsToSave.includes(id)));
+            setSelectedReviewIds(prev => {
+                const next = new Set(prev);
+                idsToSave.forEach(id => next.delete(id));
+                return next;
+            });
         }
     };
 
@@ -676,10 +629,10 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         try {
             if (type === 'product') {
                 await saveProductRows([id], true);
-                onSaved('Produkt gespeichert & als vollständig abgehakt.');
+                onSaved('Produkt gespeichert & abgehakt.');
             } else {
                 await saveSupplierRows([id], true);
-                onSaved('Lieferant gespeichert & als vollständig abgehakt.');
+                onSaved('Lieferant gespeichert & abgehakt.');
             }
         } catch (err: any) {
             setError(err?.message || 'Fehler beim Speichern.');
@@ -717,21 +670,20 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         }
     };
 
-    const handleBulkSave = async () => {
+    const handleBulkAcceptReview = async () => {
         setSavingBulk(true);
         setError(null);
         try {
+            const ids = Array.from(selectedReviewIds);
+            if (ids.length === 0) return;
             if (activeTab === 'products') {
-                const ids = Array.from(selectedProductIds);
-                if (ids.length === 0) return;
                 await saveProductRows(ids, true);
-                onSaved(`${ids.length} ${ids.length === 1 ? 'Produkt' : 'Produkte'} gespeichert & als vollständig abgehakt!`);
+                onSaved(`${ids.length} ${ids.length === 1 ? 'Produkt' : 'Produkte'} übernommen & als erledigt abgehakt!`);
             } else {
-                const ids = Array.from(selectedSupplierIds);
-                if (ids.length === 0) return;
                 await saveSupplierRows(ids, true);
-                onSaved(`${ids.length} ${ids.length === 1 ? 'Lieferant' : 'Lieferanten'} gespeichert & als vollständig abgehakt!`);
+                onSaved(`${ids.length} ${ids.length === 1 ? 'Lieferant' : 'Lieferanten'} übernommen & als erledigt abgehakt!`);
             }
+            setViewMode('overview');
         } catch (err: any) {
             setError(err?.message || 'Fehler beim Speichern.');
         } finally {
@@ -741,9 +693,612 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
 
     if (!isOpen) return null;
 
-    const totalProductPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
-    const totalSupplierPages = Math.max(1, Math.ceil(filteredSuppliers.length / PAGE_SIZE));
+    const totalOverviewPages = Math.max(
+        1,
+        Math.ceil((activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length) / BATCH_SIZE)
+    );
 
+    // ============================================================================
+    // FENSTER 2: PRÜFFENSTER ("KI-Ergebnisse prüfen & abhaken")
+    // Öffnet sich automatisch, nachdem man auf "KI Daten ergänzen lassen" geklickt hat
+    // ============================================================================
+    if (viewMode === 'review') {
+        const visibleReviewProducts = reviewedIds
+            .map(id => products.find(p => p.id === id))
+            .filter((p): p is Product => !!p);
+        const visibleReviewSuppliers = reviewedIds
+            .map(id => suppliers.find(s => s.id === id))
+            .filter((s): s is Supplier => !!s);
+
+        return (
+            <div
+                style={{
+                    position: 'fixed',
+                    inset: 0,
+                    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+                    backdropFilter: 'blur(4px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1300,
+                    padding: '16px'
+                }}
+                onClick={onClose}
+            >
+                <div
+                    style={{
+                        backgroundColor: 'var(--color-surface)',
+                        borderRadius: '18px',
+                        width: '100%',
+                        maxWidth: '940px',
+                        maxHeight: '90vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+                        border: '2px solid #8b5cf6',
+                        overflow: 'hidden'
+                    }}
+                    onClick={e => e.stopPropagation()}
+                >
+                    {/* Header des Prüffensters */}
+                    <div style={{
+                        padding: '18px 24px',
+                        borderBottom: '1px solid #ddd6fe',
+                        background: 'linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '12px',
+                        flexWrap: 'wrap'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('overview')}
+                                style={{
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #c4b5fd',
+                                    backgroundColor: '#fff',
+                                    color: '#5b21b6',
+                                    fontWeight: 600,
+                                    fontSize: '13px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <ArrowLeft size={15} /> Zurück
+                            </button>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#1e1b4b' }}>
+                                    ✨ KI-Vorschläge prüfen & abhaken ({reviewedIds.length})
+                                </h3>
+                                <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#4c1d95' }}>
+                                    Schau kurz über die gefundenen Bilder & Daten – was passt, kannst du direkt rechts (oder unten gesammelt) abhaken.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={onClose}
+                            style={{
+                                background: '#fff',
+                                border: '1px solid #c4b5fd',
+                                borderRadius: '8px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                color: '#5b21b6',
+                                display: 'flex'
+                            }}
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    {error && (
+                        <div style={{ margin: '12px 24px 0 24px', padding: '10px 14px', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '13px' }}>
+                            {error}
+                        </div>
+                    )}
+
+                    {/* Liste der geprüften Karten */}
+                    <div style={{
+                        padding: '18px 24px',
+                        overflowY: 'auto',
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        backgroundColor: '#f8fafc'
+                    }}>
+                        {reviewedIds.length === 0 ? (
+                            <div style={{ padding: '48px', textAlign: 'center' }}>
+                                <CheckCircle2 size={44} color="#16a34a" style={{ margin: '0 auto 12px auto' }} />
+                                <div style={{ fontSize: '17px', fontWeight: 700, color: 'var(--color-text-main)' }}>
+                                    Alle Vorschläge aus diesem Durchgang sind erledigt!
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('overview')}
+                                    className="btn btn-primary"
+                                    style={{ marginTop: '16px' }}
+                                >
+                                    Zurück zur Übersicht
+                                </button>
+                            </div>
+                        ) : activeTab === 'products' ? (
+                            visibleReviewProducts.map(p => {
+                                const d = productDrafts[p.id];
+                                if (!d) return null;
+                                const isChecked = selectedReviewIds.has(p.id);
+                                const sup = suppliers.find(s => s.id === d.supplierId);
+                                const isWebshop = isSupplierWebshop(sup, d);
+
+                                return (
+                                    <div
+                                        key={p.id}
+                                        style={{
+                                            backgroundColor: '#ffffff',
+                                            borderRadius: '14px',
+                                            padding: '14px 18px',
+                                            border: isChecked ? '2px solid #7c3aed' : '1px solid var(--color-border)',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '12px',
+                                            boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+                                        }}
+                                    >
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '28px 92px 1fr auto',
+                                            gap: '16px',
+                                            alignItems: 'center'
+                                        }}>
+                                            {/* Auswahl-Häkchen */}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedReviewIds(prev => {
+                                                        const next = new Set(prev);
+                                                        if (next.has(p.id)) next.delete(p.id);
+                                                        else next.add(p.id);
+                                                        return next;
+                                                    });
+                                                }}
+                                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isChecked ? '#7c3aed' : '#94a3b8' }}
+                                            >
+                                                {isChecked ? <CheckSquare size={22} /> : <Square size={22} />}
+                                            </button>
+
+                                            {/* Gefundenes Produktbild + Alternativen */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                                                <div style={{
+                                                    width: '76px',
+                                                    height: '76px',
+                                                    borderRadius: '10px',
+                                                    border: '1px solid var(--color-border)',
+                                                    backgroundColor: '#f8fafc',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    overflow: 'hidden',
+                                                    position: 'relative'
+                                                }}>
+                                                    {d.image ? (
+                                                        <>
+                                                            <img src={d.image} alt={d.name} style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#fff' }} />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setProductDrafts(prev => ({
+                                                                    ...prev,
+                                                                    [p.id]: { ...prev[p.id], image: '' }
+                                                                }))}
+                                                                title="Bild entfernen"
+                                                                style={{
+                                                                    position: 'absolute',
+                                                                    top: '3px',
+                                                                    right: '3px',
+                                                                    width: '18px',
+                                                                    height: '18px',
+                                                                    borderRadius: '50%',
+                                                                    border: 'none',
+                                                                    backgroundColor: 'rgba(220,38,38,0.9)',
+                                                                    color: '#fff',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    padding: 0
+                                                                }}
+                                                            >
+                                                                <X size={11} />
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <span style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'center' }}>Kein Bild</span>
+                                                    )}
+                                                </div>
+
+                                                {d.alternatives && d.alternatives.length > 1 && (
+                                                    <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
+                                                        {d.alternatives.slice(0, 4).map((altUrl, idx) => (
+                                                            <img
+                                                                key={idx}
+                                                                src={altUrl}
+                                                                alt=""
+                                                                onClick={() => setProductDrafts(prev => ({
+                                                                    ...prev,
+                                                                    [p.id]: { ...prev[p.id], image: altUrl }
+                                                                }))}
+                                                                style={{
+                                                                    width: '20px',
+                                                                    height: '20px',
+                                                                    borderRadius: '4px',
+                                                                    objectFit: 'cover',
+                                                                    cursor: 'pointer',
+                                                                    border: d.image === altUrl ? '2px solid #7c3aed' : '1px solid #cbd5e1'
+                                                                }}
+                                                                title="Anderes Bild wählen"
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Mitte: Übersichtliche Zusammenfassung ohne Formular-Chaos */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
+                                                    {d.name}
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', fontSize: '12px', color: '#475569' }}>
+                                                    <span style={{ backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                        Lieferant: {sup?.name || 'Nicht zugeordnet'}
+                                                    </span>
+                                                    <span style={{ backgroundColor: d.aiFields?.category ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.category ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                        Kategorie: {d.category} {d.aiFields?.category && '✨'}
+                                                    </span>
+                                                    {d.productNumber && (
+                                                        <span style={{ backgroundColor: d.aiFields?.productNumber ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.productNumber ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                            Art.-Nr.: {d.productNumber} {d.aiFields?.productNumber && '✨'}
+                                                        </span>
+                                                    )}
+                                                    {d.price > 0 && (
+                                                        <span style={{ backgroundColor: d.aiFields?.price ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.price ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                            Preis: {Number(d.price).toFixed(2).replace('.', ',')} € {d.aiFields?.price && '✨'}
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Shop-Link / Bestellweg Info */}
+                                                {d.orderUrl ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px' }}>
+                                                        <a
+                                                            href={/^https?:\/\//i.test(d.orderUrl) ? d.orderUrl : `https://${d.orderUrl}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            style={{ color: '#2563eb', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                                                        >
+                                                            <ExternalLink size={13} />
+                                                            Gefundener Shop-Link prüfen
+                                                        </a>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setProductDrafts(prev => ({
+                                                                ...prev,
+                                                                [p.id]: { ...prev[p.id], orderUrl: '', priceCheck: undefined }
+                                                            }))}
+                                                            style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: '11px', cursor: 'pointer', padding: 0, fontWeight: 600 }}
+                                                        >
+                                                            ✕ Link löschen
+                                                        </button>
+                                                        {d.priceCheck?.message && (
+                                                            <span style={{
+                                                                padding: '2px 8px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: 600,
+                                                                backgroundColor: d.priceCheck.status === 'warning' ? '#fffbeb' : '#f0fdf4',
+                                                                color: d.priceCheck.status === 'warning' ? '#b45309' : '#15803d',
+                                                                border: d.priceCheck.status === 'warning' ? '1px solid #fcd34d' : '1px solid #bbf7d0'
+                                                            }}>
+                                                                {d.priceCheck.message}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : !isWebshop ? (
+                                                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                                        📧 Bestellung per {sup?.preferredOrderMethod === 'phone' ? 'Telefon' : 'E-Mail'} (kein Shop-Link nötig)
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ fontSize: '12px', color: '#b45309' }}>
+                                                        Kein eindeutiger Shop-Link gefunden – klicke auf „Ändern“, falls du einen Link einfügen möchtest.
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Rechts: Klare Buttons (Abhaken / Ändern / Verwerfen) */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setProductDrafts(prev => ({
+                                                        ...prev,
+                                                        [p.id]: { ...prev[p.id], isEditing: !prev[p.id].isEditing }
+                                                    }))}
+                                                    style={{
+                                                        padding: '8px 12px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid var(--color-border)',
+                                                        backgroundColor: '#fff',
+                                                        color: '#334155',
+                                                        fontSize: '12px',
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px'
+                                                    }}
+                                                    title="Manuell korrigieren"
+                                                >
+                                                    <Edit2 size={13} /> Ändern
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => revertProductDraft(p.id)}
+                                                    style={{
+                                                        padding: '8px 10px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid #fecaca',
+                                                        backgroundColor: '#fef2f2',
+                                                        color: '#dc2626',
+                                                        fontSize: '12px',
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer'
+                                                    }}
+                                                    title="KI-Vorschlag ablehnen & zurücksetzen"
+                                                >
+                                                    <RotateCcw size={14} />
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSaveSingleRow(p.id, 'product')}
+                                                    disabled={savingRowId === p.id}
+                                                    style={{
+                                                        padding: '9px 16px',
+                                                        borderRadius: '8px',
+                                                        border: 'none',
+                                                        backgroundColor: '#16a34a',
+                                                        color: '#fff',
+                                                        fontWeight: 700,
+                                                        fontSize: '13px',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    {savingRowId === p.id ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
+                                                    ✓ Abhaken
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Aufklappbarer Korrektur-Bereich (nur sichtbar, wenn man auf "Ändern" klickt!) */}
+                                        {d.isEditing && (
+                                            <div style={{
+                                                marginTop: '4px',
+                                                paddingTop: '12px',
+                                                borderTop: '1px dashed var(--color-border)',
+                                                display: 'grid',
+                                                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                                                gap: '10px'
+                                            }}>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Lieferant</label>
+                                                    <select
+                                                        value={d.supplierId}
+                                                        onChange={e => setProductDrafts(prev => ({ ...prev, [p.id]: { ...prev[p.id], supplierId: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    >
+                                                        <option value="">-- Lieferant --</option>
+                                                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Kategorie</label>
+                                                    <select
+                                                        value={d.category}
+                                                        onChange={e => setProductDrafts(prev => ({ ...prev, [p.id]: { ...prev[p.id], category: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    >
+                                                        {STANDARD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Shop-Link (lädt automatisch Bild)</label>
+                                                    <input
+                                                        type="url"
+                                                        placeholder="https://..."
+                                                        value={d.orderUrl}
+                                                        onChange={e => setProductDrafts(prev => ({ ...prev, [p.id]: { ...prev[p.id], orderUrl: e.target.value } }))}
+                                                        onPaste={e => {
+                                                            const pasted = e.clipboardData?.getData('text') || '';
+                                                            if (pasted && /^https?:\/\//i.test(pasted.trim())) {
+                                                                setTimeout(() => handleExtractFromOrderUrl(p.id, pasted.trim()), 50);
+                                                            }
+                                                        }}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            visibleReviewSuppliers.map(s => {
+                                const d = supplierDrafts[s.id];
+                                if (!d) return null;
+                                const isChecked = selectedReviewIds.has(s.id);
+
+                                return (
+                                    <div
+                                        key={s.id}
+                                        style={{
+                                            backgroundColor: '#ffffff',
+                                            borderRadius: '14px',
+                                            padding: '14px 18px',
+                                            border: isChecked ? '2px solid #7c3aed' : '1px solid var(--color-border)',
+                                            display: 'grid',
+                                            gridTemplateColumns: '28px 1fr auto',
+                                            gap: '16px',
+                                            alignItems: 'center'
+                                        }}
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedReviewIds(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(s.id)) next.delete(s.id);
+                                                    else next.add(s.id);
+                                                    return next;
+                                                });
+                                            }}
+                                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isChecked ? '#7c3aed' : '#94a3b8' }}
+                                        >
+                                            {isChecked ? <CheckSquare size={22} /> : <Square size={22} />}
+                                        </button>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>{d.name}</div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
+                                                <input
+                                                    type="url"
+                                                    placeholder="Webseite (https://...)"
+                                                    value={d.url}
+                                                    onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], url: e.target.value } }))}
+                                                    className="input-field"
+                                                    style={{ padding: '6px 10px', fontSize: '12px' }}
+                                                />
+                                                <input
+                                                    type="email"
+                                                    placeholder="E-Mail"
+                                                    value={d.email}
+                                                    onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], email: e.target.value } }))}
+                                                    className="input-field"
+                                                    style={{ padding: '6px 10px', fontSize: '12px' }}
+                                                />
+                                                <input
+                                                    type="tel"
+                                                    placeholder="Telefon"
+                                                    value={d.phone}
+                                                    onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], phone: e.target.value } }))}
+                                                    className="input-field"
+                                                    style={{ padding: '6px 10px', fontSize: '12px' }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => revertSupplierDraft(s.id)}
+                                                style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}
+                                            >
+                                                <RotateCcw size={14} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSaveSingleRow(s.id, 'supplier')}
+                                                disabled={savingRowId === s.id}
+                                                style={{
+                                                    padding: '9px 16px',
+                                                    borderRadius: '8px',
+                                                    border: 'none',
+                                                    backgroundColor: '#16a34a',
+                                                    color: '#fff',
+                                                    fontWeight: 700,
+                                                    fontSize: '13px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px'
+                                                }}
+                                            >
+                                                <CheckCircle2 size={15} /> ✓ Abhaken
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    {/* Footer des Prüffensters */}
+                    <div style={{
+                        padding: '16px 24px',
+                        borderTop: '1px solid var(--color-border)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '12px',
+                        backgroundColor: '#fff'
+                    }}>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('overview')}
+                            className="btn btn-ghost"
+                        >
+                            ← Zurück zur Übersicht
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleBulkAcceptReview}
+                            disabled={savingBulk || selectedReviewIds.size === 0}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '10px',
+                                border: 'none',
+                                backgroundColor: '#16a34a',
+                                color: '#fff',
+                                fontWeight: 800,
+                                fontSize: '14px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)'
+                            }}
+                        >
+                            {savingBulk ? (
+                                <>
+                                    <Loader2 size={18} className="spin" /> Speichert...
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle2 size={18} />
+                                    ✓ Alle ausgewählten übernehmen & abhaken ({selectedReviewIds.size})
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ============================================================================
+    // FENSTER 1: START-ÜBERSICHT MIT RIESIGEM BUTTON "KI Daten ergänzen lassen"
+    // ============================================================================
     return (
         <div
             style={{
@@ -762,10 +1317,10 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             <div
                 style={{
                     backgroundColor: 'var(--color-surface)',
-                    borderRadius: '16px',
+                    borderRadius: '18px',
                     width: '100%',
-                    maxWidth: '1080px',
-                    maxHeight: '92vh',
+                    maxWidth: '900px',
+                    maxHeight: '90vh',
                     display: 'flex',
                     flexDirection: 'column',
                     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
@@ -780,211 +1335,140 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     borderBottom: '1px solid var(--color-border)',
                     display: 'flex',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '12px',
-                    flexWrap: 'wrap',
-                    background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.06) 0%, rgba(124, 58, 237, 0.06) 100%)'
+                    alignItems: 'center'
                 }}>
+                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--color-text-main)' }}>
+                        Daten vervollständigen
+                    </h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{
-                            width: '38px',
-                            height: '38px',
-                            borderRadius: '10px',
-                            background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                            color: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                        }}>
-                            <Sparkles size={20} />
-                        </div>
-                        <div>
-                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--color-text-main)' }}>
-                                Daten vervollständigen (KI-Assistent)
-                            </h3>
-                            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                                Fehlende Produktbilder, Kategorien, Artikelnummern und Webshop-Links gezielt prüfen & abhaken
-                            </p>
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
                             <input
                                 type="checkbox"
                                 checked={showCompleted}
                                 onChange={e => {
                                     setShowCompleted(e.target.checked);
-                                    setProductPage(0);
-                                    setSupplierPage(0);
+                                    setOverviewPage(0);
                                 }}
                             />
-                            Auch bereits erledigte anzeigen
+                            Bereits erledigte anzeigen
                         </label>
                         <button
                             onClick={onClose}
-                            style={{
-                                background: 'none',
-                                border: '1px solid var(--color-border)',
-                                borderRadius: '8px',
-                                padding: '6px',
-                                cursor: 'pointer',
-                                color: 'var(--color-text-muted)',
-                                display: 'flex'
-                            }}
+                            style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '6px', cursor: 'pointer', display: 'flex' }}
                         >
                             <X size={18} />
                         </button>
                     </div>
                 </div>
 
-                {/* Kompakte 3-Schritte-Erklärung: Was macht man hier & was tun, wenn die KI falsch liegt? */}
+                {/* RIESIGER HAUPT-BUTTON OBEN: "KI Daten ergänzen lassen" */}
                 <div style={{
-                    padding: '10px 24px',
-                    backgroundColor: '#f8fafc',
-                    borderBottom: '1px solid var(--color-border)',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                    gap: '12px',
-                    fontSize: '12px',
-                    color: '#334155'
+                    padding: '20px 24px',
+                    background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)',
+                    borderBottom: '1px solid #ddd6fe',
+                    textAlign: 'center'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                        <span style={{ backgroundColor: '#ede9fe', color: '#6d28d9', fontWeight: 800, borderRadius: '50%', width: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '11px' }}>1</span>
-                        <div>
-                            <strong style={{ color: '#0f172a' }}>KI-Vorschläge laden:</strong> Klicke rechts auf den lila Button. Die KI sucht Produktbilder, Kategorien & Shop-Links (nur bei echten Webshops, nicht bei E-Mail-Lieferanten wie HEWO/Schwälbchen).
-                        </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                        <span style={{ backgroundColor: '#ede9fe', color: '#6d28d9', fontWeight: 800, borderRadius: '50%', width: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '11px' }}>2</span>
-                        <div>
-                            <strong style={{ color: '#0f172a' }}>Was tun, wenn die KI falsch liegt?</strong> KI-Änderungen sind <span style={{ color: '#6d28d9', fontWeight: 700 }}>lila markiert</span>. Wähle einfach ein anderes Vorschaubild, ändere das Feld oder klicke auf <strong>„↩ Verwerfen“</strong> / <strong>„✕ Bild entfernen“</strong>.
-                        </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                        <span style={{ backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 800, borderRadius: '50%', width: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '11px' }}>3</span>
-                        <div>
-                            <strong style={{ color: '#0f172a' }}>Als erledigt abhaken:</strong> Passt ein Eintrag (auch wenn z.B. bei Obst kein Bild nötig ist), klicke rechts auf <strong>„✓ Speichern & Erledigt“</strong> – dann taucht er hier nicht mehr auf.
-                        </div>
-                    </div>
-                </div>
-
-                {/* Toolbar: Tabs + KI Action */}
-                <div style={{
-                    padding: '12px 24px',
-                    borderBottom: '1px solid var(--color-border)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '12px',
-                    flexWrap: 'wrap',
-                    backgroundColor: 'var(--color-surface)'
-                }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab('products')}
-                            style={{
-                                padding: '8px 14px',
-                                borderRadius: '8px',
-                                border: activeTab === 'products' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                backgroundColor: activeTab === 'products' ? 'var(--color-primary)' : 'var(--color-surface)',
-                                color: activeTab === 'products' ? '#fff' : 'var(--color-text-main)',
-                                fontWeight: 600,
-                                fontSize: '13px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                            }}
-                        >
-                            <Package size={15} />
-                            Offene Produkte ({filteredProducts.length})
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab('suppliers')}
-                            style={{
-                                padding: '8px 14px',
-                                borderRadius: '8px',
-                                border: activeTab === 'suppliers' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                backgroundColor: activeTab === 'suppliers' ? 'var(--color-primary)' : 'var(--color-surface)',
-                                color: activeTab === 'suppliers' ? '#fff' : 'var(--color-text-main)',
-                                fontWeight: 600,
-                                fontSize: '13px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                            }}
-                        >
-                            <Building2 size={15} />
-                            Offene Lieferanten ({filteredSuppliers.length})
-                        </button>
-                    </div>
-
                     <button
                         type="button"
-                        onClick={fetchAiSuggestionsForVisible}
-                        disabled={aiLoading || (activeTab === 'products' ? pagedProducts.length === 0 : pagedSuppliers.length === 0)}
+                        onClick={startAiCompletionAndOpenReview}
+                        disabled={aiLoading || (activeTab === 'products' ? filteredProducts.length === 0 : filteredSuppliers.length === 0)}
                         style={{
-                            padding: '9px 16px',
-                            borderRadius: '8px',
+                            width: '100%',
+                            padding: '18px 24px',
+                            borderRadius: '14px',
                             border: 'none',
-                            background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                            color: '#fff',
-                            fontWeight: 700,
-                            fontSize: '13px',
+                            background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+                            color: '#ffffff',
+                            fontSize: '18px',
+                            fontWeight: 800,
                             cursor: aiLoading ? 'wait' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
-                            opacity: aiLoading ? 0.8 : 1,
-                            boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)'
+                            justifyContent: 'center',
+                            gap: '12px',
+                            boxShadow: '0 10px 25px -5px rgba(124, 58, 237, 0.45)',
+                            transition: 'transform 0.15s ease'
                         }}
                     >
                         {aiLoading ? (
                             <>
-                                <Loader2 size={15} className="spin" />
-                                Suche passende Produktbilder & Daten...
+                                <Loader2 size={24} className="spin" />
+                                KI sucht passende Bilder, Links & Daten – Prüffenster öffnet gleich...
                             </>
                         ) : (
                             <>
-                                <Sparkles size={15} />
-                                ✨ Schritt 1: KI-Vorschläge für diese {activeTab === 'products' ? pagedProducts.length : pagedSuppliers.length} Einträge suchen
+                                <Sparkles size={24} />
+                                ✨ KI Daten ergänzen lassen
                             </>
                         )}
+                    </button>
+                    <div style={{ marginTop: '8px', fontSize: '13px', color: '#4c1d95', fontWeight: 500 }}>
+                        Sucht automatisch Produktbilder, Kategorien & Webshop-Links heraus und öffnet danach das Prüffenster zum einfachen Abhaken.
+                    </div>
+                </div>
+
+                {/* Tabs: Produkte / Lieferanten */}
+                <div style={{
+                    padding: '12px 24px',
+                    borderBottom: '1px solid var(--color-border)',
+                    display: 'flex',
+                    gap: '8px',
+                    backgroundColor: 'var(--color-surface)'
+                }}>
+                    <button
+                        type="button"
+                        onClick={() => { setActiveTab('products'); setOverviewPage(0); }}
+                        style={{
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            border: activeTab === 'products' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                            backgroundColor: activeTab === 'products' ? 'var(--color-primary)' : 'var(--color-surface)',
+                            color: activeTab === 'products' ? '#fff' : 'var(--color-text-main)',
+                            fontWeight: 600,
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}
+                    >
+                        <Package size={15} /> Offene Produkte ({filteredProducts.length})
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setActiveTab('suppliers'); setOverviewPage(0); }}
+                        style={{
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            border: activeTab === 'suppliers' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                            backgroundColor: activeTab === 'suppliers' ? 'var(--color-primary)' : 'var(--color-surface)',
+                            color: activeTab === 'suppliers' ? '#fff' : 'var(--color-text-main)',
+                            fontWeight: 600,
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}
+                    >
+                        <Building2 size={15} /> Offene Lieferanten ({filteredSuppliers.length})
                     </button>
                 </div>
 
                 {error && (
-                    <div style={{
-                        margin: '12px 24px 0 24px',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        backgroundColor: '#fef2f2',
-                        border: '1px solid #fecaca',
-                        color: '#b91c1c',
-                        fontSize: '13px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                    }}>
-                        <AlertCircle size={16} />
-                        {error}
+                    <div style={{ margin: '12px 24px 0 24px', padding: '10px 14px', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertCircle size={16} /> {error}
                     </div>
                 )}
 
-                {/* Body List */}
+                {/* Kompakte, ruhige Übersichts-Liste */}
                 <div style={{
-                    padding: '16px 24px',
+                    padding: '14px 24px',
                     overflowY: 'auto',
                     flex: 1,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '14px',
+                    gap: '8px',
                     backgroundColor: '#f8fafc'
                 }}>
                     {loadingState ? (
@@ -993,1083 +1477,208 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             Lade offene Einträge...
                         </div>
                     ) : activeTab === 'products' ? (
-                        pagedProducts.length === 0 ? (
+                        pagedOverviewProducts.length === 0 ? (
                             <div style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                                 <CheckCircle2 size={42} color="#16a34a" style={{ margin: '0 auto 12px auto' }} />
                                 <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-main)' }}>
                                     Alle Produkte sind vollständig!
                                 </div>
-                                <p style={{ fontSize: '13px', margin: '4px 0 0 0' }}>
-                                    Aktiviere oben „Auch bereits erledigte anzeigen“, falls du abgeschlossene Produkte noch einmal ansehen möchtest.
-                                </p>
                             </div>
                         ) : (
-                            pagedProducts.map(p => {
+                            pagedOverviewProducts.map(p => {
                                 const d = productDrafts[p.id];
                                 if (!d) return null;
-                                const isSelected = selectedProductIds.has(p.id);
-                                const isCompleted = completedProductIds.has(p.id) || isProductNaturallyComplete(p);
                                 const sup = suppliers.find(s => s.id === d.supplierId);
                                 const isWebshop = isSupplierWebshop(sup, d);
-
-                                // Was hat die KI bei diesem Produkt konkret vorgeschlagen?
-                                const aiSummaryParts: string[] = [];
-                                if (d.aiFields?.image && d.image) aiSummaryParts.push('Neues Produktbild');
-                                if (d.aiFields?.orderUrl && d.orderUrl) {
-                                    let host = 'Webshop';
-                                    try { host = new URL(d.orderUrl).hostname.replace(/^www\./, ''); } catch {}
-                                    aiSummaryParts.push(`Shop-Link (${host})`);
-                                }
-                                if (d.aiFields?.category && d.category) aiSummaryParts.push(`Kategorie → „${d.category}“`);
-                                if (d.aiFields?.productNumber && d.productNumber) aiSummaryParts.push(`Artikelnr. → „${d.productNumber}“`);
-                                if (d.aiFields?.price && d.price) aiSummaryParts.push(`Preis → ${Number(d.price).toFixed(2).replace('.', ',')} €`);
-
-                                // Was fehlt diesem Produkt aktuell noch?
-                                const missingParts: string[] = [];
-                                if (!d.image) missingParts.push('Produktbild fehlt');
-                                if (!d.supplierId) missingParts.push('Lieferant fehlt');
-                                if (isWebshop && !d.orderUrl) missingParts.push('Webshop-Link fehlt');
-                                if (!d.category || d.category === 'Sonstiges' || d.category === 'Ohne Kategorie') missingParts.push('Kategorie prüfen');
+                                const isCompleted = completedProductIds.has(p.id) || isProductNaturallyComplete(p);
 
                                 return (
                                     <div
                                         key={p.id}
                                         style={{
-                                            border: d.aiSuggested
-                                                ? '2px solid #8b5cf6'
-                                                : isSelected
-                                                    ? '1.5px solid var(--color-primary)'
-                                                    : '1px solid var(--color-border)',
-                                            borderRadius: '12px',
-                                            padding: '14px 16px',
-                                            backgroundColor: '#ffffff',
-                                            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: '12px'
-                                        }}
-                                    >
-                                        {/* KI-Vorschlags-Banner (nur sichtbar, wenn die KI für dieses Produkt etwas vorgeschlagen hat) */}
-                                        {d.aiSuggested && aiSummaryParts.length > 0 && (
-                                            <div style={{
-                                                padding: '8px 12px',
-                                                borderRadius: '8px',
-                                                backgroundColor: '#f5f3ff',
-                                                border: '1px solid #ddd6fe',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                gap: '8px',
-                                                flexWrap: 'wrap'
-                                            }}>
-                                                <div style={{ fontSize: '12px', color: '#5b21b6', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                                    <Sparkles size={14} />
-                                                    <strong>KI-Vorschlag zum Prüfen:</strong>
-                                                    <span>{aiSummaryParts.join(' · ')}</span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => revertProductDraft(p.id)}
-                                                    style={{
-                                                        padding: '4px 10px',
-                                                        borderRadius: '6px',
-                                                        border: '1px solid #c4b5fd',
-                                                        backgroundColor: '#ffffff',
-                                                        color: '#6d28d9',
-                                                        fontSize: '11px',
-                                                        fontWeight: 600,
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px'
-                                                    }}
-                                                    title="Alle KI-Vorschläge dieser Zeile verwerfen und auf den vorherigen Stand zurücksetzen"
-                                                >
-                                                    <RotateCcw size={12} />
-                                                    KI-Vorschlag verwerfen
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        <div style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '24px 125px 1fr auto',
-                                            gap: '16px',
-                                            alignItems: 'start'
-                                        }}>
-                                            {/* Checkbox */}
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setSelectedProductIds(prev => {
-                                                        const next = new Set(prev);
-                                                        if (next.has(p.id)) next.delete(p.id);
-                                                        else next.add(p.id);
-                                                        return next;
-                                                    });
-                                                }}
-                                                style={{ background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer', color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
-                                                title="Für Sammel-Speicherung auswählen"
-                                            >
-                                                {isSelected ? <CheckSquare size={19} /> : <Square size={19} />}
-                                            </button>
-
-                                            {/* Linke Spalte: Produktbild + Alternativen + Entfernen */}
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                                                <div style={{
-                                                    width: '84px',
-                                                    height: '84px',
-                                                    borderRadius: '10px',
-                                                    border: d.aiFields?.image ? '2px solid #8b5cf6' : '1px solid var(--color-border)',
-                                                    backgroundColor: '#f8fafc',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    overflow: 'hidden',
-                                                    position: 'relative'
-                                                }}>
-                                                    {d.loadingRow ? (
-                                                        <Loader2 size={22} className="spin" color="var(--color-primary)" />
-                                                    ) : d.image ? (
-                                                        <>
-                                                            <img
-                                                                src={d.image}
-                                                                alt={d.name}
-                                                                style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#fff' }}
-                                                                onError={(e) => {
-                                                                    (e.target as HTMLImageElement).style.display = 'none';
-                                                                }}
-                                                            />
-                                                            {d.aiFields?.image && (
-                                                                <span style={{
-                                                                    position: 'absolute',
-                                                                    top: '3px',
-                                                                    left: '3px',
-                                                                    backgroundColor: '#7c3aed',
-                                                                    color: '#fff',
-                                                                    fontSize: '9px',
-                                                                    fontWeight: 700,
-                                                                    padding: '1px 5px',
-                                                                    borderRadius: '4px'
-                                                                }}>
-                                                                    ✨ KI
-                                                                </span>
-                                                            )}
-                                                        </>
-                                                    ) : (
-                                                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '10px', padding: '4px' }}>
-                                                            <ImageIcon size={20} style={{ margin: '0 auto 2px auto', display: 'block', opacity: 0.6 }} />
-                                                            Kein Bild
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* Alternative Bilder zum Durchklicken */}
-                                                {d.alternatives && d.alternatives.length > 1 && (
-                                                    <div style={{ width: '100%' }}>
-                                                        <div style={{ fontSize: '10px', color: '#64748b', textAlign: 'center', marginBottom: '3px', fontWeight: 600 }}>
-                                                            Alternativen (Klick):
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                                                            {d.alternatives.slice(0, 4).map((altUrl, idx) => (
-                                                                <img
-                                                                    key={idx}
-                                                                    src={altUrl}
-                                                                    alt="Alternative"
-                                                                    onClick={() => setProductDrafts(prev => ({
-                                                                        ...prev,
-                                                                        [p.id]: { ...prev[p.id], image: altUrl }
-                                                                    }))}
-                                                                    style={{
-                                                                        width: '26px',
-                                                                        height: '26px',
-                                                                        borderRadius: '5px',
-                                                                        objectFit: 'cover',
-                                                                        cursor: 'pointer',
-                                                                        backgroundColor: '#fff',
-                                                                        border: d.image === altUrl ? '2px solid #7c3aed' : '1px solid var(--color-border)'
-                                                                    }}
-                                                                    title={`Alternativbild ${idx + 1} auswählen`}
-                                                                />
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Bild-Aktionen: Suchen & Entfernen */}
-                                                <div style={{ display: 'flex', gap: '4px', width: '100%', justifyContent: 'center', flexWrap: 'wrap' }}>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleSingleSearchProduct(p.id)}
-                                                        disabled={d.loadingRow}
-                                                        style={{
-                                                            padding: '3px 7px',
-                                                            fontSize: '11px',
-                                                            borderRadius: '6px',
-                                                            border: '1px solid var(--color-border)',
-                                                            backgroundColor: 'var(--color-surface)',
-                                                            cursor: 'pointer',
-                                                            color: 'var(--color-text-main)',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '3px'
-                                                        }}
-                                                        title="Bild für dieses Produkt neu suchen"
-                                                    >
-                                                        <Sparkles size={11} color="#7c3aed" /> {d.image ? 'Neu' : 'Bild suchen'}
-                                                    </button>
-                                                    {d.image && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setProductDrafts(prev => ({
-                                                                ...prev,
-                                                                [p.id]: {
-                                                                    ...prev[p.id],
-                                                                    image: '',
-                                                                    aiFields: { ...(prev[p.id].aiFields || {}), image: false }
-                                                                }
-                                                            }))}
-                                                            style={{
-                                                                padding: '3px 7px',
-                                                                fontSize: '11px',
-                                                                borderRadius: '6px',
-                                                                border: '1px solid #fecaca',
-                                                                backgroundColor: '#fef2f2',
-                                                                cursor: 'pointer',
-                                                                color: '#dc2626',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '2px'
-                                                            }}
-                                                            title="Falsches Bild entfernen"
-                                                        >
-                                                            <X size={11} /> Weg
-                                                        </button>
-                                                    )}
-                                                </div>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setProductDrafts(prev => ({
-                                                        ...prev,
-                                                        [p.id]: { ...prev[p.id], showCustomImageInput: !prev[p.id].showCustomImageInput }
-                                                    }))}
-                                                    style={{
-                                                        background: 'none',
-                                                        border: 'none',
-                                                        padding: 0,
-                                                        fontSize: '10px',
-                                                        color: '#64748b',
-                                                        textDecoration: 'underline',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                >
-                                                    {d.showCustomImageInput ? 'Bild-URL ausblenden' : 'Eigene Bild-URL'}
-                                                </button>
-                                            </div>
-
-                                            {/* Mittlere Spalte: Klar beschriftete Felder */}
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                {/* Zeile 1: Produktname + Status-Badges */}
-                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                    <input
-                                                        type="text"
-                                                        value={d.name}
-                                                        onChange={e => setProductDrafts(prev => ({
-                                                            ...prev,
-                                                            [p.id]: { ...prev[p.id], name: e.target.value }
-                                                        }))}
-                                                        className="input-field"
-                                                        style={{ flex: 1, minWidth: '220px', padding: '6px 10px', fontSize: '14px', fontWeight: 700 }}
-                                                    />
-                                                    {missingParts.length > 0 ? (
-                                                        missingParts.map((mp, idx) => (
-                                                            <span
-                                                                key={idx}
-                                                                style={{
-                                                                    fontSize: '11px',
-                                                                    padding: '3px 8px',
-                                                                    borderRadius: '999px',
-                                                                    backgroundColor: '#fef3c7',
-                                                                    color: '#92400e',
-                                                                    fontWeight: 600
-                                                                }}
-                                                            >
-                                                                {mp}
-                                                            </span>
-                                                        ))
-                                                    ) : (
-                                                        <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '999px', backgroundColor: '#dcfce7', color: '#166534', fontWeight: 600 }}>
-                                                            ✓ Alle Angaben vorhanden
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                {/* Zeile 2: Lieferant, Kategorie, Artikelnummer (MIT KLAREN LABELS!) */}
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
-                                                    {/* Lieferant */}
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>
-                                                            Lieferant
-                                                        </label>
-                                                        <select
-                                                            value={d.supplierId}
-                                                            onChange={e => setProductDrafts(prev => ({
-                                                                ...prev,
-                                                                [p.id]: { ...prev[p.id], supplierId: e.target.value }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
-                                                        >
-                                                            <option value="">-- Lieferant wählen --</option>
-                                                            {suppliers.map(s => (
-                                                                <option key={s.id} value={s.id}>{s.name}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-
-                                                    {/* Kategorie */}
-                                                    <div>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                                                            <label style={{ fontSize: '11px', fontWeight: 600, color: d.aiFields?.category ? '#6d28d9' : '#64748b' }}>
-                                                                Kategorie {d.aiFields?.category && '✨ KI'}
-                                                            </label>
-                                                            {d.aiFields?.category && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => revertProductDraft(p.id, 'category')}
-                                                                    style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: '#6d28d9', cursor: 'pointer', textDecoration: 'underline' }}
-                                                                >
-                                                                    ↩ Zurück
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                        <select
-                                                            value={d.category}
-                                                            onChange={e => setProductDrafts(prev => ({
-                                                                ...prev,
-                                                                [p.id]: { ...prev[p.id], category: e.target.value }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{
-                                                                width: '100%',
-                                                                padding: '6px 10px',
-                                                                fontSize: '12px',
-                                                                borderColor: d.aiFields?.category ? '#8b5cf6' : undefined,
-                                                                backgroundColor: d.aiFields?.category ? '#f5f3ff' : undefined
-                                                            }}
-                                                        >
-                                                            {STANDARD_CATEGORIES.map(c => (
-                                                                <option key={c} value={c}>{c}</option>
-                                                            ))}
-                                                            {d.category && !STANDARD_CATEGORIES.includes(d.category) && (
-                                                                <option value={d.category}>{d.category}</option>
-                                                            )}
-                                                        </select>
-                                                    </div>
-
-                                                    {/* Artikelnummer */}
-                                                    <div>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                                                            <label style={{ fontSize: '11px', fontWeight: 600, color: d.aiFields?.productNumber ? '#6d28d9' : '#64748b' }}>
-                                                                Artikelnummer (optional) {d.aiFields?.productNumber && '✨ KI'}
-                                                            </label>
-                                                            {d.aiFields?.productNumber && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => revertProductDraft(p.id, 'productNumber')}
-                                                                    style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: '#6d28d9', cursor: 'pointer', textDecoration: 'underline' }}
-                                                                >
-                                                                    ↩ Löschen
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                        <input
-                                                            type="text"
-                                                            placeholder="z.B. aus Rechnung..."
-                                                            value={d.productNumber}
-                                                            onChange={e => setProductDrafts(prev => ({
-                                                                ...prev,
-                                                                [p.id]: { ...prev[p.id], productNumber: e.target.value }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{
-                                                                width: '100%',
-                                                                padding: '6px 10px',
-                                                                fontSize: '12px',
-                                                                borderColor: d.aiFields?.productNumber ? '#8b5cf6' : undefined,
-                                                                backgroundColor: d.aiFields?.productNumber ? '#f5f3ff' : undefined
-                                                            }}
-                                                        />
-                                                    </div>
-
-                                                    {/* Preis (€) */}
-                                                    <div>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                                                            <label style={{ fontSize: '11px', fontWeight: 600, color: d.aiFields?.price ? '#6d28d9' : '#64748b' }}>
-                                                                Einzelpreis (€) {d.aiFields?.price && '✨ KI'}
-                                                            </label>
-                                                            {d.aiFields?.price && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => revertProductDraft(p.id, 'price')}
-                                                                    style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: '#6d28d9', cursor: 'pointer', textDecoration: 'underline' }}
-                                                                >
-                                                                    ↩ Zurück
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            placeholder="0.00"
-                                                            value={d.price || ''}
-                                                            onChange={e => setProductDrafts(prev => ({
-                                                                ...prev,
-                                                                [p.id]: { ...prev[p.id], price: parseFloat(e.target.value) || 0 }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{
-                                                                width: '100%',
-                                                                padding: '6px 10px',
-                                                                fontSize: '12px',
-                                                                borderColor: d.aiFields?.price ? '#8b5cf6' : undefined,
-                                                                backgroundColor: d.aiFields?.price ? '#f5f3ff' : undefined
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                {/* Zeile 3: Bestellweg / Shop-Link (intelligent je nach Lieferant!) */}
-                                                {isWebshop || d.orderUrl || d.showOptionalShopLink ? (
-                                                    <div>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                                                            <label style={{ fontSize: '11px', fontWeight: 600, color: d.aiFields?.orderUrl ? '#6d28d9' : '#64748b' }}>
-                                                                Direkter Webshop-Bestelllink {sup ? `(für ${sup.name})` : ''} {d.aiFields?.orderUrl && '✨ KI-Vorschlag'}
-                                                            </label>
-                                                            {d.orderUrl && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setProductDrafts(prev => ({
-                                                                        ...prev,
-                                                                        [p.id]: {
-                                                                            ...prev[p.id],
-                                                                            orderUrl: '',
-                                                                            aiFields: { ...(prev[p.id].aiFields || {}), orderUrl: false }
-                                                                        }
-                                                                    }))}
-                                                                    style={{ background: 'none', border: 'none', padding: 0, fontSize: '11px', color: '#dc2626', cursor: 'pointer', fontWeight: 600 }}
-                                                                >
-                                                                    ✕ Falschen Link entfernen
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                                            <input
-                                                                type="url"
-                                                                placeholder="https://... (Shop-Link zum Produkt – lädt beim Einfügen automatisch das Bild)"
-                                                                value={d.orderUrl}
-                                                                onChange={e => setProductDrafts(prev => ({
-                                                                    ...prev,
-                                                                    [p.id]: { ...prev[p.id], orderUrl: e.target.value }
-                                                                }))}
-                                                                onPaste={e => {
-                                                                    const pasted = e.clipboardData?.getData('text') || '';
-                                                                    if (pasted && /^https?:\/\//i.test(pasted.trim())) {
-                                                                        setTimeout(() => handleExtractFromOrderUrl(p.id, pasted.trim()), 50);
-                                                                    }
-                                                                }}
-                                                                onBlur={e => {
-                                                                    const val = e.target.value.trim();
-                                                                    if (val && !d.image) {
-                                                                        handleExtractFromOrderUrl(p.id, val);
-                                                                    }
-                                                                }}
-                                                                className="input-field"
-                                                                style={{
-                                                                    flex: 1,
-                                                                    padding: '6px 10px',
-                                                                    fontSize: '12px',
-                                                                    borderColor: d.aiFields?.orderUrl ? '#8b5cf6' : undefined,
-                                                                    backgroundColor: d.aiFields?.orderUrl ? '#f5f3ff' : undefined
-                                                                }}
-                                                            />
-                                                            {d.orderUrl && (
-                                                                <>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleExtractFromOrderUrl(p.id, d.orderUrl)}
-                                                                        style={{
-                                                                            padding: '6px 10px',
-                                                                            borderRadius: '6px',
-                                                                            border: '1px solid var(--color-border)',
-                                                                            backgroundColor: 'var(--color-surface)',
-                                                                            cursor: 'pointer',
-                                                                            fontSize: '11px',
-                                                                            fontWeight: 600,
-                                                                            color: 'var(--color-primary)',
-                                                                            whiteSpace: 'nowrap'
-                                                                        }}
-                                                                        title="Produktbild von diesem Link abrufen"
-                                                                    >
-                                                                        🖼️ Bild vom Link
-                                                                    </button>
-                                                                    <a
-                                                                        href={/^https?:\/\//i.test(d.orderUrl) ? d.orderUrl : `https://${d.orderUrl}`}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        style={{
-                                                                            padding: '6px 10px',
-                                                                            borderRadius: '6px',
-                                                                            border: '1px solid var(--color-border)',
-                                                                            color: 'var(--color-text-main)',
-                                                                            display: 'flex',
-                                                                            alignItems: 'center',
-                                                                            gap: '4px',
-                                                                            fontSize: '11px',
-                                                                            textDecoration: 'none',
-                                                                            fontWeight: 600,
-                                                                            whiteSpace: 'nowrap'
-                                                                        }}
-                                                                        title="Shop-Link im Browser öffnen und prüfen"
-                                                                    >
-                                                                        <ExternalLink size={12} /> Link prüfen
-                                                                    </a>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                        {d.priceCheck?.message && (
-                                                            <div style={{
-                                                                marginTop: '6px',
-                                                                padding: '5px 10px',
-                                                                borderRadius: '6px',
-                                                                fontSize: '11px',
-                                                                fontWeight: 600,
-                                                                backgroundColor: d.priceCheck.status === 'warning'
-                                                                    ? '#fffbeb'
-                                                                    : d.priceCheck.status === 'ok'
-                                                                        ? '#f0fdf4'
-                                                                        : '#f5f3ff',
-                                                                border: d.priceCheck.status === 'warning'
-                                                                    ? '1px solid #fcd34d'
-                                                                    : d.priceCheck.status === 'ok'
-                                                                        ? '1px solid #bbf7d0'
-                                                                        : '1px solid #ddd6fe',
-                                                                color: d.priceCheck.status === 'warning'
-                                                                    ? '#b45309'
-                                                                    : d.priceCheck.status === 'ok'
-                                                                        ? '#15803d'
-                                                                        : '#6d28d9',
-                                                                display: 'flex',
-                                                                justifyContent: 'space-between',
-                                                                alignItems: 'center',
-                                                                gap: '8px'
-                                                            }}>
-                                                                <span>{d.priceCheck.message}</span>
-                                                                {d.priceCheck.status === 'warning' && d.orderUrl && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => revertProductDraft(p.id, 'orderUrl')}
-                                                                        style={{
-                                                                            background: '#ffffff',
-                                                                            border: '1px solid #f59e0b',
-                                                                            borderRadius: '4px',
-                                                                            padding: '2px 8px',
-                                                                            fontSize: '10px',
-                                                                            fontWeight: 700,
-                                                                            color: '#b45309',
-                                                                            cursor: 'pointer'
-                                                                        }}
-                                                                    >
-                                                                        ✕ Link verwerfen
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div style={{
-                                                        padding: '6px 10px',
-                                                        borderRadius: '8px',
-                                                        backgroundColor: '#f1f5f9',
-                                                        color: '#475569',
-                                                        fontSize: '12px',
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                        flexWrap: 'wrap',
-                                                        gap: '8px'
-                                                    }}>
-                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                            {sup?.preferredOrderMethod === 'phone' ? <Phone size={13} color="#16a34a" /> : <Mail size={13} color="#2563eb" />}
-                                                            Bestellung bei <strong>{sup?.name || 'diesem Lieferanten'}</strong> erfolgt per {sup?.preferredOrderMethod === 'phone' ? 'Telefon' : 'E-Mail'} – <strong>kein Shop-Link nötig</strong>.
-                                                        </span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setProductDrafts(prev => ({
-                                                                ...prev,
-                                                                [p.id]: { ...prev[p.id], showOptionalShopLink: true }
-                                                            }))}
-                                                            style={{
-                                                                background: 'none',
-                                                                border: 'none',
-                                                                padding: 0,
-                                                                fontSize: '11px',
-                                                                color: 'var(--color-primary)',
-                                                                cursor: 'pointer',
-                                                                fontWeight: 600
-                                                            }}
-                                                        >
-                                                            + Trotzdem Shop-Link eintragen
-                                                        </button>
-                                                    </div>
-                                                )}
-
-                                                {/* Optional aufklappbares Feld für direkte Bild-URL */}
-                                                {d.showCustomImageInput && (
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>
-                                                            Direkte Bild-URL (optional)
-                                                        </label>
-                                                        <input
-                                                            type="url"
-                                                            placeholder="https://... (Direkter Link zu einer Bilddatei)"
-                                                            value={d.image}
-                                                            onChange={e => setProductDrafts(prev => ({
-                                                                ...prev,
-                                                                [p.id]: { ...prev[p.id], image: e.target.value }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Rechte Spalte: Klare Speicher-/Abhak-Aktion */}
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end', justifyContent: 'center' }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleSaveSingleRow(p.id, 'product')}
-                                                    disabled={savingRowId === p.id}
-                                                    style={{
-                                                        padding: '9px 14px',
-                                                        borderRadius: '8px',
-                                                        border: 'none',
-                                                        backgroundColor: '#16a34a',
-                                                        color: '#fff',
-                                                        fontWeight: 700,
-                                                        fontSize: '12px',
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        whiteSpace: 'nowrap',
-                                                        boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)'
-                                                    }}
-                                                    title="Speichert alle Eingaben dieser Zeile und hakt das Produkt als vollständig ab (auch wenn du z.B. kein Bild benötigst)"
-                                                >
-                                                    {savingRowId === p.id ? (
-                                                        <Loader2 size={14} className="spin" />
-                                                    ) : (
-                                                        <CheckCircle2 size={14} />
-                                                    )}
-                                                    {d.image ? 'Speichern & Erledigt' : 'Auch ohne Bild erledigt'}
-                                                </button>
-
-                                                {isCompleted && showCompleted && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleUnmarkComplete(p.id, 'product')}
-                                                        style={{
-                                                            padding: '4px 8px',
-                                                            borderRadius: '6px',
-                                                            border: '1px solid var(--color-border)',
-                                                            backgroundColor: 'transparent',
-                                                            color: 'var(--color-text-muted)',
-                                                            fontSize: '11px',
-                                                            cursor: 'pointer',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '4px'
-                                                        }}
-                                                    >
-                                                        <RotateCcw size={11} /> Wieder offen
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        )
-                    ) : (
-                        pagedSuppliers.length === 0 ? (
-                            <div style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                                <CheckCircle2 size={42} color="#16a34a" style={{ margin: '0 auto 12px auto' }} />
-                                <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-main)' }}>
-                                    Alle Lieferanten sind vollständig!
-                                </div>
-                                <p style={{ fontSize: '13px', margin: '4px 0 0 0' }}>
-                                    Aktiviere oben „Auch bereits erledigte anzeigen“, um bereits abgehakte Lieferanten einzusehen.
-                                </p>
-                            </div>
-                        ) : (
-                            pagedSuppliers.map(s => {
-                                const d = supplierDrafts[s.id];
-                                if (!d) return null;
-                                const isSelected = selectedSupplierIds.has(s.id);
-                                const isCompleted = completedSupplierIds.has(s.id) || isSupplierNaturallyComplete(s);
-
-                                const aiSupParts: string[] = [];
-                                if (d.aiFields?.url && d.url) aiSupParts.push(`Webseite (${d.url})`);
-                                if (d.aiFields?.email && d.email) aiSupParts.push(`E-Mail (${d.email})`);
-                                if (d.aiFields?.phone && d.phone) aiSupParts.push(`Telefon (${d.phone})`);
-                                if (d.aiFields?.customerNumber && d.customerNumber) aiSupParts.push(`Kundennr. (${d.customerNumber})`);
-
-                                return (
-                                    <div
-                                        key={s.id}
-                                        style={{
-                                            border: d.aiSuggested
-                                                ? '2px solid #8b5cf6'
-                                                : isSelected
-                                                    ? '1.5px solid var(--color-primary)'
-                                                    : '1px solid var(--color-border)',
-                                            borderRadius: '12px',
-                                            padding: '14px 16px',
-                                            backgroundColor: '#ffffff',
+                                            backgroundColor: '#fff',
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: '10px',
+                                            padding: '10px 14px',
                                             display: 'flex',
                                             flexDirection: 'column',
                                             gap: '10px'
                                         }}
                                     >
-                                        {d.aiSuggested && aiSupParts.length > 0 && (
-                                            <div style={{
-                                                padding: '8px 12px',
-                                                borderRadius: '8px',
-                                                backgroundColor: '#f5f3ff',
-                                                border: '1px solid #ddd6fe',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                gap: '8px',
-                                                flexWrap: 'wrap'
-                                            }}>
-                                                <div style={{ fontSize: '12px', color: '#5b21b6', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <Sparkles size={14} />
-                                                    <strong>KI-Vorschlag aus E-Mails:</strong> {aiSupParts.join(' · ')}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => revertSupplierDraft(s.id)}
-                                                    style={{
-                                                        padding: '4px 10px',
-                                                        borderRadius: '6px',
-                                                        border: '1px solid #c4b5fd',
-                                                        backgroundColor: '#ffffff',
-                                                        color: '#6d28d9',
-                                                        fontSize: '11px',
-                                                        fontWeight: 600,
-                                                        cursor: 'pointer'
-                                                    }}
-                                                >
-                                                    ↩ KI-Vorschlag verwerfen
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        <div style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '24px 1fr auto',
-                                            gap: '14px',
-                                            alignItems: 'center'
-                                        }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setSelectedSupplierIds(prev => {
-                                                        const next = new Set(prev);
-                                                        if (next.has(s.id)) next.delete(s.id);
-                                                        else next.add(s.id);
-                                                        return next;
-                                                    });
-                                                }}
-                                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
-                                            >
-                                                {isSelected ? <CheckSquare size={19} /> : <Square size={19} />}
-                                            </button>
-
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                    <input
-                                                        type="text"
-                                                        value={d.name}
-                                                        onChange={e => setSupplierDrafts(prev => ({
-                                                            ...prev,
-                                                            [s.id]: { ...prev[s.id], name: e.target.value }
-                                                        }))}
-                                                        className="input-field"
-                                                        style={{ flex: 1, minWidth: '200px', padding: '6px 10px', fontSize: '14px', fontWeight: 700 }}
-                                                    />
-                                                    {!d.url && (
-                                                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', backgroundColor: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
-                                                            Webseite fehlt
-                                                        </span>
-                                                    )}
-                                                    {!d.email && (
-                                                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', backgroundColor: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
-                                                            E-Mail fehlt
-                                                        </span>
-                                                    )}
-                                                    {!d.phone && (
-                                                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', backgroundColor: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
-                                                            Telefon fehlt
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: d.aiFields?.url ? '#6d28d9' : '#64748b', marginBottom: '3px' }}>
-                                                            Webseite / Shop-URL {d.aiFields?.url && '✨ KI'}
-                                                        </label>
-                                                        <input
-                                                            type="url"
-                                                            placeholder="https://www..."
-                                                            value={d.url}
-                                                            onChange={e => setSupplierDrafts(prev => ({
-                                                                ...prev,
-                                                                [s.id]: { ...prev[s.id], url: e.target.value }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{
-                                                                width: '100%',
-                                                                padding: '6px 10px',
-                                                                fontSize: '12px',
-                                                                borderColor: d.aiFields?.url ? '#8b5cf6' : undefined,
-                                                                backgroundColor: d.aiFields?.url ? '#f5f3ff' : undefined
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: d.aiFields?.email ? '#6d28d9' : '#64748b', marginBottom: '3px' }}>
-                                                            Bestell-E-Mail {d.aiFields?.email && '✨ KI'}
-                                                        </label>
-                                                        <input
-                                                            type="email"
-                                                            placeholder="bestellung@lieferant.de"
-                                                            value={d.email}
-                                                            onChange={e => setSupplierDrafts(prev => ({
-                                                                ...prev,
-                                                                [s.id]: { ...prev[s.id], email: e.target.value }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{
-                                                                width: '100%',
-                                                                padding: '6px 10px',
-                                                                fontSize: '12px',
-                                                                borderColor: d.aiFields?.email ? '#8b5cf6' : undefined,
-                                                                backgroundColor: d.aiFields?.email ? '#f5f3ff' : undefined
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: d.aiFields?.phone ? '#6d28d9' : '#64748b', marginBottom: '3px' }}>
-                                                            Telefonnummer (opt.) {d.aiFields?.phone && '✨ KI'}
-                                                        </label>
-                                                        <input
-                                                            type="tel"
-                                                            placeholder="+49..."
-                                                            value={d.phone}
-                                                            onChange={e => setSupplierDrafts(prev => ({
-                                                                ...prev,
-                                                                [s.id]: { ...prev[s.id], phone: e.target.value }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{
-                                                                width: '100%',
-                                                                padding: '6px 10px',
-                                                                fontSize: '12px',
-                                                                borderColor: d.aiFields?.phone ? '#8b5cf6' : undefined,
-                                                                backgroundColor: d.aiFields?.phone ? '#f5f3ff' : undefined
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: d.aiFields?.customerNumber ? '#6d28d9' : '#64748b', marginBottom: '3px' }}>
-                                                            Kundennummer (opt.) {d.aiFields?.customerNumber && '✨ KI'}
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Kundennr..."
-                                                            value={d.customerNumber}
-                                                            onChange={e => setSupplierDrafts(prev => ({
-                                                                ...prev,
-                                                                [s.id]: { ...prev[s.id], customerNumber: e.target.value }
-                                                            }))}
-                                                            className="input-field"
-                                                            style={{
-                                                                width: '100%',
-                                                                padding: '6px 10px',
-                                                                fontSize: '12px',
-                                                                borderColor: d.aiFields?.customerNumber ? '#8b5cf6' : undefined,
-                                                                backgroundColor: d.aiFields?.customerNumber ? '#f5f3ff' : undefined
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleSaveSingleRow(s.id, 'supplier')}
-                                                    disabled={savingRowId === s.id}
-                                                    style={{
-                                                        padding: '9px 14px',
-                                                        borderRadius: '8px',
-                                                        border: 'none',
-                                                        backgroundColor: '#16a34a',
-                                                        color: '#fff',
-                                                        fontWeight: 700,
-                                                        fontSize: '12px',
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                >
-                                                    {savingRowId === s.id ? (
-                                                        <Loader2 size={14} className="spin" />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                                                <div style={{
+                                                    width: '44px',
+                                                    height: '44px',
+                                                    borderRadius: '8px',
+                                                    border: '1px solid var(--color-border)',
+                                                    backgroundColor: '#f8fafc',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    overflow: 'hidden',
+                                                    flexShrink: 0
+                                                }}>
+                                                    {d.image ? (
+                                                        <img src={d.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#fff' }} />
                                                     ) : (
-                                                        <CheckCircle2 size={14} />
+                                                        <ImageIcon size={18} color="#94a3b8" />
                                                     )}
-                                                    Speichern & Erledigt
+                                                </div>
+                                                <div style={{ minWidth: 0, flex: 1 }}>
+                                                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {d.name}
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginTop: '3px', fontSize: '11px', color: '#64748b' }}>
+                                                        <span>{sup?.name || 'Kein Lieferant'}</span>
+                                                        {!d.image && <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Kein Bild</span>}
+                                                        {isWebshop && !d.orderUrl && <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Kein Shop-Link</span>}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setProductDrafts(prev => ({ ...prev, [p.id]: { ...prev[p.id], isEditing: !prev[p.id].isEditing } }))}
+                                                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', backgroundColor: '#fff', fontSize: '12px', cursor: 'pointer', color: '#475569' }}
+                                                >
+                                                    ✏️ Manuell
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSaveSingleRow(p.id, 'product')}
+                                                    disabled={savingRowId === p.id}
+                                                    style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#16a34a', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                >
+                                                    {savingRowId === p.id ? <Loader2 size={13} className="spin" /> : <CheckCircle2 size={13} />}
+                                                    Erledigt
                                                 </button>
                                                 {isCompleted && showCompleted && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleUnmarkComplete(s.id, 'supplier')}
-                                                        style={{
-                                                            padding: '4px 8px',
-                                                            borderRadius: '6px',
-                                                            border: '1px solid var(--color-border)',
-                                                            backgroundColor: 'transparent',
-                                                            color: 'var(--color-text-muted)',
-                                                            fontSize: '11px',
-                                                            cursor: 'pointer'
-                                                        }}
+                                                        onClick={() => handleUnmarkComplete(p.id, 'product')}
+                                                        style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--color-border)', backgroundColor: '#fff', fontSize: '11px', cursor: 'pointer' }}
                                                     >
                                                         Wieder offen
                                                     </button>
                                                 )}
                                             </div>
                                         </div>
+
+                                        {d.isEditing && (
+                                            <div style={{ paddingTop: '10px', borderTop: '1px dashed var(--color-border)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px' }}>
+                                                <select
+                                                    value={d.supplierId}
+                                                    onChange={e => setProductDrafts(prev => ({ ...prev, [p.id]: { ...prev[p.id], supplierId: e.target.value } }))}
+                                                    className="input-field"
+                                                    style={{ padding: '6px 8px', fontSize: '12px' }}
+                                                >
+                                                    <option value="">-- Lieferant --</option>
+                                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                </select>
+                                                <select
+                                                    value={d.category}
+                                                    onChange={e => setProductDrafts(prev => ({ ...prev, [p.id]: { ...prev[p.id], category: e.target.value } }))}
+                                                    className="input-field"
+                                                    style={{ padding: '6px 8px', fontSize: '12px' }}
+                                                >
+                                                    {STANDARD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select>
+                                                <input
+                                                    type="url"
+                                                    placeholder="Shop-Link (lädt automatisch Bild)"
+                                                    value={d.orderUrl}
+                                                    onChange={e => setProductDrafts(prev => ({ ...prev, [p.id]: { ...prev[p.id], orderUrl: e.target.value } }))}
+                                                    onPaste={e => {
+                                                        const pasted = e.clipboardData?.getData('text') || '';
+                                                        if (pasted && /^https?:\/\//i.test(pasted.trim())) {
+                                                            setTimeout(() => handleExtractFromOrderUrl(p.id, pasted.trim()), 50);
+                                                        }
+                                                    }}
+                                                    className="input-field"
+                                                    style={{ padding: '6px 8px', fontSize: '12px' }}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })
                         )
+                    ) : (
+                        pagedOverviewSuppliers.map(s => {
+                            const d = supplierDrafts[s.id];
+                            if (!d) return null;
+                            return (
+                                <div
+                                    key={s.id}
+                                    style={{
+                                        backgroundColor: '#fff',
+                                        border: '1px solid var(--color-border)',
+                                        borderRadius: '10px',
+                                        padding: '10px 14px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: '12px'
+                                    }}
+                                >
+                                    <div>
+                                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{d.name}</div>
+                                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                            {d.email || 'Keine E-Mail'} · {d.url || 'Keine Webseite'}
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSaveSingleRow(s.id, 'supplier')}
+                                        disabled={savingRowId === s.id}
+                                        style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#16a34a', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    >
+                                        <CheckCircle2 size={13} /> Erledigt
+                                    </button>
+                                </div>
+                            );
+                        })
                     )}
                 </div>
 
                 {/* Footer */}
                 <div style={{
-                    padding: '14px 24px',
+                    padding: '12px 24px',
                     borderTop: '1px solid var(--color-border)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    gap: '12px',
-                    flexWrap: 'wrap',
                     backgroundColor: 'var(--color-surface)'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="btn btn-ghost"
-                        >
-                            Schließen
-                        </button>
-
-                        {activeTab === 'products' && filteredProducts.length > PAGE_SIZE && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
-                                <button
-                                    type="button"
-                                    disabled={productPage === 0}
-                                    onClick={() => setProductPage(p => Math.max(0, p - 1))}
-                                    className="btn btn-ghost"
-                                    style={{ padding: '4px 10px', fontSize: '12px' }}
-                                >
-                                    ← Zurück
-                                </button>
-                                <span>Seite {productPage + 1} von {totalProductPages}</span>
-                                <button
-                                    type="button"
-                                    disabled={productPage + 1 >= totalProductPages}
-                                    onClick={() => setProductPage(p => Math.min(totalProductPages - 1, p + 1))}
-                                    className="btn btn-ghost"
-                                    style={{ padding: '4px 10px', fontSize: '12px' }}
-                                >
-                                    Weiter →
-                                </button>
-                            </div>
-                        )}
-
-                        {activeTab === 'suppliers' && filteredSuppliers.length > PAGE_SIZE && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
-                                <button
-                                    type="button"
-                                    disabled={supplierPage === 0}
-                                    onClick={() => setSupplierPage(p => Math.max(0, p - 1))}
-                                    className="btn btn-ghost"
-                                    style={{ padding: '4px 10px', fontSize: '12px' }}
-                                >
-                                    ← Zurück
-                                </button>
-                                <span>Seite {supplierPage + 1} von {totalSupplierPages}</span>
-                                <button
-                                    type="button"
-                                    disabled={supplierPage + 1 >= totalSupplierPages}
-                                    onClick={() => setSupplierPage(p => Math.min(totalSupplierPages - 1, p + 1))}
-                                    className="btn btn-ghost"
-                                    style={{ padding: '4px 10px', fontSize: '12px' }}
-                                >
-                                    Weiter →
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={handleBulkSave}
-                        disabled={savingBulk || (activeTab === 'products' ? selectedProductIds.size === 0 : selectedSupplierIds.size === 0)}
-                        className="btn btn-primary"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '10px 18px',
-                            fontWeight: 700,
-                            opacity: savingBulk ? 0.7 : 1
-                        }}
-                    >
-                        {savingBulk ? (
-                            <>
-                                <Loader2 size={16} className="spin" />
-                                Speichert...
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle2 size={16} />
-                                Ausgewählte speichern & als vollständig abhaken ({activeTab === 'products' ? selectedProductIds.size : selectedSupplierIds.size})
-                            </>
-                        )}
+                    <button type="button" onClick={onClose} className="btn btn-ghost">
+                        Schließen
                     </button>
+
+                    {totalOverviewPages > 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                            <button
+                                type="button"
+                                disabled={overviewPage === 0}
+                                onClick={() => setOverviewPage(p => Math.max(0, p - 1))}
+                                className="btn btn-ghost"
+                                style={{ padding: '4px 10px', fontSize: '12px' }}
+                            >
+                                ← Zurück
+                            </button>
+                            <span>Seite {overviewPage + 1} von {totalOverviewPages}</span>
+                            <button
+                                type="button"
+                                disabled={overviewPage + 1 >= totalOverviewPages}
+                                onClick={() => setOverviewPage(p => Math.min(totalOverviewPages - 1, p + 1))}
+                                className="btn btn-ghost"
+                                style={{ padding: '4px 10px', fontSize: '12px' }}
+                            >
+                                Weiter →
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
