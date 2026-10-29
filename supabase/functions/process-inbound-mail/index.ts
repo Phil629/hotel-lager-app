@@ -136,6 +136,459 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
   }
 }
 
+// =====================================================================
+// HILFSFUNKTIONEN FÜR BILD-, LINK- & DATEN-VERVOLLSTÄNDIGUNG
+// =====================================================================
+const SUPPLIER_DOMAIN_HINTS: Record<string, string> = {
+  'amazon business': 'amazon.de',
+  'amazon': 'amazon.de',
+  'böttcher ag': 'bueromarkt-ag.de',
+  'böttcher': 'bueromarkt-ag.de',
+  'hygi.de': 'hygi.de',
+  'hygi': 'hygi.de',
+  'reinigungsberater': 'reinigungsberater.de',
+  'lusini': 'lusini.com',
+  'papstar': 'papstar.de',
+  'ronnefeldt': 'ronnefeldt.com',
+  'coffee perfect': 'coffee-perfect.de',
+  'porzellantreff': 'porzellantreff.de',
+  'deutsche post': 'shop.deutschepost.de',
+  'ada cosmetics': 'ada-cosmetics.com',
+  'eofficeshop': 'eofficeshop.de',
+  'tecserv': 'eofficeshop.de',
+  'gottron': 'gottron-hygiene.de',
+  'hamburgpapier': 'hamburgpapier-shop.de',
+  'kaeferling': 'kaeferlingpro.com',
+  'zoells': 'zoells.de',
+  'cent direktvertrieb': 'cent-online.de',
+  'fixpart': 'fixpart.de',
+  'faironto': 'faironto.com',
+  'google cloud': 'cloud.google.com',
+  'hewo': 'hewo-mainz.de',
+  'schwälbchen': 'schwaelbchen-frischdienst.de',
+  'schwaelbchen': 'schwaelbchen-frischdienst.de'
+}
+
+const EMAIL_ONLY_SUPPLIER_KEYWORDS = [
+  'hewo',
+  'schwälbchen',
+  'schwaelbchen',
+  'frischdienst',
+  'getränke-vertrieb',
+  'getraenke-vertrieb',
+  'wäscherei',
+  'waescherei',
+  'bäckerei',
+  'baeckerei',
+  'metzgerei'
+]
+
+const isEmailOnlyWholesaler = (supplierName?: string, supplierEmail?: string): boolean => {
+  const lower = `${supplierName || ''} ${supplierEmail || ''}`.toLowerCase()
+  return EMAIL_ONLY_SUPPLIER_KEYWORDS.some(k => lower.includes(k))
+}
+
+const cleanProductName = (rawName: string): string => {
+  if (!rawName) return ''
+  let s = rawName.replace(/\s+/g, ' ').trim()
+
+  // 1. Großhandels-Zusätze wie "Kl.I CR", "Kl. I", "HKL A", "1 Stück" am Ende bereinigen
+  s = s
+    .replace(/\bKl\.?\s*(?:I{1,3}|1|2)\b(?:\s+[A-Z]{2,3})?/gi, '')
+    .replace(/\b(?:HKL|Handelsklasse)\s*[A-Z1-3]+\b/gi, '')
+    .replace(/\s+\b(?:CR|ES|IT|NL|FR|BE|GR|PL|TR|MA|PE|CL|ZA|BR|EC|WS)\b$/g, '')
+    .replace(/[-–\s]*Kt:\s*\d+\s*St\.?[-–\s]*/gi, ' ')
+    .replace(/\b1\s+(?:Stück|Stk\.?|Karton|Kasten|Packung|Pack|Beutel|Flasche|Rolle|Kanister)\b/gi, '')
+    .replace(/\bStück\s+(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
+    .replace(/\b(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
+
+  // 2. Überlange Amazon-/Webshop-SEO-Titel am Bindestrich " - " / " – " / " | " sinnvoll kürzen
+  const dashParts = s.split(/\s+[-–|]\s+/)
+  if (dashParts.length >= 2 && s.length > 48) {
+    const first = dashParts[0].trim()
+    const second = dashParts[1].trim()
+    // Falls im zweiten Teil eine wichtige Stückzahl wie "30x ..." steht, diese in Klammern retten
+    const countMatch = second.match(/\b(\d+\s*(?:x|Stück|Stk\.?|er\s*Pack|Rollen|Blatt))\b/i)
+    if (first.length >= 12) {
+      s = countMatch && !first.toLowerCase().includes(countMatch[1].toLowerCase())
+        ? `${first} (${countMatch[1]})`
+        : first
+    }
+  }
+
+  // 3. Falls noch ein langer Komma-SEO-Schweif anhängt (ab > 55 Zeichen)
+  if (s.length > 55 && s.includes(', ')) {
+    const commaParts = s.split(', ')
+    if (commaParts[0].length >= 15) {
+      s = commaParts[0].trim()
+    }
+  }
+
+  // 4. Führende Stückzahl wie "50 Stück Türschild Hotel Bitte nicht stören" -> "Türschild Hotel Bitte nicht stören (50 Stück)"
+  const leadingCount = s.match(/^(\d+\s*(?:Stück|Stk\.?|x|er|Pack|Rollen))\s+(.{8,})$/i)
+  if (leadingCount) {
+    const countStr = leadingCount[1].trim()
+    const rest = leadingCount[2].trim()
+    if (!rest.includes(`(${countStr})`)) {
+      s = `${rest} (${countStr})`
+    }
+  }
+
+  s = s.replace(/\s{2,}/g, ' ').replace(/[,;:\-–|]+$/, '').trim()
+  return s || rawName.trim()
+}
+
+const resolveSupplierDomainHint = (supplierName?: string, supplierUrl?: string, supplierEmail?: string): string => {
+  if (supplierUrl) {
+    try {
+      const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
+      return u.hostname.replace(/^www\./i, '').toLowerCase()
+    } catch {}
+  }
+  const lowerSup = (supplierName || '').toLowerCase().trim()
+  for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
+    if (lowerSup.includes(k)) return dom
+  }
+  if (supplierEmail && supplierEmail.includes('@') && supplierEmail !== 'hello@unbekannt.com') {
+    const dom = supplierEmail.split('@')[1]?.trim().toLowerCase()
+    const generic = new Set(['gmail.com', 'googlemail.com', 'web.de', 'gmx.de', 'gmx.net', 't-online.de', 'outlook.com', 'hotmail.com', 'icloud.com', 'yahoo.com'])
+    if (dom && !generic.has(dom)) return dom
+  }
+  return ''
+}
+
+const resolveWebshopDomain = (supplierName?: string, supplierUrl?: string, isWebshopMethod?: boolean, supplierEmail?: string): string => {
+  if (isEmailOnlyWholesaler(supplierName, supplierEmail)) return ''
+  const lowerSup = (supplierName || '').toLowerCase().trim()
+  for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
+    if (lowerSup.includes(k)) return dom
+  }
+  if (supplierUrl) {
+    try {
+      const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
+      const host = u.hostname.replace(/^www\./i, '').toLowerCase()
+      if (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt|fixpart|faironto/i.test(host)) {
+        return host
+      }
+    } catch {}
+  }
+  const domFromEmail = resolveSupplierDomainHint(supplierName, supplierUrl, supplierEmail)
+  if (domFromEmail && (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt|fixpart|faironto|deutschepost/i.test(domFromEmail))) {
+    return domFromEmail
+  }
+  return ''
+}
+
+const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 5000)
+  try {
+    const bq = encodeURIComponent(query.trim())
+    const br = await fetch(`https://www.bing.com/images/search?q=${bq}&FORM=HDRSC2`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'de-DE,de;q=0.9'
+      },
+      signal: controller.signal
+    })
+    const bhtml = await br.text()
+    const metas = [...bhtml.matchAll(/\bm="(\{[^"]+\})"/gi)]
+      .map(m => {
+        try {
+          return JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'))
+        } catch {
+          return null
+        }
+      })
+      .filter(x => x && (x.murl || x.turl))
+
+    // WICHTIG: Ein Shop-Bestell-Link (orderUrl) darf NUR dann vorgeschlagen werden,
+    // wenn die gefundene Seite tatsächlich zur Domain des zugeordneten Webshop-Lieferanten gehört!
+    // Niemals fremde Shops (z.B. getraenke-taxi-do.de bei HEWO) als Bestell-Link eintragen!
+    const preferred = webshopDomain
+      ? metas.find(x => {
+          try {
+            const host = new URL(x.purl || '').hostname.replace(/^www\./i, '').toLowerCase()
+            return host === webshopDomain || host.endsWith('.' + webshopDomain) || webshopDomain.endsWith('.' + host)
+          } catch {
+            return false
+          }
+        })
+      : null
+    const best = preferred || metas[0] || null
+    const alternatives = [...new Set(
+      metas.slice(0, 6).map(x => x.turl || x.murl).filter(Boolean)
+    )]
+
+    return {
+      orderUrl: preferred?.purl || '',
+      image: best?.turl || best?.murl || '',
+      highResImage: best?.murl || '',
+      title: (best?.t || '').replace(/[\ue000-\uf8ff]/g, '').trim(),
+      alternatives
+    }
+  } catch (err) {
+    console.warn('Bing search fallback error:', err)
+    return { orderUrl: '', image: '', highResImage: '', title: '', alternatives: [] as string[] }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: string) => {
+  const lower = (name || '').toLowerCase()
+  let category = currentCat && currentCat !== 'Sonstiges' && currentCat !== 'Ohne Kategorie' ? currentCat : ''
+  if (!category) {
+    // 0. Handwerk / Instandhaltung / Technik
+    if (/(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|kühlschrank|türfach|filter|lampe|leuchtmittel|led|batterie)/i.test(lower)) {
+      category = 'Instandhaltung'
+    } else if (/(?:melone|käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre)/i.test(lower)) {
+      // 1. Lebensmittel (z.B. Melone "Wasser" vor Getränke prüfen)
+      category = 'Lebensmittel'
+    } else if (/(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|toilettenpapier|kosmetiktücher|seife|shampoo|desinfektion|schwamm|entkalker|schaben|kakerlaken|ungeziefer|mülleimer|handschuhe)/i.test(lower)) {
+      // 2. Reinigung (erkennt auch Komposita wie Glasreiniger, Sanitärreiniger, Essigreiniger)
+      category = 'Reinigung'
+    } else if (/(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|milch|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk)/i.test(lower)) {
+      // 3. Getränke (wasser nur als eigenständiges Wort, nicht in wasserresistent)
+      category = 'Getränke'
+    } else if (/(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro)/i.test(lower)) {
+      // 4. Bürobedarf
+      category = 'Bürobedarf'
+    }
+  }
+
+  let unit = currentUnit || 'Stück'
+  if (!currentUnit || currentUnit === 'Stk' || currentUnit === 'Stück') {
+    if (/\b(\d+\s*x\s*\d+[,\.]?\d*\s*l|kasten|kiste)\b/i.test(lower)) unit = 'Kasten'
+    else if (/\b(karton|kt:|paket|pakete)\b/i.test(lower)) unit = 'Karton'
+    else if (/\b(rolle|rollen)\b/i.test(lower)) unit = 'Rolle'
+    else if (/\bkanister\b|(?<![\d,\.])(?:5|10)\s*l\b/i.test(lower)) unit = 'Kanister'
+    else if (/\bflasche\b|(?<![\d,\.])(?:1\s*l|500\s*ml|750\s*ml)\b/i.test(lower)) unit = 'Flasche'
+    else if (/\b(pack|packung|beutel)\b/i.test(lower)) unit = 'Packung'
+  }
+  return { category: category || currentCat || 'Sonstiges', unit }
+}
+
+const formatEuro = (val: number) => val.toFixed(2).replace('.', ',')
+
+const extractPriceFromHtml = (html: string): number | null => {
+  // 1. Meta-Tags (product:price:amount, og:price:amount)
+  const metaPrice =
+    html.match(/<meta[^>]+(?:property|name)=["'](?:product|og):price:amount["'][^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["']/i) ||
+    html.match(/<meta[^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["'][^>]+(?:property|name)=["'](?:product|og):price:amount["']/i) ||
+    html.match(/itemprop=["']price["'][^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["']/i)
+  if (metaPrice?.[1]) {
+    const v = parseFloat(metaPrice[1].replace(',', '.'))
+    if (!isNaN(v) && v > 0 && v < 10000) return v
+  }
+
+  // 2. JSON-LD Product Schema
+  const ldMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
+  for (const m of ldMatches) {
+    try {
+      const parsed = JSON.parse(m[1].trim())
+      const nodes = Array.isArray(parsed) ? parsed : (parsed['@graph'] || [parsed])
+      for (const node of nodes) {
+        if (node && (node['@type'] === 'Product' || node.sku || node.offers)) {
+          const offer = Array.isArray(node.offers) ? node.offers[0] : node.offers
+          const pVal = parseFloat(String(offer?.price || offer?.lowPrice || '').replace(',', '.'))
+          if (!isNaN(pVal) && pVal > 0 && pVal < 10000) return pVal
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Typische Preis-Patterns im HTML (z.B. Amazon / B2B-Shops)
+  const inlinePrice =
+    html.match(/"priceAmount"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i) ||
+    html.match(/class=["'][^"']*price[^"']*["'][^>]*>\s*([0-9]{1,4},[0-9]{2})\s*(?:€|&euro;|EUR)/i)
+  if (inlinePrice?.[1]) {
+    const v = parseFloat(inlinePrice[1].replace(',', '.'))
+    if (!isNaN(v) && v > 0 && v < 10000) return v
+  }
+  return null
+}
+
+const evaluatePricePlausibility = (
+  shopPrice: number | null,
+  knownPrice: number | null | undefined
+): {
+  status: 'ok' | 'warning' | 'new_price' | 'none'
+  shopPrice: number | null
+  knownPrice: number | null
+  message: string
+} => {
+  const kp = knownPrice && Number(knownPrice) > 0 ? Number(knownPrice) : null
+  if (!shopPrice || shopPrice <= 0) {
+    return { status: 'none', shopPrice: null, knownPrice: kp, message: '' }
+  }
+  if (shopPrice > 2500 || shopPrice < 0.05) {
+    return {
+      status: 'warning',
+      shopPrice,
+      knownPrice: kp,
+      message: `⚠️ Ungewöhnlicher Shop-Preis (${formatEuro(shopPrice)} €) – bitte Link prüfen!`
+    }
+  }
+  if (!kp) {
+    return {
+      status: 'new_price',
+      shopPrice,
+      knownPrice: null,
+      message: `✨ Shop-Preis erkannt: ${formatEuro(shopPrice)} € (als Artikelpreis vorgeschlagen)`
+    }
+  }
+
+  const ratio = shopPrice / kp
+  // Prüfe, ob Netto vs. Brutto (+7% oder +19% MwSt.)
+  if (ratio >= 1.16 && ratio <= 1.22) {
+    return {
+      status: 'ok',
+      shopPrice,
+      knownPrice: kp,
+      message: `✓ Preis plausibel: ${formatEuro(shopPrice)} € brutto im Shop passt zu ${formatEuro(kp)} € netto`
+    }
+  }
+  if (ratio >= 0.72 && ratio <= 1.35) {
+    return {
+      status: 'ok',
+      shopPrice,
+      knownPrice: kp,
+      message: `✓ Preis-Check OK: ${formatEuro(shopPrice)} € im Shop (bisher: ${formatEuro(kp)} €)`
+    }
+  }
+  // Prüfe, ob es wahrscheinlich ein Karton vs. Einzelstück ist (Faktor >= 2 oder <= 0.5)
+  const mult = ratio > 1 ? Math.round(ratio) : Math.round(1 / ratio)
+  if (mult >= 2 && mult <= 50) {
+    return {
+      status: 'warning',
+      shopPrice,
+      knownPrice: kp,
+      message: `⚠️ Preis-Warnung: Shop zeigt ${formatEuro(shopPrice)} € statt ${formatEuro(kp)} € (ca. Faktor ${mult}x – evtl. Karton vs. Einzelstück oder falscher Artikel!)`
+    }
+  }
+  return {
+    status: 'warning',
+    shopPrice,
+    knownPrice: kp,
+    message: `⚠️ Preis weicht stark ab: Shop zeigt ${formatEuro(shopPrice)} € statt bisher ${formatEuro(kp)} € – bitte Link prüfen!`
+  }
+}
+
+
+
+async function enrichSingleProduct(params: {
+  name: string;
+  sku?: string | null;
+  supplierName?: string | null;
+  supplierUrl?: string | null;
+  supplierEmail?: string | null;
+  knownPrice?: number | null;
+}): Promise<{
+  cleanName: string;
+  orderUrl: string;
+  image: string;
+  alternatives: string[];
+  sku: string;
+  category: string;
+  unit: string;
+}> {
+  const cleanName = cleanProductName(params.name) || params.name
+  const webshopDomain = resolveWebshopDomain(params.supplierName || '', params.supplierUrl || '', false, params.supplierEmail || '')
+  const { category, unit } = inferCategoryAndUnit(params.name)
+  let orderUrl = ''
+  let image = ''
+  let alternatives: string[] = []
+  let effectiveSku = params.sku || ''
+
+  // 1. Amazon ASIN Direkt-Check
+  if ((webshopDomain === 'amazon.de' || (params.supplierName || '').toLowerCase().includes('amazon')) && effectiveSku && /^B0[A-Z0-9]{8}$/i.test(effectiveSku)) {
+    orderUrl = `https://www.amazon.de/dp/${effectiveSku.toUpperCase()}`
+    try {
+      const ctrl = new AbortController()
+      const t = setTimeout(() => ctrl.abort(), 2600)
+      const r = await fetch(orderUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
+        signal: ctrl.signal
+      })
+      clearTimeout(t)
+      if (r.ok) {
+        const html = await r.text()
+        const m = html.match(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
+          html.match(/"large"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
+          html.match(/src=["'](https:\/\/m\.media-amazon\.com\/images\/I\/[^"']+)["']/i)
+        if (m?.[1]) {
+          image = m[1]
+          alternatives.push(image)
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Reinigungsberater Direkt-Check
+  if (!image && webshopDomain === 'reinigungsberater.de') {
+    const skuCandidate = effectiveSku || params.name.match(/\b([1-9]\d{4,6})\b/)?.[1]
+    if (skuCandidate) {
+      try {
+        const targetUrl = `https://www.reinigungsberater.de/,p-${skuCandidate}.html`
+        const ctrl = new AbortController()
+        const t = setTimeout(() => ctrl.abort(), 2600)
+        const r = await fetch(targetUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+          signal: ctrl.signal,
+          redirect: 'follow'
+        })
+        clearTimeout(t)
+        if (r.ok && r.url && /-p-[A-Za-z0-9_-]+/i.test(r.url)) {
+          orderUrl = r.url
+          effectiveSku = skuCandidate
+          const html = await r.text()
+          let ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
+          if (!ogImg || /manifest|favicon|icon[-_.]|apple-touch|logo/i.test(ogImg)) {
+            const cdnImg = html.match(/src=["'](https:\/\/cdn\.reinigungsberater\.de\/products\/[^"']+)["']/i)?.[1]
+            ogImg = cdnImg || ''
+          }
+          if (ogImg) {
+            image = ogImg
+            alternatives.push(ogImg)
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // 3. Fallback: Gezielte Bing-Suche
+  if (!image) {
+    const coreName = cleanName
+      .replace(/\s*\(\s*(?:\d+\s*(?:st(?:ü|ue)ck|x|er|pack|rollen|kg|g|l|ml)|ca\.[^)]+)\s*\)/gi, '')
+      .replace(/\b\d+\s*x\s*\d+[,\.]?\d*\s*(?:l|g|kg|ml)\b/gi, '')
+      .replace(/\bca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml)\b/gi, '')
+      .replace(/\b\d+[.,]?\d*\s*(?:kg|g|l|ml)\b/gi, '')
+      .trim()
+    const query = webshopDomain
+      ? `site:${webshopDomain} ${effectiveSku ? effectiveSku + ' ' : ''}${coreName}`.trim()
+      : `${cleanName} ${params.supplierName || ''}`.trim()
+
+    const bingRes = await searchBingProductMeta(query, webshopDomain)
+    if (bingRes.image) {
+      image = bingRes.highResImage || bingRes.image
+      if (!orderUrl && bingRes.orderUrl) orderUrl = bingRes.orderUrl
+      alternatives = bingRes.alternatives || []
+    }
+  }
+
+  return {
+    cleanName: cleanName || params.name,
+    orderUrl,
+    image,
+    alternatives,
+    sku: effectiveSku,
+    category,
+    unit
+  }
+}
+
+
 async function processEmailWithAi(params: {
   user_id: string;
   company_id: string;
@@ -482,8 +935,38 @@ Antworte ausschließlich als JSON:
       }
     }
 
-    const canonicalProductName = matchedProd ? matchedProd.name : item.product_name.trim()
+    const cleanedName = cleanProductName(item.product_name || '')
+    const canonicalProductName = matchedProd ? matchedProd.name : (cleanedName || item.product_name.trim())
     item.product_name = canonicalProductName
+
+    let resolvedImage = matchedProd?.image || ''
+    let resolvedOrderUrl = matchedProd?.order_url || ''
+    let resolvedSku = matchedProd?.product_number || item.sku || ''
+    let resolvedCategory = (matchedProd?.category && matchedProd.category !== 'Sonstiges') ? matchedProd.category : (item.category && item.category !== 'Sonstiges' ? item.category : '')
+    let resolvedUnit = (matchedProd?.unit && matchedProd.unit !== 'Stk' && matchedProd.unit !== 'Stück') ? matchedProd.unit : ''
+    let resolvedName = canonicalProductName
+
+    // Automatische KI-Anreicherung bei neuen oder unvollständigen Produkten für maximalen Wow-Effekt
+    if (docType !== 'unknown' && (!resolvedImage || !resolvedOrderUrl || !resolvedCategory || !resolvedUnit)) {
+      try {
+        const enriched = await enrichSingleProduct({
+          name: canonicalProductName,
+          sku: item.sku || matchedProd?.product_number || null,
+          supplierName: supName,
+          supplierUrl: matchedSupplier?.url || matchedSupplier?.order_url || '',
+          supplierEmail: parsedData.supplier_email || matchedSupplier?.email || fromAddress,
+          knownPrice: Number(item.price) || 0
+        })
+        if (enriched.image && !resolvedImage) resolvedImage = enriched.image
+        if (enriched.orderUrl && !resolvedOrderUrl) resolvedOrderUrl = enriched.orderUrl
+        if (enriched.sku && !resolvedSku) resolvedSku = enriched.sku
+        if (enriched.category && !resolvedCategory) resolvedCategory = enriched.category
+        if (enriched.unit && !resolvedUnit) resolvedUnit = enriched.unit
+        if (enriched.cleanName && !matchedProd) resolvedName = enriched.cleanName
+      } catch (enrichErr) {
+        console.warn('Auto-enrich error on inbound item:', item.product_name, enrichErr)
+      }
+    }
 
     let orderStatus: string | null = null
     if (docType === 'order_confirmation' || docType === 'delivery_note') {
@@ -557,6 +1040,7 @@ Antworte ausschließlich als JSON:
           updatePayload.price = aiPrice
         }
 
+        if (!existingOrder.product_image && resolvedImage) updatePayload.product_image = resolvedImage
         if (orderRef) updatePayload.order_number = orderRef
         if (parsedData.delivery_date) updatePayload.expected_delivery_date = parsedData.delivery_date
         if (parsedData.tracking_link) updatePayload.trackingLink = parsedData.tracking_link
@@ -579,7 +1063,8 @@ Antworte ausschließlich als JSON:
           id: crypto.randomUUID(),
           user_id: user_id,
           company_id: company_id,
-          product_name: canonicalProductName,
+          product_name: resolvedName,
+          product_image: resolvedImage || null,
           quantity: Math.round(Number(item.quantity)) || 1,
           price: Number(item.price) || 0,
           date: parsedData.order_date || fallbackOrderDate,
@@ -597,13 +1082,23 @@ Antworte ausschließlich als JSON:
     // Produkt nur aktualisieren oder neu anlegen, wenn es KEIN unbekannter/Newsletter-Beleg ist!
     if (docType !== 'unknown') {
       if (matchedProd) {
-        if (item.price && Number(item.price) > 0) {
-          let newPrice = Number(item.price)
-          if (valuation_method === 'average' && matchedProd.stock > 0 && matchedProd.price > 0) {
-            newPrice = ((matchedProd.stock * matchedProd.price) + ((item.quantity || 1) * newPrice)) / (matchedProd.stock + (item.quantity || 1))
-          }
-          const prodUpdate: any = { price: newPrice }
-          if (!matchedProd.supplier_id && supplier_id) prodUpdate.supplier_id = supplier_id
+        let newPrice = Number(item.price) || 0
+        if (newPrice > 0 && valuation_method === 'average' && matchedProd.stock > 0 && matchedProd.price > 0) {
+          newPrice = ((matchedProd.stock * matchedProd.price) + ((item.quantity || 1) * newPrice)) / (matchedProd.stock + (item.quantity || 1))
+        }
+        const prodUpdate: any = {}
+        if (newPrice > 0) prodUpdate.price = newPrice
+        if (!matchedProd.supplier_id && supplier_id) prodUpdate.supplier_id = supplier_id
+        if (!matchedProd.image && resolvedImage) prodUpdate.image = resolvedImage
+        if (!matchedProd.order_url && resolvedOrderUrl) prodUpdate.order_url = resolvedOrderUrl
+        if (!matchedProd.product_number && resolvedSku) prodUpdate.product_number = resolvedSku
+        if ((!matchedProd.category || matchedProd.category === 'Sonstiges') && resolvedCategory && resolvedCategory !== 'Sonstiges') {
+          prodUpdate.category = resolvedCategory
+        }
+        if ((!matchedProd.unit || matchedProd.unit === 'Stk' || matchedProd.unit === 'Stück') && resolvedUnit && resolvedUnit !== 'Stk') {
+          prodUpdate.unit = resolvedUnit
+        }
+        if (Object.keys(prodUpdate).length > 0) {
           await supabase.from('products').update(prodUpdate).eq('id', matchedProd.id)
         }
       } else if (supplier_id) {
@@ -611,13 +1106,17 @@ Antworte ausschließlich als JSON:
           id: crypto.randomUUID(),
           user_id: user_id,
           company_id: company_id,
-          name: canonicalProductName,
-          category: item.category || 'Sonstiges',
+          name: resolvedName,
+          category: resolvedCategory || 'Sonstiges',
           price: Number(item.price) || 0,
           supplier_id: supplier_id,
           is_auto_generated: true,
           stock: 0,
-          unit: 'Stk'
+          unit: resolvedUnit || 'Stück',
+          image: resolvedImage || null,
+          order_url: resolvedOrderUrl || null,
+          product_number: resolvedSku || null,
+          preferred_order_method: resolvedOrderUrl ? 'webshop' : undefined
         }
         const { error: newProdErr } = await supabase.from('products').insert(newProd)
         if (!newProdErr) {
@@ -1146,345 +1645,6 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
-      }
-
-      // =====================================================================
-      // HILFSFUNKTIONEN FÜR BILD-, LINK- & DATEN-VERVOLLSTÄNDIGUNG
-      // =====================================================================
-      const SUPPLIER_DOMAIN_HINTS: Record<string, string> = {
-        'amazon business': 'amazon.de',
-        'amazon': 'amazon.de',
-        'böttcher ag': 'bueromarkt-ag.de',
-        'böttcher': 'bueromarkt-ag.de',
-        'hygi.de': 'hygi.de',
-        'hygi': 'hygi.de',
-        'reinigungsberater': 'reinigungsberater.de',
-        'lusini': 'lusini.com',
-        'papstar': 'papstar.de',
-        'ronnefeldt': 'ronnefeldt.com',
-        'coffee perfect': 'coffee-perfect.de',
-        'porzellantreff': 'porzellantreff.de',
-        'deutsche post': 'shop.deutschepost.de',
-        'ada cosmetics': 'ada-cosmetics.com',
-        'eofficeshop': 'eofficeshop.de',
-        'tecserv': 'eofficeshop.de',
-        'gottron': 'gottron-hygiene.de',
-        'hamburgpapier': 'hamburgpapier-shop.de',
-        'kaeferling': 'kaeferlingpro.com',
-        'zoells': 'zoells.de',
-        'cent direktvertrieb': 'cent-online.de',
-        'fixpart': 'fixpart.de',
-        'faironto': 'faironto.com',
-        'google cloud': 'cloud.google.com',
-        'hewo': 'hewo-mainz.de',
-        'schwälbchen': 'schwaelbchen-frischdienst.de',
-        'schwaelbchen': 'schwaelbchen-frischdienst.de'
-      }
-
-      const EMAIL_ONLY_SUPPLIER_KEYWORDS = [
-        'hewo',
-        'schwälbchen',
-        'schwaelbchen',
-        'frischdienst',
-        'getränke-vertrieb',
-        'getraenke-vertrieb',
-        'wäscherei',
-        'waescherei',
-        'bäckerei',
-        'baeckerei',
-        'metzgerei'
-      ]
-
-      const isEmailOnlyWholesaler = (supplierName?: string, supplierEmail?: string): boolean => {
-        const lower = `${supplierName || ''} ${supplierEmail || ''}`.toLowerCase()
-        return EMAIL_ONLY_SUPPLIER_KEYWORDS.some(k => lower.includes(k))
-      }
-
-      const cleanProductName = (rawName: string): string => {
-        if (!rawName) return ''
-        let s = rawName.replace(/\s+/g, ' ').trim()
-
-        // 1. Großhandels-Zusätze wie "Kl.I CR", "Kl. I", "HKL A", "1 Stück" am Ende bereinigen
-        s = s
-          .replace(/\bKl\.?\s*(?:I{1,3}|1|2)\b(?:\s+[A-Z]{2,3})?/gi, '')
-          .replace(/\b(?:HKL|Handelsklasse)\s*[A-Z1-3]+\b/gi, '')
-          .replace(/\s+\b(?:CR|ES|IT|NL|FR|BE|GR|PL|TR|MA|PE|CL|ZA|BR|EC|WS)\b$/g, '')
-          .replace(/[-–\s]*Kt:\s*\d+\s*St\.?[-–\s]*/gi, ' ')
-          .replace(/\b1\s+(?:Stück|Stk\.?|Karton|Kasten|Packung|Pack|Beutel|Flasche|Rolle|Kanister)\b/gi, '')
-          .replace(/\bStück\s+(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
-          .replace(/\b(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
-
-        // 2. Überlange Amazon-/Webshop-SEO-Titel am Bindestrich " - " / " – " / " | " sinnvoll kürzen
-        const dashParts = s.split(/\s+[-–|]\s+/)
-        if (dashParts.length >= 2 && s.length > 48) {
-          const first = dashParts[0].trim()
-          const second = dashParts[1].trim()
-          // Falls im zweiten Teil eine wichtige Stückzahl wie "30x ..." steht, diese in Klammern retten
-          const countMatch = second.match(/\b(\d+\s*(?:x|Stück|Stk\.?|er\s*Pack|Rollen|Blatt))\b/i)
-          if (first.length >= 12) {
-            s = countMatch && !first.toLowerCase().includes(countMatch[1].toLowerCase())
-              ? `${first} (${countMatch[1]})`
-              : first
-          }
-        }
-
-        // 3. Falls noch ein langer Komma-SEO-Schweif anhängt (ab > 55 Zeichen)
-        if (s.length > 55 && s.includes(', ')) {
-          const commaParts = s.split(', ')
-          if (commaParts[0].length >= 15) {
-            s = commaParts[0].trim()
-          }
-        }
-
-        // 4. Führende Stückzahl wie "50 Stück Türschild Hotel Bitte nicht stören" -> "Türschild Hotel Bitte nicht stören (50 Stück)"
-        const leadingCount = s.match(/^(\d+\s*(?:Stück|Stk\.?|x|er|Pack|Rollen))\s+(.{8,})$/i)
-        if (leadingCount) {
-          const countStr = leadingCount[1].trim()
-          const rest = leadingCount[2].trim()
-          if (!rest.includes(`(${countStr})`)) {
-            s = `${rest} (${countStr})`
-          }
-        }
-
-        s = s.replace(/\s{2,}/g, ' ').replace(/[,;:\-–|]+$/, '').trim()
-        return s || rawName.trim()
-      }
-
-      const resolveSupplierDomainHint = (supplierName?: string, supplierUrl?: string, supplierEmail?: string): string => {
-        if (supplierUrl) {
-          try {
-            const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
-            return u.hostname.replace(/^www\./i, '').toLowerCase()
-          } catch {}
-        }
-        const lowerSup = (supplierName || '').toLowerCase().trim()
-        for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
-          if (lowerSup.includes(k)) return dom
-        }
-        if (supplierEmail && supplierEmail.includes('@') && supplierEmail !== 'hello@unbekannt.com') {
-          const dom = supplierEmail.split('@')[1]?.trim().toLowerCase()
-          const generic = new Set(['gmail.com', 'googlemail.com', 'web.de', 'gmx.de', 'gmx.net', 't-online.de', 'outlook.com', 'hotmail.com', 'icloud.com', 'yahoo.com'])
-          if (dom && !generic.has(dom)) return dom
-        }
-        return ''
-      }
-
-      const resolveWebshopDomain = (supplierName?: string, supplierUrl?: string, isWebshopMethod?: boolean, supplierEmail?: string): string => {
-        if (isEmailOnlyWholesaler(supplierName, supplierEmail)) return ''
-        const lowerSup = (supplierName || '').toLowerCase().trim()
-        for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
-          if (lowerSup.includes(k)) return dom
-        }
-        if (supplierUrl) {
-          try {
-            const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
-            const host = u.hostname.replace(/^www\./i, '').toLowerCase()
-            if (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt|fixpart|faironto/i.test(host)) {
-              return host
-            }
-          } catch {}
-        }
-        const domFromEmail = resolveSupplierDomainHint(supplierName, supplierUrl, supplierEmail)
-        if (domFromEmail && (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt|fixpart|faironto|deutschepost/i.test(domFromEmail))) {
-          return domFromEmail
-        }
-        return ''
-      }
-
-      const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 5000)
-        try {
-          const bq = encodeURIComponent(query.trim())
-          const br = await fetch(`https://www.bing.com/images/search?q=${bq}&FORM=HDRSC2`, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-              'Accept-Language': 'de-DE,de;q=0.9'
-            },
-            signal: controller.signal
-          })
-          const bhtml = await br.text()
-          const metas = [...bhtml.matchAll(/\bm="(\{[^"]+\})"/gi)]
-            .map(m => {
-              try {
-                return JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'))
-              } catch {
-                return null
-              }
-            })
-            .filter(x => x && (x.murl || x.turl))
-
-          // WICHTIG: Ein Shop-Bestell-Link (orderUrl) darf NUR dann vorgeschlagen werden,
-          // wenn die gefundene Seite tatsächlich zur Domain des zugeordneten Webshop-Lieferanten gehört!
-          // Niemals fremde Shops (z.B. getraenke-taxi-do.de bei HEWO) als Bestell-Link eintragen!
-          const preferred = webshopDomain
-            ? metas.find(x => {
-                try {
-                  const host = new URL(x.purl || '').hostname.replace(/^www\./i, '').toLowerCase()
-                  return host === webshopDomain || host.endsWith('.' + webshopDomain) || webshopDomain.endsWith('.' + host)
-                } catch {
-                  return false
-                }
-              })
-            : null
-          const best = preferred || metas[0] || null
-          const alternatives = [...new Set(
-            metas.slice(0, 6).map(x => x.turl || x.murl).filter(Boolean)
-          )]
-
-          return {
-            orderUrl: preferred?.purl || '',
-            image: best?.turl || best?.murl || '',
-            highResImage: best?.murl || '',
-            title: (best?.t || '').replace(/[\ue000-\uf8ff]/g, '').trim(),
-            alternatives
-          }
-        } catch (err) {
-          console.warn('Bing search fallback error:', err)
-          return { orderUrl: '', image: '', highResImage: '', title: '', alternatives: [] as string[] }
-        } finally {
-          clearTimeout(timer)
-        }
-      }
-
-      const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: string) => {
-        const lower = (name || '').toLowerCase()
-        let category = currentCat && currentCat !== 'Sonstiges' && currentCat !== 'Ohne Kategorie' ? currentCat : ''
-        if (!category) {
-          // 0. Handwerk / Instandhaltung / Technik
-          if (/(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|kühlschrank|türfach|filter|lampe|leuchtmittel|led|batterie)/i.test(lower)) {
-            category = 'Instandhaltung'
-          } else if (/(?:melone|käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre)/i.test(lower)) {
-            // 1. Lebensmittel (z.B. Melone "Wasser" vor Getränke prüfen)
-            category = 'Lebensmittel'
-          } else if (/(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|toilettenpapier|kosmetiktücher|seife|shampoo|desinfektion|schwamm|entkalker|schaben|kakerlaken|ungeziefer|mülleimer|handschuhe)/i.test(lower)) {
-            // 2. Reinigung (erkennt auch Komposita wie Glasreiniger, Sanitärreiniger, Essigreiniger)
-            category = 'Reinigung'
-          } else if (/(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|milch|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk)/i.test(lower)) {
-            // 3. Getränke (wasser nur als eigenständiges Wort, nicht in wasserresistent)
-            category = 'Getränke'
-          } else if (/(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro)/i.test(lower)) {
-            // 4. Bürobedarf
-            category = 'Bürobedarf'
-          }
-        }
-
-        let unit = currentUnit || 'Stück'
-        if (!currentUnit || currentUnit === 'Stk' || currentUnit === 'Stück') {
-          if (/\b(\d+\s*x\s*\d+[,\.]?\d*\s*l|kasten|kiste)\b/i.test(lower)) unit = 'Kasten'
-          else if (/\b(karton|kt:|paket|pakete)\b/i.test(lower)) unit = 'Karton'
-          else if (/\b(rolle|rollen)\b/i.test(lower)) unit = 'Rolle'
-          else if (/\bkanister\b|(?<![\d,\.])(?:5|10)\s*l\b/i.test(lower)) unit = 'Kanister'
-          else if (/\bflasche\b|(?<![\d,\.])(?:1\s*l|500\s*ml|750\s*ml)\b/i.test(lower)) unit = 'Flasche'
-          else if (/\b(pack|packung|beutel)\b/i.test(lower)) unit = 'Packung'
-        }
-        return { category: category || currentCat || 'Sonstiges', unit }
-      }
-
-      const formatEuro = (val: number) => val.toFixed(2).replace('.', ',')
-
-      const extractPriceFromHtml = (html: string): number | null => {
-        // 1. Meta-Tags (product:price:amount, og:price:amount)
-        const metaPrice =
-          html.match(/<meta[^>]+(?:property|name)=["'](?:product|og):price:amount["'][^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["']/i) ||
-          html.match(/<meta[^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["'][^>]+(?:property|name)=["'](?:product|og):price:amount["']/i) ||
-          html.match(/itemprop=["']price["'][^>]+content=["']([0-9]+(?:[.,][0-9]{1,2})?)["']/i)
-        if (metaPrice?.[1]) {
-          const v = parseFloat(metaPrice[1].replace(',', '.'))
-          if (!isNaN(v) && v > 0 && v < 10000) return v
-        }
-
-        // 2. JSON-LD Product Schema
-        const ldMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
-        for (const m of ldMatches) {
-          try {
-            const parsed = JSON.parse(m[1].trim())
-            const nodes = Array.isArray(parsed) ? parsed : (parsed['@graph'] || [parsed])
-            for (const node of nodes) {
-              if (node && (node['@type'] === 'Product' || node.sku || node.offers)) {
-                const offer = Array.isArray(node.offers) ? node.offers[0] : node.offers
-                const pVal = parseFloat(String(offer?.price || offer?.lowPrice || '').replace(',', '.'))
-                if (!isNaN(pVal) && pVal > 0 && pVal < 10000) return pVal
-              }
-            }
-          } catch {}
-        }
-
-        // 3. Typische Preis-Patterns im HTML (z.B. Amazon / B2B-Shops)
-        const inlinePrice =
-          html.match(/"priceAmount"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i) ||
-          html.match(/class=["'][^"']*price[^"']*["'][^>]*>\s*([0-9]{1,4},[0-9]{2})\s*(?:€|&euro;|EUR)/i)
-        if (inlinePrice?.[1]) {
-          const v = parseFloat(inlinePrice[1].replace(',', '.'))
-          if (!isNaN(v) && v > 0 && v < 10000) return v
-        }
-        return null
-      }
-
-      const evaluatePricePlausibility = (
-        shopPrice: number | null,
-        knownPrice: number | null | undefined
-      ): {
-        status: 'ok' | 'warning' | 'new_price' | 'none'
-        shopPrice: number | null
-        knownPrice: number | null
-        message: string
-      } => {
-        const kp = knownPrice && Number(knownPrice) > 0 ? Number(knownPrice) : null
-        if (!shopPrice || shopPrice <= 0) {
-          return { status: 'none', shopPrice: null, knownPrice: kp, message: '' }
-        }
-        if (shopPrice > 2500 || shopPrice < 0.05) {
-          return {
-            status: 'warning',
-            shopPrice,
-            knownPrice: kp,
-            message: `⚠️ Ungewöhnlicher Shop-Preis (${formatEuro(shopPrice)} €) – bitte Link prüfen!`
-          }
-        }
-        if (!kp) {
-          return {
-            status: 'new_price',
-            shopPrice,
-            knownPrice: null,
-            message: `✨ Shop-Preis erkannt: ${formatEuro(shopPrice)} € (als Artikelpreis vorgeschlagen)`
-          }
-        }
-
-        const ratio = shopPrice / kp
-        // Prüfe, ob Netto vs. Brutto (+7% oder +19% MwSt.)
-        if (ratio >= 1.16 && ratio <= 1.22) {
-          return {
-            status: 'ok',
-            shopPrice,
-            knownPrice: kp,
-            message: `✓ Preis plausibel: ${formatEuro(shopPrice)} € brutto im Shop passt zu ${formatEuro(kp)} € netto`
-          }
-        }
-        if (ratio >= 0.72 && ratio <= 1.35) {
-          return {
-            status: 'ok',
-            shopPrice,
-            knownPrice: kp,
-            message: `✓ Preis-Check OK: ${formatEuro(shopPrice)} € im Shop (bisher: ${formatEuro(kp)} €)`
-          }
-        }
-        // Prüfe, ob es wahrscheinlich ein Karton vs. Einzelstück ist (Faktor >= 2 oder <= 0.5)
-        const mult = ratio > 1 ? Math.round(ratio) : Math.round(1 / ratio)
-        if (mult >= 2 && mult <= 50) {
-          return {
-            status: 'warning',
-            shopPrice,
-            knownPrice: kp,
-            message: `⚠️ Preis-Warnung: Shop zeigt ${formatEuro(shopPrice)} € statt ${formatEuro(kp)} € (ca. Faktor ${mult}x – evtl. Karton vs. Einzelstück oder falscher Artikel!)`
-          }
-        }
-        return {
-          status: 'warning',
-          shopPrice,
-          knownPrice: kp,
-          message: `⚠️ Preis weicht stark ab: Shop zeigt ${formatEuro(shopPrice)} € statt bisher ${formatEuro(kp)} € – bitte Link prüfen!`
-        }
       }
 
       // 5. EXTRACT URL METADATA: Beim Einfügen eines Shop-Links Bild, Titel, Preis, Artikelnummer & Lieferant laden

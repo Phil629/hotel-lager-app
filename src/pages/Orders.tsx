@@ -4,8 +4,7 @@ import { createPortal } from 'react-dom';
 import type { Product, Order } from '../types';
 import { DataService } from '../services/data';
 import { StorageService } from '../services/storage';
-import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ChevronRight, ShoppingCart, Bot, Save, Settings, Truck, Printer, Sparkles } from 'lucide-react';
-import { supabase } from '../services/supabase';
+import { Trash2, CheckCircle, Clock, Package, AlertTriangle, Calendar, Phone, Mail, X, Plus, Search, ExternalLink, CheckSquare, Edit2, ChevronDown, ChevronUp, ChevronRight, ShoppingCart, Bot, Save, Settings, Truck, Printer } from 'lucide-react';
 import { Notification, type NotificationType } from '../components/Notification';
 import { PhoneCallPanel } from '../components/PhoneCallPanel';
 import { CheckoutButton } from '../components/CheckoutButton';
@@ -25,7 +24,7 @@ export const Orders: React.FC = () => {
         products,
         suppliers,
         inboundEmails,
-        loadOrders, loadProducts, loadSuppliers, loadInboundEmails,
+        loadOrders, loadProducts, loadSuppliers,
         receivedTotal, receivedLimit, receivedLoading, searchReceived, loadMoreReceived,
     } = useOrderData();
 
@@ -82,51 +81,6 @@ export const Orders: React.FC = () => {
     const [expandedReceivedOrders, setExpandedReceivedOrders] = useState<Set<string>>(new Set());
 
     const [showKiLogModal, setShowKiLogModal] = useState(false);
-    const [smartPasteText, setSmartPasteText] = useState('');
-    const [isSmartPasteOpen, setIsSmartPasteOpen] = useState(false);
-    const [isSmartPasteLoading, setIsSmartPasteLoading] = useState(false);
-
-    const handleSmartPasteAnalyze = async (rawInput: string) => {
-        const textToParse = rawInput.trim();
-        if (!textToParse || !supabase || isSmartPasteLoading) return;
-        setIsSmartPasteLoading(true);
-        try {
-            const { data, error } = await supabase.functions.invoke('process-inbound-mail', {
-                body: { action: 'smart_paste', text: textToParse }
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-
-            const parsed = data?.data;
-            if (parsed) {
-                const matchedSupplier = (parsed.matched_supplier_id && suppliers.find(s => s.id === parsed.matched_supplier_id))
-                    || (parsed.supplier_name && suppliers.find(s => s.name.toLowerCase().includes(parsed.supplier_name.toLowerCase()) || parsed.supplier_name.toLowerCase().includes(s.name.toLowerCase())));
-
-                setOneTimeOrder(prev => ({
-                    ...prev,
-                    name: parsed.product_name || prev.name,
-                    quantity: parsed.quantity ? Number(parsed.quantity) : prev.quantity,
-                    price: parsed.price != null ? Number(parsed.price) : prev.price,
-                    orderNumber: parsed.order_reference || prev.orderNumber,
-                    supplierId: matchedSupplier ? matchedSupplier.id : prev.supplierId,
-                    supplierName: matchedSupplier ? matchedSupplier.name : (parsed.supplier_name || prev.supplierName),
-                    supplierEmail: matchedSupplier?.email || prev.supplierEmail,
-                    supplierPhone: matchedSupplier?.phone || prev.supplierPhone,
-                }));
-                if (parsed.order_reference || parsed.price != null || parsed.supplier_name) {
-                    setIsDetailsOpen(true);
-                }
-                setSmartPasteText('');
-                setIsSmartPasteOpen(false);
-                setNotification({ message: 'Bestelldaten erfolgreich mit KI ausgelesen!', type: 'success' });
-            }
-        } catch (err: any) {
-            console.error('Smart paste error:', err);
-            setNotification({ message: 'KI konnte den Text nicht zerlegen: ' + (err?.message || String(err)), type: 'error' });
-        } finally {
-            setIsSmartPasteLoading(false);
-        }
-    };
 
     const [phoneCallPanelData, setPhoneCallPanelData] = useState<{ order: Order; mode: 'order' | 'defect' } | null>(null);
     const [phoneCallProposalData, setPhoneCallProposalData] = useState<{ product: Product, quantity: number } | null>(null);
@@ -771,8 +725,8 @@ export const Orders: React.FC = () => {
     };
 
     const renderOrderCard = (order: Order) => {
-        const currentProduct = products.find(p => p.name === order.productName);
-        const displayImage = currentProduct?.image || order.productImage;
+        const currentProduct = products.find(p => p.name?.toLowerCase().trim() === order.productName?.toLowerCase().trim()) || products.find(p => p.name && order.productName && (p.name.toLowerCase().includes(order.productName.toLowerCase()) || order.productName.toLowerCase().includes(p.name.toLowerCase())));
+        const displayImage = order.productImage || currentProduct?.image;
         
         return (
         <div key={order.id} style={{
@@ -878,21 +832,9 @@ export const Orders: React.FC = () => {
                             if (!order.aiRevisions) return null;
                             const revs = order.aiRevisions;
                             
-                            const hasPendingQty = !!(
-                                revs.quantity &&
-                                !revs.quantity.reverted &&
-                                Number(revs.quantity.suggested) !== Number(revs.quantity.original)
-                            );
-                            const hasPendingPrice = !!(
-                                revs.price &&
-                                !revs.price.reverted &&
-                                Math.abs(Number(revs.price.suggested || 0) - Number(revs.price.original || 0)) >= 0.01
-                            );
-                            const hasPendingDate = !!(
-                                revs.date &&
-                                !revs.date.reverted &&
-                                String(revs.date.suggested || '').slice(0, 10) !== String(revs.date.original || '').slice(0, 10)
-                            );
+                            const hasPendingQty = revs.quantity && !revs.quantity.reverted;
+                            const hasPendingPrice = revs.price && !revs.price.reverted;
+                            const hasPendingDate = revs.date && !revs.date.reverted;
                             
                             if (!hasPendingQty && !hasPendingPrice && !hasPendingDate) return null;
                             
@@ -2139,50 +2081,6 @@ export const Orders: React.FC = () => {
                         ) : (
                             // One-time Order Form
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                                {/* Smart Paste Box */}
-                                <div style={{
-                                    border: '1px dashed var(--color-primary)',
-                                    backgroundColor: 'rgba(37, 99, 235, 0.04)',
-                                    borderRadius: 'var(--radius-md)',
-                                    padding: '10px 12px'
-                                }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <Sparkles size={14} />
-                                            Smart Paste: Bestellbestätigung oder Text automatisch zerlegen
-                                        </span>
-                                        <button
-                                            type="button"
-                                            className="btn btn-sm btn-ghost"
-                                            onClick={() => setIsSmartPasteOpen(!isSmartPasteOpen)}
-                                            style={{ fontSize: '12px', padding: '2px 8px' }}
-                                        >
-                                            {isSmartPasteOpen ? 'Schließen' : 'Text einfügen'}
-                                        </button>
-                                    </div>
-                                    {isSmartPasteOpen && (
-                                        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <textarea
-                                                rows={3}
-                                                value={smartPasteText}
-                                                onChange={e => setSmartPasteText(e.target.value)}
-                                                placeholder="E-Mail-Text, Bestellbestätigung oder Artikelzeile hier einfügen…"
-                                                style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: '13px', fontFamily: 'inherit' }}
-                                            />
-                                            <button
-                                                type="button"
-                                                className="btn btn-sm btn-primary"
-                                                disabled={!smartPasteText.trim() || isSmartPasteLoading}
-                                                onClick={() => handleSmartPasteAnalyze(smartPasteText)}
-                                                style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                            >
-                                                <Sparkles size={13} />
-                                                {isSmartPasteLoading ? 'KI liest aus…' : 'Mit KI ausfüllen'}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '4px', fontSize: 'var(--font-size-sm)' }}>Produktname *</label>
                                     <input
@@ -2192,34 +2090,6 @@ export const Orders: React.FC = () => {
                                         placeholder=""
                                         style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                                     />
-                                    {oneTimeOrder.name.trim().length > 50 && (
-                                        <div style={{
-                                            marginTop: '6px',
-                                            padding: '8px 10px',
-                                            backgroundColor: '#eff6ff',
-                                            border: '1px solid #bfdbfe',
-                                            borderRadius: 'var(--radius-sm)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            gap: '8px',
-                                            flexWrap: 'wrap',
-                                            fontSize: '12px',
-                                            color: '#1e40af'
-                                        }}>
-                                            <span>Sieht nach einem kopierten Bestelltext aus. Automatisch bereinigen?</span>
-                                            <button
-                                                type="button"
-                                                className="btn btn-sm btn-primary"
-                                                disabled={isSmartPasteLoading}
-                                                onClick={() => handleSmartPasteAnalyze(oneTimeOrder.name)}
-                                                style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                                            >
-                                                <Sparkles size={12} />
-                                                {isSmartPasteLoading ? 'Wird zerlegt…' : 'Mit KI zerlegen'}
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
 
                                 <div>
@@ -3052,12 +2922,6 @@ export const Orders: React.FC = () => {
                 isOpen={showKiLogModal}
                 onClose={() => setShowKiLogModal(false)}
                 inboundEmails={inboundEmails}
-                onReprocessed={() => {
-                    loadInboundEmails();
-                    loadOrders(true);
-                    loadProducts(true);
-                    loadSuppliers(true);
-                }}
             />
 
             {
