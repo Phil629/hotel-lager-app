@@ -1172,7 +1172,78 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         'hamburgpapier': 'hamburgpapier-shop.de',
         'kaeferling': 'kaeferlingpro.com',
         'zoells': 'zoells.de',
-        'cent direktvertrieb': 'cent-online.de'
+        'cent direktvertrieb': 'cent-online.de',
+        'fixpart': 'fixpart.de',
+        'faironto': 'faironto.com',
+        'google cloud': 'cloud.google.com',
+        'hewo': 'hewo-mainz.de',
+        'schwälbchen': 'schwaelbchen-frischdienst.de',
+        'schwaelbchen': 'schwaelbchen-frischdienst.de'
+      }
+
+      const EMAIL_ONLY_SUPPLIER_KEYWORDS = [
+        'hewo',
+        'schwälbchen',
+        'schwaelbchen',
+        'frischdienst',
+        'getränke-vertrieb',
+        'getraenke-vertrieb',
+        'wäscherei',
+        'waescherei',
+        'bäckerei',
+        'baeckerei',
+        'metzgerei'
+      ]
+
+      const isEmailOnlyWholesaler = (supplierName?: string, supplierEmail?: string): boolean => {
+        const lower = `${supplierName || ''} ${supplierEmail || ''}`.toLowerCase()
+        return EMAIL_ONLY_SUPPLIER_KEYWORDS.some(k => lower.includes(k))
+      }
+
+      const cleanProductName = (rawName: string): string => {
+        if (!rawName) return ''
+        let s = rawName.replace(/\s+/g, ' ').trim()
+
+        // 1. Großhandels-Zusätze wie "Kl.I CR", "Kl. I", "HKL A", "1 Stück" am Ende bereinigen
+        s = s
+          .replace(/\bKl\.?\s*(?:I{1,3}|1|2)\b(?:\s+[A-Z]{2,3})?/gi, '')
+          .replace(/\bStück\s+(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
+          .replace(/\b(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
+
+        // 2. Überlange Amazon-/Webshop-SEO-Titel am Bindestrich " - " / " – " / " | " sinnvoll kürzen
+        const dashParts = s.split(/\s+[-–|]\s+/)
+        if (dashParts.length >= 2 && s.length > 48) {
+          const first = dashParts[0].trim()
+          const second = dashParts[1].trim()
+          // Falls im zweiten Teil eine wichtige Stückzahl wie "30x ..." steht, diese in Klammern retten
+          const countMatch = second.match(/\b(\d+\s*(?:x|Stück|Stk\.?|er\s*Pack|Rollen|Blatt))\b/i)
+          if (first.length >= 12) {
+            s = countMatch && !first.toLowerCase().includes(countMatch[1].toLowerCase())
+              ? `${first} (${countMatch[1]})`
+              : first
+          }
+        }
+
+        // 3. Falls noch ein langer Komma-SEO-Schweif anhängt (ab > 55 Zeichen)
+        if (s.length > 55 && s.includes(', ')) {
+          const commaParts = s.split(', ')
+          if (commaParts[0].length >= 15) {
+            s = commaParts[0].trim()
+          }
+        }
+
+        // 4. Führende Stückzahl wie "50 Stück Türschild Hotel Bitte nicht stören" -> "Türschild Hotel Bitte nicht stören (50 Stück)"
+        const leadingCount = s.match(/^(\d+\s*(?:Stück|Stk\.?|x|er|Pack|Rollen))\s+(.{8,})$/i)
+        if (leadingCount) {
+          const countStr = leadingCount[1].trim()
+          const rest = leadingCount[2].trim()
+          if (!rest.includes(`(${countStr})`)) {
+            s = `${rest} (${countStr})`
+          }
+        }
+
+        s = s.replace(/\s{2,}/g, ' ').replace(/[,;:\-–|]+$/, '').trim()
+        return s || rawName.trim()
       }
 
       const resolveSupplierDomainHint = (supplierName?: string, supplierUrl?: string, supplierEmail?: string): string => {
@@ -1194,7 +1265,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         return ''
       }
 
-      const resolveWebshopDomain = (supplierName?: string, supplierUrl?: string, isWebshopMethod?: boolean): string => {
+      const resolveWebshopDomain = (supplierName?: string, supplierUrl?: string, isWebshopMethod?: boolean, supplierEmail?: string): string => {
+        if (isEmailOnlyWholesaler(supplierName, supplierEmail)) return ''
         const lowerSup = (supplierName || '').toLowerCase().trim()
         for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
           if (lowerSup.includes(k)) return dom
@@ -1203,10 +1275,14 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           try {
             const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
             const host = u.hostname.replace(/^www\./i, '').toLowerCase()
-            if (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt/i.test(host)) {
+            if (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt|fixpart|faironto/i.test(host)) {
               return host
             }
           } catch {}
+        }
+        const domFromEmail = resolveSupplierDomainHint(supplierName, supplierUrl, supplierEmail)
+        if (domFromEmail && (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt|fixpart|faironto|deutschepost/i.test(domFromEmail))) {
+          return domFromEmail
         }
         return ''
       }
@@ -1606,18 +1682,47 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
       if (action === 'suggest_completion') {
         const items = Array.isArray(body?.items) ? body.items.slice(0, 12) : []
 
-        // Lade letzte E-Mails, um Kundennummern, Telefonnummern, Artikelnummern & Domains aus echten Belegen zu ziehen
-        const { data: recentEmails } = await supabase
-          .from('inbound_emails')
-          .select('supplier_name, extracted_data')
-          .eq('company_id', company_id)
-          .neq('status', 'gemini_error')
-          .order('created_at', { ascending: false })
-          .limit(60)
+        // Lade letzte E-Mails & vergangene Bestellungen, um Kundennummern, Telefonnummern, Artikelnummern,
+        // typische Bestellmengen & Domains aus echten Belegen zu ziehen
+        const [{ data: recentEmails }, { data: recentOrders }] = await Promise.all([
+          supabase
+            .from('inbound_emails')
+            .select('supplier_name, extracted_data')
+            .eq('company_id', company_id)
+            .neq('status', 'gemini_error')
+            .order('created_at', { ascending: false })
+            .limit(60),
+          supabase
+            .from('orders')
+            .select('product_name, supplier_name, quantity')
+            .eq('company_id', company_id)
+            .order('date', { ascending: false })
+            .limit(200)
+        ])
 
         const emailMetaBySupplier = new Map<string, { email?: string; phone?: string; customer_number?: string }>()
         const skuByProductName = new Map<string, string>()
         const priceByProductName = new Map<string, number>()
+        const quantitiesByProductName = new Map<string, number[]>()
+
+        const recordQuantity = (rawName: string, qtyVal: any) => {
+          const q = Math.round(Number(qtyVal || 0))
+          if (!rawName || q <= 0 || q > 500) return
+          const k1 = String(rawName).trim().toLowerCase()
+          const k2 = cleanProductName(String(rawName)).toLowerCase()
+          for (const k of new Set([k1, k2])) {
+            if (!k) continue
+            const arr = quantitiesByProductName.get(k) || []
+            arr.push(q)
+            quantitiesByProductName.set(k, arr)
+          }
+        }
+
+        for (const o of (recentOrders || [])) {
+          if (o?.product_name) {
+            recordQuantity(o.product_name, o.quantity)
+          }
+        }
 
         for (const row of (recentEmails || [])) {
           const ed = row.extracted_data as any
@@ -1640,6 +1745,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               if (unitP > 0 && !priceByProductName.has(pKey)) {
                 priceByProductName.set(pKey, unitP)
               }
+              recordQuantity(it.product_name, it.quantity)
             }
           }
         }
@@ -1650,7 +1756,11 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             const fromMail = emailMetaBySupplier.get(lowerName) || {}
             const effectiveEmail = (item.email && item.email !== 'hello@unbekannt.com') ? item.email : (fromMail.email || '')
             const domHint = resolveSupplierDomainHint(item.name, item.url, effectiveEmail)
-            const suggestedUrl = item.url || (domHint ? `https://www.${domHint.replace(/^www\./, '')}` : '')
+            const suggestedUrl = item.url || (domHint ? (domHint.startsWith('shop.') || domHint.startsWith('cloud.') ? `https://${domHint}` : `https://www.${domHint.replace(/^www\./, '')}`) : '')
+            const isEmailOnly = isEmailOnlyWholesaler(item.name, effectiveEmail)
+            const suggestedOrderMethod: 'email' | 'webshop' = isEmailOnly
+              ? 'email'
+              : (suggestedUrl || domHint ? 'webshop' : 'email')
 
             return {
               id: item.id,
@@ -1658,13 +1768,16 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               url: suggestedUrl,
               email: effectiveEmail,
               phone: item.phone || fromMail.phone || '',
-              customerNumber: item.customerNumber || fromMail.customer_number || ''
+              customerNumber: item.customerNumber || fromMail.customer_number || '',
+              preferredOrderMethod: item.preferredOrderMethod || suggestedOrderMethod
             }
           } else {
-            const webshopDomain = resolveWebshopDomain(item.supplierName, item.supplierUrl, item.isWebshopSupplier)
+            const cleanedName = cleanProductName(item.name || '')
+            const isEmailWholesaler = isEmailOnlyWholesaler(item.supplierName, item.supplierEmail)
+            const webshopDomain = resolveWebshopDomain(item.supplierName, item.supplierUrl, item.isWebshopSupplier, item.supplierEmail)
             // Für die Bildersuche: Wenn es ein echter Webshop-Lieferant ist, nach dessen Domain mit-suchen;
-            // bei Großhändlern/E-Mail-Lieferanten (z.B. HEWO, Schwälbchen) nur nach Produktname + Artikelnr. suchen!
-            const query = `${item.name} ${item.productNumber || ''} ${webshopDomain}`.trim()
+            // bei Großhändlern/E-Mail-Lieferanten (z.B. HEWO, Schwälbchen) nur nach bereinigtem Produktnamen + Artikelnr. suchen!
+            const query = `${cleanedName || item.name} ${item.productNumber || ''} ${webshopDomain}`.trim()
             const bingRes = await searchBingProductMeta(query, webshopDomain)
             const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
             const lowerProdName = String(item.name || '').trim().toLowerCase()
@@ -1705,9 +1818,34 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               ? (shopPrice || mailPrice || 0)
               : Number(item.price)
 
+            // Typische Bestellmenge & Mindestbestand aus bisherigen Bestellungen oder sinnvollen Kategorie-Standards ableiten
+            const pastQtys = quantitiesByProductName.get(lowerProdName) || quantitiesByProductName.get(cleanedName.toLowerCase()) || []
+            let defaultOrderQty = 2
+            if (pastQtys.length > 0) {
+              const sorted = [...pastQtys].sort((a, b) => a - b)
+              defaultOrderQty = Math.max(1, sorted[Math.floor(sorted.length / 2)])
+            } else if (unit === 'Kasten' || unit === 'Karton' || unit === 'Kanister') {
+              defaultOrderQty = 2
+            } else if (category === 'Getränke' || category === 'Lebensmittel') {
+              defaultOrderQty = 4
+            }
+
+            const suggestedStandardOrderQuantity = (item.standardOrderQuantity && Number(item.standardOrderQuantity) > 0)
+              ? Number(item.standardOrderQuantity)
+              : defaultOrderQty
+            const suggestedMinStock = (item.minStock && Number(item.minStock) > 0)
+              ? Number(item.minStock)
+              : Math.max(1, Math.floor(suggestedStandardOrderQuantity / 2))
+
+            // Bestellweg: Webshop bei Shop-Link oder Webshop-Lieferant, E-Mail bei Großhändlern wie HEWO / Schwälbchen
+            const suggestedPreferredOrderMethod: 'email' | 'webshop' | 'phone' = isEmailWholesaler
+              ? 'email'
+              : (suggestedOrderUrl || webshopDomain || item.isWebshopSupplier ? 'webshop' : (item.preferredOrderMethod || 'webshop'))
+
             return {
               id: item.id,
               type: 'product',
+              cleanName: cleanedName && cleanedName !== item.name ? cleanedName : undefined,
               image: item.image || bingRes.image || '',
               alternatives: bingRes.alternatives || [],
               orderUrl: suggestedOrderUrl,
@@ -1715,7 +1853,10 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               price: suggestedPrice,
               priceCheck,
               category,
-              unit
+              unit,
+              minStock: suggestedMinStock,
+              standardOrderQuantity: suggestedStandardOrderQuantity,
+              preferredOrderMethod: suggestedPreferredOrderMethod
             }
           }
         }))
@@ -1759,6 +1900,10 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           if (p.category !== undefined) patch.category = p.category
           if (p.unit !== undefined) patch.unit = p.unit
           if (p.price !== undefined && p.price !== null && p.price !== '') patch.price = Number(p.price) || 0
+          if (p.min_stock !== undefined && p.min_stock !== null && p.min_stock !== '') patch.min_stock = Number(p.min_stock) || 0
+          if (p.standard_order_quantity !== undefined && p.standard_order_quantity !== null && p.standard_order_quantity !== '') {
+            patch.standard_order_quantity = Number(p.standard_order_quantity) || null
+          }
           if (p.product_number !== undefined) patch.product_number = p.product_number || null
           if (p.supplier_id !== undefined) patch.supplier_id = p.supplier_id || null
           if (p.order_url !== undefined) {
