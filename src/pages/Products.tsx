@@ -1893,30 +1893,51 @@ export const Products: React.FC = () => {
                                                         backgroundColor: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'rgba(37, 99, 235, 0.05)' : 'transparent',
                                                         border: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? '1px solid var(--color-primary)' : '1px solid transparent'
                                                     }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-                                                            <label className="form-label" style={{ margin: 0, color: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : 'inherit' }}>Webshop / Bestell-URL</label>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', gap: '6px', flexWrap: 'wrap' }}>
+                                                            <label className="form-label" style={{ margin: 0, color: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : 'inherit' }}>
+                                                                Webshop / Bestell-URL
+                                                            </label>
                                                             {newProduct.orderUrl && (
-                                                                <button
-                                                                    type="button"
-                                                                    disabled={isExtractingUrlMeta}
-                                                                    onClick={() => extractProductMetaFromUrl(newProduct.orderUrl || '', true)}
-                                                                    style={{
-                                                                        display: 'inline-flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '4px',
-                                                                        padding: '2px 8px',
-                                                                        borderRadius: '6px',
-                                                                        border: '1px solid #c7d2fe',
-                                                                        backgroundColor: '#eef2ff',
-                                                                        color: '#4338ca',
-                                                                        fontSize: '11px',
-                                                                        fontWeight: 600,
-                                                                        cursor: isExtractingUrlMeta ? 'wait' : 'pointer'
-                                                                    }}
-                                                                >
-                                                                    {isExtractingUrlMeta ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={11} />}
-                                                                    Bild vom Link laden
-                                                                </button>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                    <a
+                                                                        href={newProduct.orderUrl.startsWith('http') ? newProduct.orderUrl : `https://${newProduct.orderUrl}`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        style={{
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '4px',
+                                                                            fontSize: '11px',
+                                                                            color: 'var(--color-primary)',
+                                                                            fontWeight: 600,
+                                                                            textDecoration: 'none'
+                                                                        }}
+                                                                    >
+                                                                        <ExternalLink size={11} /> Link testen
+                                                                    </a>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={isExtractingUrlMeta}
+                                                                        onClick={() => extractProductMetaFromUrl(newProduct.orderUrl || '', true)}
+                                                                        title="Aktualisiert Produktbild und Preis direkt aus dem Onlineshop"
+                                                                        style={{
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '4px',
+                                                                            padding: '2px 8px',
+                                                                            borderRadius: '6px',
+                                                                            border: '1px solid #c7d2fe',
+                                                                            backgroundColor: '#eef2ff',
+                                                                            color: '#4338ca',
+                                                                            fontSize: '11px',
+                                                                            fontWeight: 600,
+                                                                            cursor: isExtractingUrlMeta ? 'wait' : 'pointer'
+                                                                        }}
+                                                                    >
+                                                                        {isExtractingUrlMeta ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={11} />}
+                                                                        Shop-Daten synchronisieren
+                                                                    </button>
+                                                                </div>
                                                             )}
                                                         </div>
                                                         <input
@@ -1940,7 +1961,7 @@ export const Products: React.FC = () => {
                                                                     }
                                                                 }
                                                             }}
-                                                            placeholder="https://... (Lädt automatisch das Produktbild)"
+                                                            placeholder="https://... (Direkter Link zur Produkt-Detailseite)"
                                                             className="input-field"
                                                             style={{ borderColor: (newProduct.preferredOrderMethod === 'link' || newProduct.preferredOrderMethod === 'webshop') ? 'var(--color-primary)' : '' }}
                                                         />
