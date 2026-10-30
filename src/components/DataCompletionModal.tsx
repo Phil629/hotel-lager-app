@@ -881,35 +881,49 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     };
 
     const handleBulkAcceptReview = async (continueNextBatch = false) => {
-        setSavingBulk(true);
+        const ids = Array.from(selectedReviewIds);
+        if (ids.length === 0) return;
+
         setError(null);
+        if (continueNextBatch) {
+            // Sofortige visuelle Rückmeldung ohne 1s Hängen!
+            setAiLoading(true);
+            setAiLoadingSeconds(0);
+        } else {
+            setSavingBulk(true);
+        }
+
         try {
-            const ids = Array.from(selectedReviewIds);
-            if (ids.length === 0) return;
             if (activeTab === 'products') {
-                await saveProductRows(ids, true);
-                onSaved(`${ids.length} ${ids.length === 1 ? 'Produkt' : 'Produkte'} übernommen & als erledigt abgehakt!`);
                 const doneSet = new Set([...completedProductIds, ...ids]);
                 const remaining = filteredProducts.filter(p => !doneSet.has(p.id));
+
                 if (continueNextBatch && remaining.length > 0) {
-                    setSavingBulk(false);
+                    // Erst im Hintergrund speichern und nahtlos nächste Batch laden
+                    await saveProductRows(ids, true);
                     await startAiCompletionAndOpenReview(doneSet);
                     return;
+                } else {
+                    await saveProductRows(ids, true);
+                    onSaved(`${ids.length} ${ids.length === 1 ? 'Produkt' : 'Produkte'} übernommen & als erledigt abgehakt!`);
                 }
             } else {
-                await saveSupplierRows(ids, true);
-                onSaved(`${ids.length} ${ids.length === 1 ? 'Lieferant' : 'Lieferanten'} übernommen & als erledigt abgehakt!`);
                 const doneSet = new Set([...completedSupplierIds, ...ids]);
                 const remaining = filteredSuppliers.filter(s => !doneSet.has(s.id));
+
                 if (continueNextBatch && remaining.length > 0) {
-                    setSavingBulk(false);
+                    await saveSupplierRows(ids, true);
                     await startAiCompletionAndOpenReview(doneSet);
                     return;
+                } else {
+                    await saveSupplierRows(ids, true);
+                    onSaved(`${ids.length} ${ids.length === 1 ? 'Lieferant' : 'Lieferanten'} übernommen & als erledigt abgehakt!`);
                 }
             }
             setViewMode('overview');
         } catch (err: any) {
             setError(err?.message || 'Fehler beim Speichern.');
+            setAiLoading(false);
         } finally {
             setSavingBulk(false);
         }
@@ -1014,10 +1028,19 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             </button>
                             <div>
                                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#1e1b4b' }}>
-                                    ✨ KI-Vorschläge prüfen & abhaken ({reviewedIds.length})
+                                    {aiLoading ? (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                                            <Loader2 size={18} className="spin" style={{ color: '#6d28d9' }} />
+                                            Nächste Artikel werden geladen... ({aiLoadingSeconds}s)
+                                        </span>
+                                    ) : (
+                                        <>✨ KI-Vorschläge prüfen & abhaken ({reviewedIds.length})</>
+                                    )}
                                 </h3>
                                 <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#4c1d95' }}>
-                                    Schau kurz über die gefundenen Bilder & Daten – was passt, kannst du direkt rechts (oder unten gesammelt) abhaken.
+                                    {aiLoading
+                                        ? getAiLoadingStatus(aiLoadingSeconds).detail
+                                        : 'Schau kurz über die gefundenen Bilder & Daten – was passt, kannst du direkt rechts (oder unten gesammelt) abhaken.'}
                                 </p>
                             </div>
                         </div>
@@ -1078,7 +1101,59 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         gap: '12px',
                         backgroundColor: '#f8fafc'
                     }}>
-                        {reviewedIds.length === 0 ? (
+                        {aiLoading ? (
+                            <div style={{
+                                padding: '54px 24px',
+                                textAlign: 'center',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '14px'
+                            }}>
+                                <div style={{
+                                    width: '60px',
+                                    height: '60px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#eef2ff',
+                                    border: '2px solid #818cf8',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.3)'
+                                }}>
+                                    <Loader2 size={30} className="spin" style={{ color: '#4f46e5' }} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '18px', fontWeight: 800, color: '#1e1b4b', marginBottom: '6px' }}>
+                                        Nächste 8 Artikel werden analysiert... ({aiLoadingSeconds}s)
+                                    </div>
+                                    <div style={{ fontSize: '14px', color: '#4338ca', fontWeight: 600 }}>
+                                        {getAiLoadingStatus(aiLoadingSeconds).title}
+                                    </div>
+                                    <div style={{ fontSize: '13px', color: '#64748b', marginTop: '6px', maxWidth: '420px' }}>
+                                        {getAiLoadingStatus(aiLoadingSeconds).detail}. Die neuen Vorschläge erscheinen gleich hier zur Prüfung.
+                                    </div>
+                                </div>
+                                <div style={{
+                                    height: '6px',
+                                    width: '100%',
+                                    maxWidth: '360px',
+                                    backgroundColor: '#e0e7ff',
+                                    borderRadius: '999px',
+                                    overflow: 'hidden',
+                                    marginTop: '4px'
+                                }}>
+                                    <div style={{
+                                        width: '45%',
+                                        height: '100%',
+                                        backgroundColor: '#6366f1',
+                                        borderRadius: '999px',
+                                        animation: 'agy-progress-indeterminate 1.3s ease-in-out infinite'
+                                    }} />
+                                </div>
+                            </div>
+                        ) : reviewedIds.length === 0 ? (
                             <div style={{ padding: '48px', textAlign: 'center' }}>
                                 <CheckCircle2 size={44} color="#16a34a" style={{ margin: '0 auto 12px auto' }} />
                                 <div style={{ fontSize: '17px', fontWeight: 700, color: 'var(--color-text-main)' }}>
@@ -1100,16 +1175,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                             className="btn btn-primary"
                                             style={{ background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', border: 'none' }}
                                         >
-                                            {aiLoading ? (
-                                                <>
-                                                    <Loader2 size={16} className="spin" /> Lädt nächste...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Sparkles size={16} />
-                                                    ✨ Nächste {Math.min(BATCH_SIZE, activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length)} mit KI prüfen →
-                                                </>
-                                            )}
+                                            <Sparkles size={16} />
+                                            ✨ Nächste {Math.min(BATCH_SIZE, activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length)} mit KI prüfen →
                                         </button>
                                     )}
                                 </div>
@@ -1675,73 +1742,86 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             type="button"
                             onClick={() => setViewMode('overview')}
                             className="btn btn-ghost"
+                            disabled={aiLoading || savingBulk}
                         >
                             ← Zurück zur Übersicht
                         </button>
 
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                            {((activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length) > reviewedIds.length) && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleBulkAcceptReview(true)}
-                                    disabled={savingBulk || aiLoading || selectedReviewIds.size === 0}
-                                    style={{
-                                        padding: '12px 20px',
-                                        borderRadius: '10px',
-                                        border: '1px solid #7c3aed',
-                                        backgroundColor: '#f5f3ff',
-                                        color: '#6d28d9',
-                                        fontWeight: 800,
-                                        fontSize: '13px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px'
-                                    }}
-                                >
-                                    {aiLoading ? (
-                                        <>
-                                            <Loader2 size={16} className="spin" /> Lädt nächste...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Sparkles size={16} />
-                                            ✓ Übernehmen & nächste {Math.min(BATCH_SIZE, Math.max(1, (activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length) - reviewedIds.length))} mit KI prüfen →
-                                        </>
-                                    )}
-                                </button>
-                            )}
-
-                            <button
-                                type="button"
-                                onClick={() => handleBulkAcceptReview(false)}
-                                disabled={savingBulk || aiLoading || selectedReviewIds.size === 0}
-                                style={{
-                                    padding: '12px 24px',
-                                    borderRadius: '10px',
-                                    border: 'none',
-                                    backgroundColor: '#16a34a',
-                                    color: '#fff',
-                                    fontWeight: 800,
-                                    fontSize: '14px',
-                                    cursor: 'pointer',
+                            {aiLoading ? (
+                                <div style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '8px',
-                                    boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)'
-                                }}
-                            >
-                                {savingBulk ? (
-                                    <>
-                                        <Loader2 size={18} className="spin" /> Speichert...
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle2 size={18} />
-                                        ✓ Alle ausgewählten übernehmen & abhaken ({selectedReviewIds.size})
-                                    </>
-                                )}
-                            </button>
+                                    gap: '10px',
+                                    padding: '10px 18px',
+                                    borderRadius: '10px',
+                                    backgroundColor: '#f5f3ff',
+                                    border: '1px solid #ddd6fe',
+                                    color: '#6d28d9',
+                                    fontSize: '13px',
+                                    fontWeight: 700
+                                }}>
+                                    <Loader2 size={16} className="spin" />
+                                    <span>Nächste Artikel werden analysiert ({aiLoadingSeconds}s)...</span>
+                                </div>
+                            ) : (
+                                <>
+                                    {((activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length) > reviewedIds.length) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleBulkAcceptReview(true)}
+                                            disabled={savingBulk || selectedReviewIds.size === 0}
+                                            style={{
+                                                padding: '12px 20px',
+                                                borderRadius: '10px',
+                                                border: '1px solid #7c3aed',
+                                                backgroundColor: '#f5f3ff',
+                                                color: '#6d28d9',
+                                                fontWeight: 800,
+                                                fontSize: '13px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px'
+                                            }}
+                                        >
+                                            <Sparkles size={16} />
+                                            ✓ Übernehmen & nächste {Math.min(BATCH_SIZE, Math.max(1, (activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length) - reviewedIds.length))} mit KI prüfen →
+                                        </button>
+                                    )}
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleBulkAcceptReview(false)}
+                                        disabled={savingBulk || selectedReviewIds.size === 0}
+                                        style={{
+                                            padding: '12px 24px',
+                                            borderRadius: '10px',
+                                            border: 'none',
+                                            backgroundColor: '#16a34a',
+                                            color: '#fff',
+                                            fontWeight: 800,
+                                            fontSize: '14px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)'
+                                        }}
+                                    >
+                                        {savingBulk ? (
+                                            <>
+                                                <Loader2 size={18} className="spin" /> Speichert...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle2 size={18} />
+                                                ✓ Alle ausgewählten übernehmen & abhaken ({selectedReviewIds.size})
+                                            </>
+                                        )}
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
