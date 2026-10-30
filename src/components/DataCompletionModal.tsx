@@ -298,15 +298,6 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         setSelectedIds(new Set(currentBatchIds));
     }, [currentBatchIds]);
 
-    // Automatisch KI für den aktuellen Batch starten (beim Öffnen oder beim Weiterschalten zum nächsten Batch)
-    useEffect(() => {
-        if (!isOpen || loadingState || currentBatch.length === 0) return;
-        const batchKey = `${activeTab}:${currentBatchIds.sort().join(',')}`;
-        if (enrichedBatchRef.current === batchKey) return;
-        enrichedBatchRef.current = batchKey;
-        triggerAiForCurrentBatch(currentBatch);
-    }, [isOpen, loadingState, activeTab, currentBatchIds]);
-
     const triggerAiForCurrentBatch = async (batchItems: (Product | Supplier)[]) => {
         if (!supabase || aiLoading || batchItems.length === 0) return;
         setAiLoading(true);
