@@ -11,8 +11,7 @@ import {
     Square,
     RotateCcw,
     AlertCircle,
-    Edit2,
-    RefreshCw
+    Edit2
 } from 'lucide-react';
 import type { Product, Supplier } from '../types';
 import { supabase } from '../services/supabase';
@@ -962,33 +961,42 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     </div>
 
                     {/* Batch-Status & Schnellauswahl */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {aiLoading ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#7c3aed', fontWeight: 600 }}>
-                                <Loader2 size={15} className="spin" /> KI sucht Bilder & Daten...
-                            </span>
-                        ) : currentBatch.length > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        {currentBatch.length > 0 && (
                             <button
                                 type="button"
                                 onClick={() => triggerAiForCurrentBatch(currentBatch)}
+                                disabled={aiLoading}
                                 style={{
-                                    padding: '5px 10px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #ddd6fe',
-                                    backgroundColor: '#f5f3ff',
-                                    color: '#6d28d9',
-                                    fontSize: '11px',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
+                                    padding: '8px 16px',
+                                    borderRadius: '10px',
+                                    border: 'none',
+                                    background: aiLoading
+                                        ? '#ede9fe'
+                                        : 'linear-gradient(135deg, #6366f1 0%, #7c3aed 100%)',
+                                    color: aiLoading ? '#6d28d9' : '#fff',
+                                    fontWeight: 800,
+                                    fontSize: '13px',
+                                    cursor: aiLoading ? 'wait' : 'pointer',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '5px'
+                                    gap: '7px',
+                                    boxShadow: aiLoading ? 'none' : '0 4px 12px rgba(124, 58, 237, 0.28)',
+                                    transition: 'all 0.2s ease'
                                 }}
-                                title="KI-Suche für diesen Durchgang erneut starten"
+                                title="Startet die KI-Ergänzung für Bilder, Kategorien & Shop-Links"
                             >
-                                <RefreshCw size={12} /> Neu suchen
+                                {aiLoading ? (
+                                    <>
+                                        <Loader2 size={16} className="spin" /> KI sucht Bilder & Daten...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles size={16} /> ✨ Mit KI ergänzen ({currentBatch.length} {activeTab === 'products' ? 'Artikel' : 'Lieferanten'})
+                                    </>
+                                )}
                             </button>
-                        ) : null}
+                        )}
 
                         {currentBatch.length > 0 && (
                             <button
@@ -1001,12 +1009,12 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                     }
                                 }}
                                 style={{
-                                    padding: '5px 10px',
+                                    padding: '6px 12px',
                                     borderRadius: '8px',
                                     border: '1px solid #cbd5e1',
                                     backgroundColor: '#fff',
                                     color: '#475569',
-                                    fontSize: '11px',
+                                    fontSize: '12px',
                                     fontWeight: 600,
                                     cursor: 'pointer'
                                 }}
@@ -1018,7 +1026,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         <button
                             type="button"
                             onClick={handleBulkAccept}
-                            disabled={savingBulk || aiLoading || selectedIds.size === 0}
+                            disabled={savingBulk || selectedIds.size === 0}
                             style={{
                                 padding: '8px 18px',
                                 borderRadius: '10px',
@@ -1027,11 +1035,11 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                 color: '#fff',
                                 fontWeight: 800,
                                 fontSize: '13px',
-                                cursor: (savingBulk || aiLoading || selectedIds.size === 0) ? 'not-allowed' : 'pointer',
+                                cursor: (savingBulk || selectedIds.size === 0) ? 'not-allowed' : 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '7px',
-                                opacity: selectedIds.size === 0 ? 0.6 : 1,
+                                opacity: selectedIds.size === 0 ? 0.5 : 1,
                                 boxShadow: selectedIds.size > 0 ? '0 4px 12px rgba(22, 163, 74, 0.3)' : 'none',
                                 transition: 'all 0.2s ease'
                             }}
