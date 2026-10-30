@@ -345,6 +345,17 @@ export const DataService = {
         const { error } = await supabase.from('products').upsert(dbProduct);
         if (error) throw new Error(error.message || JSON.stringify(error));
         dataCache.invalidate('products');
+
+        // Wenn ein Produktbild aktualisiert wird, synchronisiere zugehörige Bestellungen automatisch mit
+        if (dbProduct.image && dbProduct.name) {
+            void Promise.resolve(
+                supabase.from('orders')
+                    .update({ product_image: dbProduct.image })
+                    .ilike('product_name', dbProduct.name.trim())
+            ).then(() => {
+                dataCache.invalidate('orders');
+            }).catch(() => {});
+        }
     },
 
     async updateProduct(product: Product): Promise<void> {

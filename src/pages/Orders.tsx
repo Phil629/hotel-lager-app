@@ -726,7 +726,7 @@ export const Orders: React.FC = () => {
 
     const renderOrderCard = (order: Order) => {
         const currentProduct = products.find(p => p.name?.toLowerCase().trim() === order.productName?.toLowerCase().trim()) || products.find(p => p.name && order.productName && (p.name.toLowerCase().includes(order.productName.toLowerCase()) || order.productName.toLowerCase().includes(p.name.toLowerCase())));
-        const displayImage = order.productImage || currentProduct?.image;
+        const displayImage = currentProduct?.image || order.productImage;
         
         return (
         <div key={order.id} style={{
