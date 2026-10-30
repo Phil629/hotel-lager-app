@@ -279,6 +279,19 @@ const resolveWebshopDomain = (supplierName?: string, supplierUrl?: string, isWeb
   return ''
 }
 
+const isDeepProductUrl = (url?: string): boolean => {
+  if (!url || typeof url !== 'string' || !url.trim()) return false
+  try {
+    const u = new URL(url.startsWith('http') ? url : `https://${url}`)
+    const cleanPath = u.pathname.replace(/^\/(de|en|de-de|de_de)?\/?$/i, '').trim()
+    if (cleanPath.length <= 1) return false
+    if (/^\/(index\.(html|php|asp)|home|startseite)\/?$/i.test(cleanPath)) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
 const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 5000)
@@ -303,13 +316,14 @@ const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
       .filter(x => x && (x.murl || x.turl))
 
     // WICHTIG: Ein Shop-Bestell-Link (orderUrl) darf NUR dann vorgeschlagen werden,
-    // wenn die gefundene Seite tatsächlich zur Domain des zugeordneten Webshop-Lieferanten gehört!
-    // Niemals fremde Shops (z.B. getraenke-taxi-do.de bei HEWO) als Bestell-Link eintragen!
+    // wenn die gefundene Seite tatsächlich zur Domain des zugeordneten Webshop-Lieferanten gehört UND eine echte Unterseite/Produktseite ist!
+    // Niemals die Startseite des Shops als Produkt-Bestell-Link eintragen!
     const preferred = webshopDomain
       ? metas.find(x => {
           try {
             const host = new URL(x.purl || '').hostname.replace(/^www\./i, '').toLowerCase()
-            return host === webshopDomain || host.endsWith('.' + webshopDomain) || webshopDomain.endsWith('.' + host)
+            const matchesDomain = host === webshopDomain || host.endsWith('.' + webshopDomain) || webshopDomain.endsWith('.' + host)
+            return matchesDomain && isDeepProductUrl(x.purl)
           } catch {
             return false
           }
@@ -321,7 +335,7 @@ const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
     )]
 
     return {
-      orderUrl: preferred?.purl || '',
+      orderUrl: (preferred?.purl && isDeepProductUrl(preferred.purl)) ? preferred.purl : '',
       image: best?.turl || best?.murl || '',
       highResImage: best?.murl || '',
       title: (best?.t || '').replace(/[\ue000-\uf8ff]/g, '').trim(),
@@ -572,14 +586,14 @@ async function enrichSingleProduct(params: {
     const bingRes = await searchBingProductMeta(query, webshopDomain)
     if (bingRes.image) {
       image = bingRes.highResImage || bingRes.image
-      if (!orderUrl && bingRes.orderUrl) orderUrl = bingRes.orderUrl
+      if (!orderUrl && bingRes.orderUrl && isDeepProductUrl(bingRes.orderUrl)) orderUrl = bingRes.orderUrl
       alternatives = bingRes.alternatives || []
     }
   }
 
   return {
     cleanName: cleanName || params.name,
-    orderUrl,
+    orderUrl: isDeepProductUrl(orderUrl) ? orderUrl : '',
     image,
     alternatives,
     sku: effectiveSku,
@@ -2210,7 +2224,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             const webshopDomain = resolveWebshopDomain(effectiveSupName, item.supplierUrl || learnedSupDomain, item.isWebshopSupplier, item.supplierEmail) || learnedSupDomain
 
             // 1. Zuerst prüfen, ob genau dieses Produkt (oder die direkte Artikelnummer im Shop) schon einen Link hat
-            let suggestedOrderUrl = item.orderUrl || existingProductOrderUrlByName.get(lowerProdName) || ''
+            let rawExistingUrl = item.orderUrl || existingProductOrderUrlByName.get(lowerProdName) || ''
+            let suggestedOrderUrl = isDeepProductUrl(rawExistingUrl) ? rawExistingUrl : ''
             let directImage = ''
             let shopPrice: number | null = null
 
@@ -2219,7 +2234,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             const query = `${normalizedSearchName} ${effectiveSku} ${webshopDomain}`.trim()
             const bingRes = await searchBingProductMeta(query, webshopDomain)
 
-            if (!suggestedOrderUrl && webshopDomain && bingRes.orderUrl) {
+            if (!suggestedOrderUrl && webshopDomain && bingRes.orderUrl && isDeepProductUrl(bingRes.orderUrl)) {
               suggestedOrderUrl = bingRes.orderUrl
             }
 
@@ -2227,7 +2242,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             // direkt über Artikelnummer / Shop-Suche / site:-Suche auf der Lieferanten-Domain auflösen!
             if (!suggestedOrderUrl && webshopDomain) {
               const directRes = await resolveDirectShopProduct(webshopDomain, effectiveSku, cleanedName || item.name || '')
-              if (directRes.orderUrl) {
+              if (directRes.orderUrl && isDeepProductUrl(directRes.orderUrl)) {
                 suggestedOrderUrl = directRes.orderUrl
               }
               if (directRes.image) {
@@ -2236,6 +2251,10 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               if (directRes.shopPrice) {
                 shopPrice = directRes.shopPrice
               }
+            }
+
+            if (isEmailWholesaler || !isDeepProductUrl(suggestedOrderUrl)) {
+              suggestedOrderUrl = ''
             }
 
             if (!suggestedSupplierId && (suggestedOrderUrl || webshopDomain)) {

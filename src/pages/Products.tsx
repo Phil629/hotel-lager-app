@@ -1813,9 +1813,8 @@ export const Products: React.FC = () => {
                                                             value={newProduct.supplierId || ''}
                                                             onChange={e => {
                                                                 const sId = e.target.value; const s = suppliers.find(su => su.id === sId);
-                                                                const fallbackUrl = newProduct.orderUrl ? newProduct.orderUrl : (s?.url || s?.loginUrl || '');
                                                                 const autoCategory = !newProduct.category && s?.defaultCategory ? s.defaultCategory : newProduct.category;
-                                                                setNewProduct({ ...newProduct, supplierId: sId || undefined, emailOrderAddress: s?.email || '', supplierPhone: s?.phone || '', orderUrl: fallbackUrl, category: autoCategory });
+                                                                setNewProduct({ ...newProduct, supplierId: sId || undefined, emailOrderAddress: s?.email || '', supplierPhone: s?.phone || '', category: autoCategory });
                                                             }}
                                                             className="input-field"
                                                             style={{ flex: 1 }}
