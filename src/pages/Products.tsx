@@ -38,6 +38,21 @@ export const Products: React.FC = () => {
     const { canSeePrices, isAiCartEnabled } = useAppContext();
     const [products, setProducts] = useState<Product[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+    const allAvailableCategories = useMemo(() => {
+        const set = new Set(CATEGORIES.filter(c => c !== 'Sonstiges'));
+        products.forEach(p => {
+            const norm = normalizeCategory(p.category);
+            if (norm && norm !== 'Ohne Kategorie' && norm !== 'Sonstiges') set.add(norm);
+        });
+        suppliers.forEach(s => {
+            const norm = normalizeCategory(s.defaultCategory);
+            if (norm && norm !== 'Ohne Kategorie' && norm !== 'Sonstiges') set.add(norm);
+        });
+        const list = Array.from(set).sort();
+        list.push('Sonstiges');
+        return list;
+    }, [products, suppliers]);
     const [orders, setOrders] = useState<Order[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
@@ -1549,7 +1564,7 @@ export const Products: React.FC = () => {
                                                                     className="input-field"
                                                                 >
                                                                     <option value="">-- Leer --</option>
-                                                                    {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                                                    {allAvailableCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                                                     <option value="custom">Eigene eingeben...</option>
                                                                 </select>
                                                             )}

@@ -365,11 +365,16 @@ const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
   }
 }
 
-function normalizeCategory(rawCat?: string | null): string {
+function normalizeCategory(rawCat?: string | null, customAllowed: string[] = []): string {
   if (!rawCat || typeof rawCat !== 'string') return ''
   const c = rawCat.trim()
   const lower = c.toLowerCase()
 
+  // 1. Wenn der Hotelier selbst eine Kategorie angelegt hat, exakt beibehalten
+  const matchedCustom = customAllowed.find(ca => ca && ca.trim().toLowerCase() === lower)
+  if (matchedCustom) return matchedCustom.trim()
+
+  // 2. Bekannte Synonyme auf Standard-Kategorien normalisieren
   if (lower === 'büro' || lower === 'büroartikel' || lower === 'schreibwaren' || lower === 'office' || lower === 'büro & verwaltung') return 'Bürobedarf'
   if (lower === 'reinigungsmittel' || lower === 'putzmittel' || lower === 'cleaning') return 'Reinigung'
   if (lower === 'hygieneartikel' || lower === 'drogerie' || lower === 'körperpflege' || lower === 'hygiene & sanitär') return 'Hygiene'
@@ -384,7 +389,12 @@ function normalizeCategory(rawCat?: string | null): string {
   return matched || c
 }
 
-const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: string) => {
+const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: string, customAllowed: string[] = []) => {
+  const normCurrent = normalizeCategory(currentCat, customAllowed)
+  if (customAllowed.some(ca => ca.toLowerCase() === normCurrent.toLowerCase())) {
+    let unit = currentUnit || 'Stück'
+    return { category: normCurrent, unit }
+  }
   const lower = (name || '').toLowerCase()
 
   // Semantische Erkennung nach Produktart für Hotel-Warenwirtschaft:
@@ -810,7 +820,7 @@ async function processEmailWithAi(params: {
   // Vorhandene Lieferanten & Produkte dieser Firma laden (verhindert Duplikate direkt beim Import!)
   const [{ data: existingSuppliersData }, { data: existingProductsData }] = await Promise.all([
     supabase.from('suppliers')
-      .select('id, name, email, customer_number, phone, iban')
+      .select('id, name, email, customer_number, phone, iban, default_category')
       .eq('company_id', company_id)
       .order('name', { ascending: true }),
     supabase.from('products')
@@ -822,13 +832,17 @@ async function processEmailWithAi(params: {
   const allSuppliers = existingSuppliersData || []
   const allProducts = existingProductsData || []
 
-  const existingCategories = [...new Set(
-    allProducts.map((r: any) => r.category as string).filter(Boolean)
-  )].filter(c => c !== 'KI-Import (E-Mail)' && c !== 'Importiert' && c !== 'Ohne Kategorie')
+  const standardCats = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro']
+  const allHotelCategories = [...new Set([
+    ...allProducts.map((r: any) => (r.category as string || '').trim()),
+    ...allSuppliers.map((s: any) => (s.default_category as string || '').trim())
+  ])].filter(c => c && c !== 'KI-Import (E-Mail)' && c !== 'Importiert' && c !== 'Ohne Kategorie' && c !== 'Sonstiges')
 
-  const categoryHint = existingCategories.length > 0
-    ? existingCategories.join(', ')
-    : '(keine vorhanden — du MUSST zwingend selbst eine passende kurze Kategorie auf Deutsch erfinden)'
+  const customCategories = allHotelCategories.filter(c => !standardCats.some(s => s.toLowerCase() === c.toLowerCase()))
+
+  const categoryHint = allHotelCategories.length > 0
+    ? allHotelCategories.join(', ')
+    : standardCats.join(', ')
 
   const suppliersHint = allSuppliers.length > 0
     ? allSuppliers.map((s: any) => `- ID: "${s.id}" | Name: "${s.name}" | E-Mail: "${s.email || ''}"`).join('\n')
@@ -867,7 +881,9 @@ Regeln:
 10. Wenn zu wenig Sicherheit besteht, document_type = "unknown".
 11. Extrahiere die Kundennummer des Hotels (customer_number) bei diesem Lieferanten, falls sie auf dem Beleg steht (oft als "Kd-Nr.", "Kunden-Nr." oder "Customer No.").
 12. WICHTIG zu 'product_name' (falls neues Produkt): Filtere alle Artikelnummern, EANs, SKUs und kryptischen Codes aus dem Produktnamen heraus! 'product_name' darf NUR den menschenlesbaren Namen enthalten. Packe die Artikelnummer stattdessen in das Feld 'sku'.
-13. KATEGORIE: Ordne jeden Artikel ZWINGEND genau einer dieser Standard-Hotelkategorien zu:
+13. KATEGORIE: Ordne jeden Artikel passend den Kategorien DIESES Hotels zu.
+    Folgende Kategorien existieren in diesem Hotel:
+${customCategories.length > 0 ? `    >>> VOM HOTEL INDIVIDUELL EINGERICHTET (bevorzuge diese bei passenden Artikeln!):\n${customCategories.map(c => `    - "${c}"`).join('\n')}\n` : ''}    Standard-Kategorien:
     - "Lebensmittel" (Frühstückszutaten, Obst, Gemüse, Molkerei, Wurst, Käse, Brot, Aufstriche, Gewürze, Küchenfolien)
     - "Getränke" (Kaffee, Espresso, Tee, Wasser, Säfte, Bier, Wein, Softdrinks, Spirituosen)
     - "Reinigung" (Reinigungsmittel, Entkalker, Milchreiniger, Kaffeemaschinen-Reiniger, Spülmittel, Wischbezüge, Müllbeutel, Schwämme)
@@ -877,7 +893,7 @@ Regeln:
     - "Hotel & Gastro" (Geschirr, Besteck, Gläser, Servietten, Buffet-Zubehör, Zimmerausstattung, Schilder)
     - "Sonstiges" (NUR als allerletzter Ausweg, falls überhaupt nichts anderes passt!)
     WICHTIGE KATEGORIE-REGELN:
-    - Kaffeemaschinen-Reiniger, Milch- & Sahnereiniger oder Entkalker sind IMMER "Reinigung" (NIEMALS "Getränke", selbst wenn der Lieferant Coffee Perfect heißt)!
+${customCategories.length > 0 ? `    - Falls ein Artikel thematisch zu einer der individuellen Hotel-Kategorien (${customCategories.join(', ')}) passt, ordne ihn ZWINGEND dort ein!\n` : ''}    - Kaffeemaschinen-Reiniger, Milch- & Sahnereiniger oder Entkalker sind IMMER "Reinigung" (NIEMALS "Getränke", selbst wenn der Lieferant Coffee Perfect heißt)!
     - Werkzeug, Leuchtmittel, Duschköpfe, Dichtungen, Türfächer, Wasserfilter sind IMMER "Instandhaltung"!
     - Edding, Marker, Kugelschreiber, Papier sind IMMER "Bürobedarf" (niemals "Büro")!
     - Seife, Desinfektion, Toilettenpapier, Kosmetiktücher, Shampoo sind IMMER "Hygiene"!
@@ -2162,11 +2178,11 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             .limit(200),
           supabase
             .from('products')
-            .select('id, name, product_number, supplier_id, order_url')
+            .select('id, name, product_number, supplier_id, order_url, category')
             .eq('company_id', company_id),
           supabase
             .from('suppliers')
-            .select('id, name, email, url, order_url')
+            .select('id, name, email, url, order_url, default_category')
             .eq('company_id', company_id)
         ])
 
@@ -2412,12 +2428,20 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           standard_order_quantity?: number
         }>()
 
+        const standardCats = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro']
+        const allHotelCategories = [...new Set([
+          ...(existingProducts || []).map((p: any) => (p.category as string || '').trim()),
+          ...(existingSuppliers || []).map((s: any) => (s.default_category as string || '').trim())
+        ])].filter(c => c && c !== 'Sonstiges' && c !== 'Ohne Kategorie' && c !== 'Importiert')
+        const customCategories = allHotelCategories.filter(c => !standardCats.some(s => s.toLowerCase() === c.toLowerCase()))
+
         if (productItemsToAnalyze.length > 0) {
           const aiPrompt = `
 Du bist ein erfahrener Hotel-Wirtschaftsleiter und Chefeinkäufer für das Hotel Schottenhof.
 Analysiere die folgenden Hotel-Artikel und ergänze fehlende Stammdaten mit hotelgerechter Präzision.
 
-Erlaubte Kategorien (wähle IMMER genau eine der folgenden):
+Erlaubte Kategorien (wähle die treffendste für jedes Produkt):
+${customCategories.length > 0 ? `>>> VOM HOTEL INDIVIDUELL EINGERICHTET (bevorzuge diese bei passenden Artikeln!):\n${customCategories.map(c => `- "${c}"`).join('\n')}\n` : ''}Standard-Kategorien:
 - "Lebensmittel" (Frühstück, Obst, Gemüse, Molkerei, Brot, Belag, Wurst, Käse, Eier, Trockenwaren, Gewürze, Küchenfolien)
 - "Getränke" (Kaffee, Espresso, Tee, Wasser, Säfte, Bier, Wein, Softdrinks, Spirituosen)
 - "Reinigung" (Kaffeemaschinen-Reiniger, Milch- & Sahnereiniger, Entkalker, Spülmittel, Allzweckreiniger, Wischbezüge, Müllbeutel, Schwämme)
@@ -2429,7 +2453,7 @@ Erlaubte Kategorien (wähle IMMER genau eine der folgenden):
 
 Regeln:
 1. 'clean_name': Saubere, ansprechende Produktbezeichnung auf Deutsch ohne kryptische Artikelnummern, EANs oder Lieferanten-Codes.
-2. 'category': Zwingend eine der obigen Kategorien. Kaffeereiniger/Milchreiniger/Entkalker sind IMMER "Reinigung" (niemals "Getränke"). LED/Lampen/Dichtungen/Kleber sind IMMER "Instandhaltung". Duschhocker/Türschilder/Geschirr sind "Hotel & Gastro".
+2. 'category': Zwingend eine der obigen Kategorien.${customCategories.length > 0 ? ` Falls ein Artikel zu einer der individuellen Kategorien des Hotels (${customCategories.join(', ')}) passt, ordne ihn ZWINGEND dort ein!` : ''} Kaffeereiniger/Milchreiniger/Entkalker sind IMMER "Reinigung" (niemals "Getränke"). LED/Lampen/Dichtungen/Kleber sind IMMER "Instandhaltung". Duschhocker/Türschilder/Geschirr sind "Hotel & Gastro".
 3. 'unit': Typische Bestelleinheit ("Karton", "Kasten", "Flasche", "Packung", "Rolle", "Dose", "Kanister" oder "Stück").
 4. 'min_stock': Empfohlener Mindestbestand für ein mittelgroßes Stadthotel (ganze Zahl >= 1).
 5. 'standard_order_quantity': Empfohlene Bestellmenge (ganze Zahl >= 1).
@@ -2576,14 +2600,14 @@ Antworte ausschließlich als JSON im Format:
               } catch {}
             }
 
-            let effectiveCategory = normalizeCategory(aiResult?.category || item.category)
+            let effectiveCategory = normalizeCategory(aiResult?.category || item.category, customCategories)
             let effectiveUnit = aiResult?.unit || item.unit
             if (!effectiveCategory || effectiveCategory === 'Sonstiges') {
-              const fallback = inferCategoryAndUnit(cleanedName || item.name, effectiveCategory, effectiveUnit)
+              const fallback = inferCategoryAndUnit(cleanedName || item.name, effectiveCategory, effectiveUnit, customCategories)
               if (!effectiveCategory || effectiveCategory === 'Sonstiges') effectiveCategory = fallback.category
               if (!effectiveUnit || effectiveUnit === 'Stück' || effectiveUnit === 'Stk') effectiveUnit = fallback.unit
             }
-            effectiveCategory = normalizeCategory(effectiveCategory) || 'Sonstiges'
+            effectiveCategory = normalizeCategory(effectiveCategory, customCategories) || 'Sonstiges'
             const unit = effectiveUnit || 'Stück'
             const category = effectiveCategory
 

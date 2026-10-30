@@ -1,5 +1,5 @@
 import { generateId } from "../utils";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Mail, Phone, Search, X, AlertTriangle, Package, CheckSquare, Square, Globe, Key, Eye, EyeOff, ExternalLink, Sparkles, Wand2 } from 'lucide-react';
 import { DuplicateCheckModal } from '../components/DuplicateCheckModal';
 import { DataCompletionModal } from '../components/DataCompletionModal';
@@ -9,6 +9,9 @@ import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
+import { normalizeCategory } from './Products';
+
+const STANDARD_CATEGORIES = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro', 'Sonstiges'];
 
 export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -38,6 +41,21 @@ export const Suppliers: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [overwriteProducts, setOverwriteProducts] = useState(false);
     const [overwriteCategory, setOverwriteCategory] = useState(false);
+
+    const availableCategories = useMemo(() => {
+        const set = new Set(STANDARD_CATEGORIES.filter(c => c !== 'Sonstiges'));
+        products.forEach(p => {
+            const norm = normalizeCategory(p.category);
+            if (norm && norm !== 'Ohne Kategorie' && norm !== 'Sonstiges') set.add(norm);
+        });
+        suppliers.forEach(s => {
+            const norm = normalizeCategory(s.defaultCategory);
+            if (norm && norm !== 'Ohne Kategorie' && norm !== 'Sonstiges') set.add(norm);
+        });
+        const list = Array.from(set).sort();
+        list.push('Sonstiges');
+        return list;
+    }, [products, suppliers]);
 
     useEffect(() => {
         const supabaseClient = getSupabaseClient();
@@ -481,11 +499,7 @@ export const Suppliers: React.FC = () => {
                                                         className="input-field"
                                                     >
                                                         <option value="">-- Keine Vorgabe --</option>
-                                                        <option value="Lebensmittel">Lebensmittel</option>
-                                                        <option value="Getränke">Getränke</option>
-                                                        <option value="Reinigung">Reinigung</option>
-                                                        <option value="Büro">Büro</option>
-                                                        <option value="Sonstiges">Sonstiges</option>
+                                                        {availableCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                                         <option value="custom">Eigene eingeben...</option>
                                                     </select>
                                                 )}
