@@ -87,17 +87,13 @@ interface SupplierDraft {
 }
 
 const STANDARD_CATEGORIES = [
+    'Lebensmittel',
+    'Getränke',
     'Reinigung',
-    'Büro & Verwaltung',
-    'Frühstück & Küche',
-    'Rezeption & Lobby',
-    'Zimmerausstattung',
-    'Wäsche & Textilien',
-    'Instandhaltung & Technik',
-    'Druckerei & Werbemittel',
-    'Getränke & Minibar',
-    'Hygiene & Sanitär',
-    'Garten & Außenbereich',
+    'Hygiene',
+    'Bürobedarf',
+    'Instandhaltung',
+    'Hotel & Gastro',
     'Sonstiges'
 ];
 

@@ -30,11 +30,12 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
     }
   })
 
-  // Starte mit gemini-flash-lite-latest (antwortet in ~3-4 Sek. ohne Thinking-Verzögerung), danach Fallbacks
+  // Intelligentes Modell-Routing: Starte mit vollwertigem Gemini Flash für präzise Beleg- & Tabellenanalyse,
+  // danach gemini-flash-latest, und flash-lite nur als Notfall-Fallback bei extremen Rate-Limits
   const GEMINI_MODELS = [
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-    geminiUrl,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${GEMINI_API_KEY}`,
   ]
   const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
   const MAX_ATTEMPTS_PER_MODEL = 2
@@ -283,9 +284,24 @@ const isDeepProductUrl = (url?: string): boolean => {
   if (!url || typeof url !== 'string' || !url.trim()) return false
   try {
     const u = new URL(url.startsWith('http') ? url : `https://${url}`)
-    const cleanPath = u.pathname.replace(/^\/(de|en|de-de|de_de)?\/?$/i, '').trim()
-    if (cleanPath.length <= 1) return false
-    if (/^\/(index\.(html|php|asp)|home|startseite)\/?$/i.test(cleanPath)) return false
+    const p = u.pathname.toLowerCase()
+    const cleanPath = p.replace(/^\/(de|en|de-de|de_de)?\/?$/i, '').trim()
+    if (cleanPath.length <= 2) return false
+    if (/^\/(index\.(html|php|asp)|home|startseite|default\.(html|aspx?))\/?$/i.test(cleanPath)) return false
+
+    // Keine Such- oder Katalogübersichtsseiten als Produkt-URL (verhindert Landen auf Shop-Startseite/Suche)
+    if (/(?:\/|^)(suche|search|catalogsearch|find|results|query|katalog|categories|kategorien)(?:\/|$)/i.test(p) || u.searchParams.has('q') || u.searchParams.has('k') || u.searchParams.has('query')) {
+      return false
+    }
+    // Keine Warenkorb-, Login- oder Kontoseiten
+    if (/(?:\/|^)(warenkorb|cart|basket|checkout|kasse|login|signin|anmelden|account|mein-konto|register|auth)(?:\/|$)/i.test(p)) {
+      return false
+    }
+    // Keine Tracking-, Hilfe- oder Benachrichtigungslinks
+    if (/(?:\/|^)(progress-tracker|tracking|order-history|notification|widerruf|agb|impressum|datenschutz|hilfe|faq|kontakt)(?:\/|$)/i.test(p)) {
+      return false
+    }
+
     return true
   } catch {
     return false
@@ -349,32 +365,68 @@ const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
   }
 }
 
+function normalizeCategory(rawCat?: string | null): string {
+  if (!rawCat || typeof rawCat !== 'string') return ''
+  const c = rawCat.trim()
+  const lower = c.toLowerCase()
+
+  if (lower === 'büro' || lower === 'büroartikel' || lower === 'schreibwaren' || lower === 'office' || lower === 'büro & verwaltung') return 'Bürobedarf'
+  if (lower === 'reinigungsmittel' || lower === 'putzmittel' || lower === 'cleaning') return 'Reinigung'
+  if (lower === 'hygieneartikel' || lower === 'drogerie' || lower === 'körperpflege' || lower === 'hygiene & sanitär') return 'Hygiene'
+  if (lower === 'technik' || lower === 'reparatur' || lower === 'ersatzteile' || lower === 'werkzeug' || lower === 'wasserfilter' || lower === 'sanitär' || lower === 'instandhaltung & technik') return 'Instandhaltung'
+  if (lower === 'hotelbedarf' || lower === 'gastronomie' || lower === 'gastro' || lower === 'geschirr' || lower === 'porzellan' || lower === 'tischwäsche' || lower === 'zimmerausstattung' || lower === 'rezeption & lobby') return 'Hotel & Gastro'
+  if (lower === 'speisen' || lower === 'frühstück' || lower === 'food' || lower === 'frühstück & küche') return 'Lebensmittel'
+  if (lower === 'drinks' || lower === 'beverages' || lower === 'getränke & minibar') return 'Getränke'
+  if (lower === 'ohne kategorie' || lower === 'importiert' || lower === 'ki-import') return ''
+
+  const valid = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro', 'Sonstiges']
+  const matched = valid.find(v => v.toLowerCase() === lower)
+  return matched || c
+}
+
 const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: string) => {
   const lower = (name || '').toLowerCase()
 
-  // 1. Starke semantische Erkennung nach Produktart:
-  // Ein Reiniger, Entkalker, Spülmittel, Seife oder Handschuh ist IMMER "Reinigung" –
-  // selbst wenn der Lieferant (z.B. Coffee Perfect) Standard-Kategorie "Getränke" hat!
-  const isCleaning = /(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|toilettenpapier|kosmetiktücher|seife|shampoo|desinfektion|schwamm|entkalker|schaben|kakerlaken|ungeziefer|mülleimer|handschuhe|putztuch|wischmopp|fettlöser|sahnereiniger|milchreiniger)/i.test(lower)
-  const isMaintenance = /(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|kühlschrank|türfach|filter|lampe|leuchtmittel|led|batterie|bohrer|zange|schraubendreher|dichtung)/i.test(lower)
-  const isOffice = /(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro|notizblock|post-it)/i.test(lower)
-  const isFood = /(?:melone|käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre|brot|brötchen|croissant|müsli|haferflocken)/i.test(lower)
-  const isDrink = !isCleaning && /(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|\bmilch\b|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk)/i.test(lower)
+  // Semantische Erkennung nach Produktart für Hotel-Warenwirtschaft:
+  // 1. Reinigung (Chemische Reiniger, Kaffeemaschinenreiniger, Spülmittel, Wischbezüge, Müllbeutel)
+  // WICHTIG: Milchreiniger/Entkalker sind IMMER Reinigung, selbst wenn sie von Coffee Perfect stammen!
+  const isCleaning = /(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|seife|schwamm|entkalker|schaben|kakerlaken|ungeziefer|putztuch|wischmopp|fettlöser|sahnereiniger|milchreiniger|maschinenreiniger|rohrreiniger|glasreiniger|allzweckreiniger|spültabs|sanitärreiniger)/i.test(lower)
 
-  let category = currentCat && currentCat !== 'Sonstiges' && currentCat !== 'Ohne Kategorie' ? currentCat : ''
+  // 2. Hygiene & Körperpflege (Toilettenpapier, Kosmetiktücher, Handseife, Desinfektion, Shampoo, Handschuhe)
+  const isHygiene = !isCleaning && /(?:toilettenpapier|kosmetiktücher|taschentücher|küchenrollen|händedesinfektion|desinfektionsmittel|desinfektion|shampoo|duschgel|handseife|seifenspender|wandspender|handschuh|handschuhe|nitril|latex|hotelkosmetik|badelotion|zahnbürste|duschhaube)/i.test(lower)
 
-  // Widersprüche korrigieren (z.B. Reiniger in Getränke/Lebensmittel oder Getränke in Reinigung)
+  // 3. Instandhaltung & Technik (Werkzeuge, LED/Leuchtmittel, Batterien, Sanitär, Duschköpfe, Dichtungen, Reparatur, Klebstoffe, Ersatzteile wie Türfächer, Wasserfilter)
+  const isMaintenance = /(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|duschbrause|kühlschrank|türfach|filter|filterkartusche|lampe|leuchtmittel|led|glühbirne|batterie|bohrer|zange|schraubendreher|dichtung|ersatzdichtung|abfluss|ventil|kabel|stecker|rauchmelder)/i.test(lower)
+
+  // 4. Bürobedarf (Papier, Marker, Stifte, Ordner, Etiketten, Umschläge, Tacker, RFID-Karten)
+  const isOffice = /(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro|notizblock|post-it|toner|druckerpatrone|kassenrolle|laminier)/i.test(lower)
+
+  // 5. Hotel & Gastronomie (Geschirr, Besteck, Gläser, Servietten, Buffet, Türschilder, Duschhocker)
+  const isHotelGastro = /(?:porzellan|teller|tasse|becher|glas|gläser|besteck|messer|gabel|löffel|serviette|servietten|tischdecke|dessertdeckchen|salzstreuer|pfefferstreuer|türschild|duschhocker|menagen|buffet|tablett|ascher|speisekarte)/i.test(lower)
+
+  // 6. Lebensmittel (Frühstück, Obst, Gemüse, Molkerei, Brot, Wurst, Käse, Gewürze, Küchenfolien)
+  const isFood = /(?:melone|käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre|brot|brötchen|croissant|müsli|haferflocken|alufolie|frischhaltefolie|backpapier|salz\b|pfeffer\b|öl\b|essig\b|ketchup|mayonnaise|senf)/i.test(lower)
+
+  // 7. Getränke (Kaffee, Tee, Wasser, Säfte, Bier, Wein, Softdrinks)
+  const isDrink = !isCleaning && /(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|\bmilch\b|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk|sirup|limonade)/i.test(lower)
+
+  let category = normalizeCategory(currentCat)
+
   if (isCleaning) {
     category = 'Reinigung'
+  } else if (isHygiene) {
+    category = 'Hygiene'
   } else if (isMaintenance) {
     category = 'Instandhaltung'
-  } else if (isOffice && (category === 'Getränke' || category === 'Lebensmittel' || !category)) {
+  } else if (isOffice) {
     category = 'Bürobedarf'
+  } else if (isHotelGastro) {
+    category = 'Hotel & Gastro'
   } else if (isFood && (category === 'Reinigung' || category === 'Bürobedarf' || !category)) {
     category = 'Lebensmittel'
   } else if (isDrink && (category === 'Reinigung' || category === 'Bürobedarf' || !category)) {
     category = 'Getränke'
-  } else if (!category) {
+  } else if (!category || category === 'Ohne Kategorie') {
     category = 'Sonstiges'
   }
 
@@ -385,9 +437,9 @@ const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: s
     else if (/\b(rolle|rollen)\b/i.test(lower)) unit = 'Rolle'
     else if (/\bkanister\b|(?<![\d,\.])(?:5|10)\s*l\b/i.test(lower)) unit = 'Kanister'
     else if (/\bflasche\b|(?<![\d,\.])(?:1\s*l|500\s*ml|750\s*ml)\b/i.test(lower)) unit = 'Flasche'
-    else if (/\b(pack|packung|beutel)\b/i.test(lower)) unit = 'Packung'
+    else if (/\b(pack|packung|beutel|dose|tüte)\b/i.test(lower)) unit = 'Packung'
   }
-  return { category: category || 'Sonstiges', unit }
+  return { category: normalizeCategory(category), unit }
 }
 
 const formatEuro = (val: number) => val.toFixed(2).replace('.', ',')
@@ -815,7 +867,20 @@ Regeln:
 10. Wenn zu wenig Sicherheit besteht, document_type = "unknown".
 11. Extrahiere die Kundennummer des Hotels (customer_number) bei diesem Lieferanten, falls sie auf dem Beleg steht (oft als "Kd-Nr.", "Kunden-Nr." oder "Customer No.").
 12. WICHTIG zu 'product_name' (falls neues Produkt): Filtere alle Artikelnummern, EANs, SKUs und kryptischen Codes aus dem Produktnamen heraus! 'product_name' darf NUR den menschenlesbaren Namen enthalten. Packe die Artikelnummer stattdessen in das Feld 'sku'.
-13. KATEGORIE: Weise jedem Artikel ZWINGEND eine logische Warengruppe/Kategorie auf Deutsch zu (z.B. "Getränke", "Reinigung", "Lebensmittel", "Hygiene", "Bürobedarf"). Nutze bevorzugt EXAKT eine der vorhandenen Kategorien. Verwende NIEMALS generische Begriffe wie "Importiert" oder "KI-Import".
+13. KATEGORIE: Ordne jeden Artikel ZWINGEND genau einer dieser Standard-Hotelkategorien zu:
+    - "Lebensmittel" (Frühstückszutaten, Obst, Gemüse, Molkerei, Wurst, Käse, Brot, Aufstriche, Gewürze, Küchenfolien)
+    - "Getränke" (Kaffee, Espresso, Tee, Wasser, Säfte, Bier, Wein, Softdrinks, Spirituosen)
+    - "Reinigung" (Reinigungsmittel, Entkalker, Milchreiniger, Kaffeemaschinen-Reiniger, Spülmittel, Wischbezüge, Müllbeutel, Schwämme)
+    - "Hygiene" (Toilettenpapier, Kosmetiktücher, Handseife, Desinfektion, Shampoo, Duschgel, Gästekosmetik, Handtücher, Einweghandschuhe)
+    - "Bürobedarf" (Kopierpapier, Stifte, Marker, Edding, Ordner, Etiketten, Notizblöcke, Umschläge, Tacker, Druckertoner, RFID-Karten)
+    - "Instandhaltung" (Werkzeuge, Leuchtmittel/LED, Batterien, Sanitär/Duschköpfe/Dichtungen, Schrauben, Klebstoffe, Ersatzteile wie Kühlschranktürfächer, Wasserfilter)
+    - "Hotel & Gastro" (Geschirr, Besteck, Gläser, Servietten, Buffet-Zubehör, Zimmerausstattung, Schilder)
+    - "Sonstiges" (NUR als allerletzter Ausweg, falls überhaupt nichts anderes passt!)
+    WICHTIGE KATEGORIE-REGELN:
+    - Kaffeemaschinen-Reiniger, Milch- & Sahnereiniger oder Entkalker sind IMMER "Reinigung" (NIEMALS "Getränke", selbst wenn der Lieferant Coffee Perfect heißt)!
+    - Werkzeug, Leuchtmittel, Duschköpfe, Dichtungen, Türfächer, Wasserfilter sind IMMER "Instandhaltung"!
+    - Edding, Marker, Kugelschreiber, Papier sind IMMER "Bürobedarf" (niemals "Büro")!
+    - Seife, Desinfektion, Toilettenpapier, Kosmetiktücher, Shampoo sind IMMER "Hygiene"!
 14. TELEFON & IBAN: Falls Telefonnummer oder IBAN des Lieferanten auf dem Beleg stehen, trage sie unter supplier_phone bzw. supplier_iban ein.
 15. LIEFERTERMIN: Extrahiere den voraussichtlichen oder tatsächlichen Liefertermin als 'delivery_date' (Format YYYY-MM-DD). WICHTIG: Wenn der Liefertermin als relativer Wochentag oder Text angegeben ist (z.B. 'Zustellung: Samstag', 'Lieferung morgen', 'Dienstag, 3. November'), berechne IMMER das exakte Datum im Format YYYY-MM-DD basierend auf 'Heutiges Datum / Belegdatum'! Setze 'delivery_date' NIEMALS auf null, wenn ein Wochentag oder Liefertermin im Text vorkommt!
 16. TRACKING: Extrahiere einen eventuellen Tracking-Link ODER eine Sendungsnummer als 'tracking_link'.
@@ -886,15 +951,34 @@ Antworte ausschließlich als JSON:
     }
   }
 
-  // Mathematische Korrektur: Falls in der Belegtabelle Zeilensummen statt Stückpreise standen
-  if (Array.isArray(parsedData?.items)) {
-    for (const it of parsedData.items) {
-      const q = Math.round(Number(it.quantity)) || 1
-      const p = Number(it.price) || 0
-      const tot = Number(parsedData.total_price) || 0
-      if (q > 1 && p > 0 && tot > 0 && Math.abs(p - tot) < 0.05) {
-        it.price = Math.round((tot / q) * 100) / 100
-        console.log(`Auto-corrected line item price for "${it.product_name}": ${p} € total -> ${it.price} € per unit (qty: ${q})`)
+  // Mathematische Korrektur & Plausibilitätsprüfung für Belegtabellen:
+  if (Array.isArray(parsedData?.items) && parsedData.items.length > 0) {
+    const tot = Number(parsedData.total_price) || 0
+    const sumMultiplied = parsedData.items.reduce((acc: number, it: any) => acc + (Number(it.price) || 0) * (Math.round(Number(it.quantity)) || 1), 0)
+    const sumUnmultiplied = parsedData.items.reduce((acc: number, it: any) => acc + (Number(it.price) || 0), 0)
+
+    // Wenn die unmultiplizierte Summe der Preise (fast) exakt dem Rechnungsbetrag entspricht,
+    // aber die multiplizierte Summe viel höher ist (Faktor > 1.25):
+    // Dann enthielt die "Preis"-Spalte die Zeilengesamtsummen, die durch die jeweilige Menge geteilt werden müssen!
+    if (tot > 0 && Math.abs(sumUnmultiplied - tot) <= Math.max(0.2, tot * 0.05) && sumMultiplied > tot * 1.25) {
+      console.log(`Auto-correcting table row totals: sumUnmultiplied (${sumUnmultiplied.toFixed(2)}) matches total_price (${tot.toFixed(2)}). Dividing each item price by quantity!`)
+      for (const it of parsedData.items) {
+        const q = Math.round(Number(it.quantity)) || 1
+        const p = Number(it.price) || 0
+        if (q > 1 && p > 0) {
+          it.price = Math.round((p / q) * 100) / 100
+          console.log(`Divided row price for "${it.product_name}": ${p} € / ${q} = ${it.price} €`)
+        }
+      }
+    } else {
+      // Einzelfallprüfung: Falls ein einzelner Posten q > 1 hat und p genau der Gesamtbelegsumme entspricht
+      for (const it of parsedData.items) {
+        const q = Math.round(Number(it.quantity)) || 1
+        const p = Number(it.price) || 0
+        if (q > 1 && p > 0 && tot > 0 && Math.abs(p - tot) < 0.05) {
+          it.price = Math.round((tot / q) * 100) / 100
+          console.log(`Auto-corrected single line item total price for "${it.product_name}": ${p} € total -> ${it.price} € per unit (qty: ${q})`)
+        }
       }
     }
   }
@@ -1124,7 +1208,9 @@ Antworte ausschließlich als JSON:
     let resolvedImage = matchedProd?.image || ''
     let resolvedOrderUrl = matchedProd?.order_url || ''
     let resolvedSku = matchedProd?.product_number || item.sku || ''
-    let resolvedCategory = (matchedProd?.category && matchedProd.category !== 'Sonstiges') ? matchedProd.category : (item.category && item.category !== 'Sonstiges' ? item.category : '')
+    let resolvedCategory = (matchedProd?.category && matchedProd.category !== 'Sonstiges')
+      ? normalizeCategory(matchedProd.category)
+      : (item.category && item.category !== 'Sonstiges' ? normalizeCategory(item.category) : '')
     let resolvedUnit = (matchedProd?.unit && matchedProd.unit !== 'Stk' && matchedProd.unit !== 'Stück') ? matchedProd.unit : ''
     let resolvedName = canonicalProductName
 
@@ -1142,13 +1228,21 @@ Antworte ausschließlich als JSON:
         if (enriched.image && !resolvedImage) resolvedImage = enriched.image
         if (enriched.orderUrl && !resolvedOrderUrl) resolvedOrderUrl = enriched.orderUrl
         if (enriched.sku && !resolvedSku) resolvedSku = enriched.sku
-        if (enriched.category && !resolvedCategory) resolvedCategory = enriched.category
+        if (enriched.category && !resolvedCategory) resolvedCategory = normalizeCategory(enriched.category)
         if (enriched.unit && !resolvedUnit) resolvedUnit = enriched.unit
         if (enriched.cleanName && !matchedProd) resolvedName = enriched.cleanName
       } catch (enrichErr) {
         console.warn('Auto-enrich error on inbound item:', item.product_name, enrichErr)
       }
     }
+
+    if (!resolvedCategory || resolvedCategory === 'Sonstiges') {
+      const fallback = inferCategoryAndUnit(canonicalProductName, resolvedCategory, resolvedUnit)
+      if (fallback.category && fallback.category !== 'Sonstiges') {
+        resolvedCategory = fallback.category
+      }
+    }
+    resolvedCategory = normalizeCategory(resolvedCategory) || 'Sonstiges'
 
     let orderStatus: string | null = null
     if (docType === 'order_confirmation' || docType === 'delivery_note') {
@@ -2304,22 +2398,69 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             return { orderUrl: siteBing.orderUrl, image: siteBing.image || '', shopPrice: null }
           }
 
-          // 4. Falls in keiner Suchmaschine eine Einzel-Unterseite indexiert ist, aber der Webshop bekannt ist:
-          // Direkten Such-Link im Webshop des Lieferanten generieren (damit man mit 1 Klick direkt beim Artikel im Shop landet!)
-          const searchParam = encodeURIComponent(sku || coreName)
-          if (webshopDomain === 'reinigungsberater.de' || webshopDomain === 'bueromarkt-ag.de') {
-            return { orderUrl: `https://www.${webshopDomain}/suche?q=${searchParam}`, image: '', shopPrice: null }
-          }
-          if (webshopDomain === 'hygi.de') {
-            return { orderUrl: `https://www.hygi.de/catalogsearch/result/?q=${searchParam}`, image: '', shopPrice: null }
-          }
-          if (webshopDomain === 'amazon.de') {
-            return { orderUrl: `https://www.amazon.de/s?k=${searchParam}`, image: '', shopPrice: null }
-          }
-          if (webshopDomain === 'lusini.com') {
-            return { orderUrl: `https://www.lusini.com/de-de/search/?q=${searchParam}`, image: '', shopPrice: null }
-          }
+          // 4. Wenn keine echte Produkt-Detailseite indexiert ist, KEINEN Pseudo-Suchlink erzeugen!
           return { orderUrl: '', image: '', shopPrice: null }
+        }
+
+        // Echte KI-Analyse für Stammdaten (Kategorie, Einheit, Bereinigter Name, Mindestbestand)
+        const productItemsToAnalyze = items.filter(it => it.type !== 'supplier')
+        const aiAnalysisById = new Map<string, {
+          clean_name?: string
+          category?: string
+          unit?: string
+          min_stock?: number
+          standard_order_quantity?: number
+        }>()
+
+        if (productItemsToAnalyze.length > 0) {
+          const aiPrompt = `
+Du bist ein erfahrener Hotel-Wirtschaftsleiter und Chefeinkäufer für das Hotel Schottenhof.
+Analysiere die folgenden Hotel-Artikel und ergänze fehlende Stammdaten mit hotelgerechter Präzision.
+
+Erlaubte Kategorien (wähle IMMER genau eine der folgenden):
+- "Lebensmittel" (Frühstück, Obst, Gemüse, Molkerei, Brot, Belag, Wurst, Käse, Eier, Trockenwaren, Gewürze, Küchenfolien)
+- "Getränke" (Kaffee, Espresso, Tee, Wasser, Säfte, Bier, Wein, Softdrinks, Spirituosen)
+- "Reinigung" (Kaffeemaschinen-Reiniger, Milch- & Sahnereiniger, Entkalker, Spülmittel, Allzweckreiniger, Wischbezüge, Müllbeutel, Schwämme)
+- "Hygiene" (Toilettenpapier, Kosmetiktücher, Handseife, Desinfektion, Shampoo, Duschgel, Gästekosmetik, Handtücher, Handschuhe)
+- "Bürobedarf" (Kopierpapier, Stifte, Marker, Edding, Ordner, Etiketten, Notizblöcke, Umschläge, Tacker, Druckertoner, RFID-Karten)
+- "Instandhaltung" (Werkzeug, Leuchtmittel/LED, Batterien, Sanitär/Duschköpfe/Dichtungen, Schrauben, Klebstoffe, Ersatzteile, Kühlschranktürfächer, Wasserfilter)
+- "Hotel & Gastro" (Geschirr, Besteck, Gläser, Servietten, Buffet-Zubehör, Zimmerausstattung, Türschilder, Duschhocker)
+- "Sonstiges" (NUR im absoluten Notfall)
+
+Regeln:
+1. 'clean_name': Saubere, ansprechende Produktbezeichnung auf Deutsch ohne kryptische Artikelnummern, EANs oder Lieferanten-Codes.
+2. 'category': Zwingend eine der obigen Kategorien. Kaffeereiniger/Milchreiniger/Entkalker sind IMMER "Reinigung" (niemals "Getränke"). LED/Lampen/Dichtungen/Kleber sind IMMER "Instandhaltung". Duschhocker/Türschilder/Geschirr sind "Hotel & Gastro".
+3. 'unit': Typische Bestelleinheit ("Karton", "Kasten", "Flasche", "Packung", "Rolle", "Dose", "Kanister" oder "Stück").
+4. 'min_stock': Empfohlener Mindestbestand für ein mittelgroßes Stadthotel (ganze Zahl >= 1).
+5. 'standard_order_quantity': Empfohlene Bestellmenge (ganze Zahl >= 1).
+
+Artikel:
+${JSON.stringify(productItemsToAnalyze.map(p => ({ id: p.id, name: p.name, supplier: p.supplierName || '' })), null, 2)}
+
+Antworte ausschließlich als JSON im Format:
+{
+  "results": [
+    {
+      "id": "...",
+      "clean_name": "...",
+      "category": "...",
+      "unit": "...",
+      "min_stock": 2,
+      "standard_order_quantity": 5
+    }
+  ]
+}
+`
+          try {
+            const aiRes = await callGeminiJson([{ text: aiPrompt }], 25_000)
+            if (aiRes.ok && Array.isArray(aiRes.parsedData?.results)) {
+              for (const r of aiRes.parsedData.results) {
+                if (r.id) aiAnalysisById.set(String(r.id), r)
+              }
+            }
+          } catch (e) {
+            console.warn("AI completion error:", e)
+          }
         }
 
         const results = await Promise.all(items.map(async (item: any) => {
@@ -2373,7 +2514,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               preferredOrderMethod: item.preferredOrderMethod || suggestedOrderMethod
             }
           } else {
-            const cleanedName = cleanProductName(item.name || '')
+            const aiResult = aiAnalysisById.get(String(item.id))
+            const cleanedName = aiResult?.clean_name || cleanProductName(item.name || '')
             const lowerProdName = String(item.name || '').trim().toLowerCase()
             const lowerCleanName = cleanedName.toLowerCase()
             const mailSku = skuByProductName.get(lowerProdName) || skuByProductName.get(lowerCleanName) || ''
@@ -2434,7 +2576,16 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               } catch {}
             }
 
-            const { category, unit } = inferCategoryAndUnit(item.name, item.category, item.unit)
+            let effectiveCategory = normalizeCategory(aiResult?.category || item.category)
+            let effectiveUnit = aiResult?.unit || item.unit
+            if (!effectiveCategory || effectiveCategory === 'Sonstiges') {
+              const fallback = inferCategoryAndUnit(cleanedName || item.name, effectiveCategory, effectiveUnit)
+              if (!effectiveCategory || effectiveCategory === 'Sonstiges') effectiveCategory = fallback.category
+              if (!effectiveUnit || effectiveUnit === 'Stück' || effectiveUnit === 'Stk') effectiveUnit = fallback.unit
+            }
+            effectiveCategory = normalizeCategory(effectiveCategory) || 'Sonstiges'
+            const unit = effectiveUnit || 'Stück'
+            const category = effectiveCategory
 
             // Wenn eine Shop-URL vorliegt, versuche den Preis sowie Bild & Artikelnummer direkt von der Zielseite zu laden
             if (suggestedOrderUrl) {
@@ -2503,10 +2654,10 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
 
             const suggestedStandardOrderQuantity = (item.standardOrderQuantity && Number(item.standardOrderQuantity) > 0)
               ? Number(item.standardOrderQuantity)
-              : defaultOrderQty
+              : (aiResult?.standard_order_quantity || defaultOrderQty)
             const suggestedMinStock = (item.minStock && Number(item.minStock) > 0)
               ? Number(item.minStock)
-              : (pastQtys.length >= 2 ? Math.max(1, Math.floor(suggestedStandardOrderQuantity / 2)) : 0)
+              : (aiResult?.min_stock || (pastQtys.length >= 2 ? Math.max(1, Math.floor(suggestedStandardOrderQuantity / 2)) : 0))
 
             // Bestellweg: Webshop bei Shop-Link oder Webshop-Lieferant, E-Mail bei Großhändlern wie HEWO / Schwälbchen
             const suggestedPreferredOrderMethod: 'email' | 'webshop' | 'phone' = isEmailWholesaler
