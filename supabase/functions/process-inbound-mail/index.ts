@@ -351,24 +351,31 @@ const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
 
 const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: string) => {
   const lower = (name || '').toLowerCase()
+
+  // 1. Starke semantische Erkennung nach Produktart:
+  // Ein Reiniger, Entkalker, Spülmittel, Seife oder Handschuh ist IMMER "Reinigung" –
+  // selbst wenn der Lieferant (z.B. Coffee Perfect) Standard-Kategorie "Getränke" hat!
+  const isCleaning = /(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|toilettenpapier|kosmetiktücher|seife|shampoo|desinfektion|schwamm|entkalker|schaben|kakerlaken|ungeziefer|mülleimer|handschuhe|putztuch|wischmopp|fettlöser|sahnereiniger|milchreiniger)/i.test(lower)
+  const isMaintenance = /(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|kühlschrank|türfach|filter|lampe|leuchtmittel|led|batterie|bohrer|zange|schraubendreher|dichtung)/i.test(lower)
+  const isOffice = /(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro|notizblock|post-it)/i.test(lower)
+  const isFood = /(?:melone|käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre|brot|brötchen|croissant|müsli|haferflocken)/i.test(lower)
+  const isDrink = !isCleaning && /(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|\bmilch\b|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk)/i.test(lower)
+
   let category = currentCat && currentCat !== 'Sonstiges' && currentCat !== 'Ohne Kategorie' ? currentCat : ''
-  if (!category) {
-    // 0. Handwerk / Instandhaltung / Technik
-    if (/(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|kühlschrank|türfach|filter|lampe|leuchtmittel|led|batterie)/i.test(lower)) {
-      category = 'Instandhaltung'
-    } else if (/(?:melone|käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre)/i.test(lower)) {
-      // 1. Lebensmittel (z.B. Melone "Wasser" vor Getränke prüfen)
-      category = 'Lebensmittel'
-    } else if (/(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|toilettenpapier|kosmetiktücher|seife|shampoo|desinfektion|schwamm|entkalker|schaben|kakerlaken|ungeziefer|mülleimer|handschuhe)/i.test(lower)) {
-      // 2. Reinigung (erkennt auch Komposita wie Glasreiniger, Sanitärreiniger, Essigreiniger)
-      category = 'Reinigung'
-    } else if (/(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|milch|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk)/i.test(lower)) {
-      // 3. Getränke (wasser nur als eigenständiges Wort, nicht in wasserresistent)
-      category = 'Getränke'
-    } else if (/(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro)/i.test(lower)) {
-      // 4. Bürobedarf
-      category = 'Bürobedarf'
-    }
+
+  // Widersprüche korrigieren (z.B. Reiniger in Getränke/Lebensmittel oder Getränke in Reinigung)
+  if (isCleaning) {
+    category = 'Reinigung'
+  } else if (isMaintenance) {
+    category = 'Instandhaltung'
+  } else if (isOffice && (category === 'Getränke' || category === 'Lebensmittel' || !category)) {
+    category = 'Bürobedarf'
+  } else if (isFood && (category === 'Reinigung' || category === 'Bürobedarf' || !category)) {
+    category = 'Lebensmittel'
+  } else if (isDrink && (category === 'Reinigung' || category === 'Bürobedarf' || !category)) {
+    category = 'Getränke'
+  } else if (!category) {
+    category = 'Sonstiges'
   }
 
   let unit = currentUnit || 'Stück'
@@ -380,7 +387,7 @@ const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: s
     else if (/\bflasche\b|(?<![\d,\.])(?:1\s*l|500\s*ml|750\s*ml)\b/i.test(lower)) unit = 'Flasche'
     else if (/\b(pack|packung|beutel)\b/i.test(lower)) unit = 'Packung'
   }
-  return { category: category || currentCat || 'Sonstiges', unit }
+  return { category: category || 'Sonstiges', unit }
 }
 
 const formatEuro = (val: number) => val.toFixed(2).replace('.', ',')
@@ -684,6 +691,7 @@ Regeln:
 15. LIEFERTERMIN: Extrahiere den voraussichtlichen oder tatsächlichen Liefertermin als 'delivery_date' (Format YYYY-MM-DD).
 16. TRACKING: Extrahiere einen eventuellen Tracking-Link ODER eine Sendungsnummer als 'tracking_link'.
 17. STATUS-NOTIZEN: Fasse wichtige Versand- und Statusinformationen in 'order_notes' zusammen.
+18. EINZELPREIS vs. GESAMTPREIS: 'price' in jedem Item MUSS der EINZELPREIS für 1 Einheit sein! Wenn auf dem Beleg nur der Gesamtpreis der Zeile steht (z.B. 5 Stück für 59,95 € oder Spaltenkopf "Preis" enthält Zeilensumme), teile die Summe durch die Menge: 59,95 / 5 = 11,99 €! Setze 'price' NIEMALS auf den Gesamtpreis mehrerer Stücke!
 
 Vorhandene Kategorien (bevorzugt verwenden): ${categoryHint}
 
@@ -734,6 +742,19 @@ Antworte ausschließlich als JSON:
   const geminiResult = await callGeminiJson(geminiParts)
   const geminiError = !geminiResult.ok
   const parsedData = geminiResult.parsedData
+
+  // Mathematische Korrektur: Falls in der Belegtabelle Zeilensummen statt Stückpreise standen
+  if (Array.isArray(parsedData?.items)) {
+    for (const it of parsedData.items) {
+      const q = Math.round(Number(it.quantity)) || 1
+      const p = Number(it.price) || 0
+      const tot = Number(parsedData.total_price) || 0
+      if (q > 1 && p > 0 && tot > 0 && Math.abs(p - tot) < 0.05) {
+        it.price = Math.round((tot / q) * 100) / 100
+        console.log(`Auto-corrected line item price for "${it.product_name}": ${p} € total -> ${it.price} € per unit (qty: ${q})`)
+      }
+    }
+  }
 
   let inboundLogId = existingLogId || null
   if (existingLogId) {
@@ -2306,9 +2327,18 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             }
 
             const priceCheck = evaluatePricePlausibility(shopPrice, knownPrice)
-            const suggestedPrice = (!item.price || Number(item.price) === 0)
+            let suggestedPrice = (!item.price || Number(item.price) === 0)
               ? (shopPrice || mailPrice || 0)
               : Number(item.price)
+
+            // Falls der bisherige Preis um mindestens Faktor 2.5 vom verifizierten Shop-Einzelpreis abweicht:
+            // Schlage den echten Einzelpreis aus dem Webshop vor (verhindert Karton-/Gesamtpreis-Fehler!)
+            if (shopPrice && shopPrice > 0 && item.price && Number(item.price) > 0) {
+              const ratio = Number(item.price) / shopPrice
+              if (ratio >= 2.5) {
+                suggestedPrice = shopPrice
+              }
+            }
 
             // Punkt 2: Typische Bestellmenge immer vorschlagen, aber Mindestbestand (minStock > 0) NUR dann vorschlagen,
             // wenn das Produkt in der Vergangenheit mindestens 2x bestellt wurde (also ein wiederkehrender Verbrauchsartikel ist!).

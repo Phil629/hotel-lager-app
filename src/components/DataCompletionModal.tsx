@@ -366,7 +366,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         const validSuggestedUrl = isDeepProductUrl(s.orderUrl) ? s.orderUrl : '';
                         const newOrderUrl = allowShopLink && !cur.orderUrl && validSuggestedUrl ? validSuggestedUrl : cur.orderUrl;
                         const newProdNum = !cur.productNumber && s.productNumber ? s.productNumber : cur.productNumber;
-                        const newPrice = (!cur.price || Number(cur.price) === 0) && s.price && Number(s.price) > 0 ? Number(s.price) : cur.price;
+                        const isPriceOutlier = !!(s.price && cur.price && Number(cur.price) > Number(s.price) * 2.5);
+                        const newPrice = (!cur.price || Number(cur.price) === 0 || isPriceOutlier) && s.price && Number(s.price) > 0 ? Number(s.price) : cur.price;
                         const newMinStock = (!cur.minStock || Number(cur.minStock) === 0) && s.minStock && Number(s.minStock) > 0
                             ? Number(s.minStock)
                             : cur.minStock;
@@ -376,9 +377,9 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         const newOrderMethod = newOrderUrl
                             ? 'webshop'
                             : (s.preferredOrderMethod || cur.preferredOrderMethod || (isEmailOnlySupplier(sup) ? 'email' : 'webshop'));
-                        const newCat = (!cur.category || cur.category === 'Sonstiges' || cur.category === 'Ohne Kategorie') && s.category && s.category !== 'Sonstiges'
-                            ? s.category
-                            : cur.category;
+                        const isMismatch = (cur.category === 'Getränke' || cur.category === 'Lebensmittel') && (s.category === 'Reinigung' || s.category === 'Instandhaltung' || s.category === 'Bürobedarf');
+                        const shouldUpdateCat = (!cur.category || cur.category === 'Sonstiges' || cur.category === 'Ohne Kategorie' || isMismatch) && s.category && s.category !== 'Sonstiges';
+                        const newCat = shouldUpdateCat ? s.category : cur.category;
                         const newUnit = (!cur.unit || cur.unit === 'Stück' || cur.unit === 'Stk') && s.unit && s.unit !== cur.unit
                             ? s.unit
                             : cur.unit;
@@ -390,11 +391,11 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             orderUrl: allowShopLink && !cur.orderUrl && !!validSuggestedUrl ? true : cur.aiFields?.orderUrl,
                             productNumber: !cur.productNumber && !!s.productNumber ? true : cur.aiFields?.productNumber,
                             supplierId: !cur.supplierId && !!s.supplierId ? true : cur.aiFields?.supplierId,
-                            price: (!cur.price || Number(cur.price) === 0) && !!s.price && Number(s.price) > 0 ? true : cur.aiFields?.price,
+                            price: (!cur.price || Number(cur.price) === 0 || isPriceOutlier) && !!s.price && Number(s.price) > 0 ? true : cur.aiFields?.price,
                             minStock: (!cur.minStock || Number(cur.minStock) === 0) && !!s.minStock && Number(s.minStock) > 0 ? true : cur.aiFields?.minStock,
                             standardOrderQuantity: (!cur.standardOrderQuantity || Number(cur.standardOrderQuantity) === 0) && !!s.standardOrderQuantity && Number(s.standardOrderQuantity) > 0 ? true : cur.aiFields?.standardOrderQuantity,
                             preferredOrderMethod: newOrderMethod !== cur.preferredOrderMethod ? true : cur.aiFields?.preferredOrderMethod,
-                            category: (!cur.category || cur.category === 'Sonstiges' || cur.category === 'Ohne Kategorie') && !!s.category && s.category !== 'Sonstiges' ? true : cur.aiFields?.category,
+                            category: shouldUpdateCat && newCat !== cur.category ? true : cur.aiFields?.category,
                             unit: newUnit !== cur.unit ? true : cur.aiFields?.unit
                         };
 
@@ -1349,6 +1350,43 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                         }}>
                                                             {d.priceCheck.message}
                                                         </span>
+                                                    )}
+                                                    {d.priceCheck?.status === 'warning' && d.priceCheck.shopPrice && d.priceCheck.shopPrice > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const sp = d.priceCheck!.shopPrice!;
+                                                                setProductDrafts(prev => ({
+                                                                    ...prev,
+                                                                    [p.id]: {
+                                                                        ...prev[p.id],
+                                                                        price: sp,
+                                                                        priceCheck: {
+                                                                            ...prev[p.id].priceCheck!,
+                                                                            status: 'ok',
+                                                                            message: `✓ Shop-Preis übernommen (${sp.toFixed(2).replace('.', ',')} €)`
+                                                                        },
+                                                                        aiFields: { ...(prev[p.id].aiFields || {}), price: true }
+                                                                    }
+                                                                }));
+                                                            }}
+                                                            style={{
+                                                                padding: '2px 8px',
+                                                                borderRadius: '5px',
+                                                                border: '1px solid #b45309',
+                                                                backgroundColor: '#fef3c7',
+                                                                color: '#92400e',
+                                                                fontSize: '11px',
+                                                                fontWeight: 700,
+                                                                cursor: 'pointer',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px'
+                                                            }}
+                                                            title="Falscher Preis korrigieren und echten Shop-Einzelpreis übernehmen"
+                                                        >
+                                                            <Sparkles size={11} /> Shop-Preis ({d.priceCheck.shopPrice.toFixed(2).replace('.', ',')} €) übernehmen
+                                                        </button>
                                                     )}
                                                 </div>
                                             ) : !isWebshop ? (
