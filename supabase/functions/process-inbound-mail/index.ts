@@ -609,6 +609,135 @@ async function enrichSingleProduct(params: {
   }
 }
 
+function resolveDeliveryDate(
+  candidate: string | null | undefined,
+  notes: string | null | undefined,
+  bodyText: string | null | undefined,
+  baseDateStr: string
+): string | null {
+  const base = baseDateStr ? new Date(baseDateStr) : new Date()
+  if (isNaN(base.getTime())) return null
+
+  // 1. Bereits valides ISO YYYY-MM-DD
+  if (typeof candidate === 'string') {
+    const isoMatch = candidate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (isoMatch) return candidate.trim()
+
+    // DD.MM.YYYY
+    const deMatch = candidate.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/)
+    if (deMatch) {
+      const day = deMatch[1].padStart(2, '0')
+      const month = deMatch[2].padStart(2, '0')
+      return `${deMatch[3]}-${month}-${day}`
+    }
+  }
+
+  const weekdayMap: Record<string, number> = {
+    'sonntag': 0, 'so': 0,
+    'montag': 1, 'mo': 1,
+    'dienstag': 2, 'di': 2,
+    'mittwoch': 3, 'mi': 3,
+    'donnerstag': 4, 'do': 4,
+    'freitag': 5, 'fr': 5,
+    'samstag': 6, 'sa': 6, 'sonnabend': 6
+  }
+
+  const monthMap: Record<string, number> = {
+    'januar': 1, 'jan': 1,
+    'februar': 2, 'feb': 2,
+    'märz': 3, 'maerz': 3, 'mrz': 3,
+    'april': 4, 'apr': 4,
+    'mai': 5,
+    'juni': 6, 'jun': 6,
+    'juli': 7, 'jul': 7,
+    'august': 8, 'aug': 8,
+    'september': 9, 'sep': 9, 'sept': 9,
+    'oktober': 10, 'okt': 10,
+    'november': 11, 'nov': 11,
+    'dezember': 12, 'dez': 12
+  }
+
+  const toIsoDate = (d: Date) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  const textsToSearch = [candidate, notes, bodyText].filter(Boolean)
+
+  for (const text of textsToSearch) {
+    if (typeof text !== 'string') continue
+
+    // A1. DD.MM. (z.B. "17.08." oder "17.08.2026")
+    const ddmmMatch = text.match(/\b(\d{1,2})\.(\d{1,2})\.(?:\s*(\d{4}))?\b/)
+    if (ddmmMatch && (text.includes('zugestellt') || text.includes('Zustellung') || text.includes('Lieferung') || text.includes('Liefertermin') || text.includes('ankommen'))) {
+      const day = parseInt(ddmmMatch[1], 10)
+      const month = parseInt(ddmmMatch[2], 10)
+      const year = ddmmMatch[3] ? parseInt(ddmmMatch[3], 10) : base.getFullYear()
+      if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+        const target = new Date(year, month - 1, day)
+        if (!isNaN(target.getTime())) return toIsoDate(target)
+      }
+    }
+
+    // A2. DD. Monatsname (z.B. "31. Oktober" oder "28. August")
+    const fullDateMatch = text.match(/\b(\d{1,2})\.\s*(Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan|Feb|Mrz|Apr|Jun|Jul|Aug|Sep|Sept|Okt|Nov|Dez)\.?(?:\s*(\d{4}))?\b/i)
+    if (fullDateMatch) {
+      const day = parseInt(fullDateMatch[1], 10)
+      const mName = fullDateMatch[2].toLowerCase()
+      const month = monthMap[mName]
+      let year = fullDateMatch[3] ? parseInt(fullDateMatch[3], 10) : base.getFullYear()
+      if (!fullDateMatch[3]) {
+        if (month < base.getMonth() + 1 && (base.getMonth() + 1 - month) > 2) {
+          year += 1
+        }
+      }
+      const target = new Date(year, month - 1, day)
+      if (!isNaN(target.getTime())) return toIsoDate(target)
+    }
+
+    // B. Relative Schlagworte: heute, morgen, übermorgen
+    const relWordMatch = text.match(/(?:Zustellung|Lieferung|Liefertermin|Lieferdatum|Ankunft)(?:[^\n\r]{0,30}?)\b(heute|morgen|übermorgen|uebermorgen)\b/i)
+    if (relWordMatch) {
+      const word = relWordMatch[1].toLowerCase()
+      const d = new Date(base)
+      if (word === 'morgen') d.setDate(d.getDate() + 1)
+      else if (word === 'übermorgen' || word === 'uebermorgen') d.setDate(d.getDate() + 2)
+      return toIsoDate(d)
+    }
+
+    // C. Wochentag vorwärts: "Zustellung: Samstag", "Lieferung geplant für Freitag"
+    const weekdayForward = text.match(/(?:Zustellung|Lieferung|Liefertermin|Lieferdatum|Zustelltermin)(?:[^\n\r]{0,40}?)\b(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Sonnabend)\b/i)
+    if (weekdayForward) {
+      const targetDayName = weekdayForward[1].toLowerCase()
+      const targetDay = weekdayMap[targetDayName]
+      if (targetDay !== undefined) {
+        const currentDay = base.getDay()
+        const diff = (targetDay - currentDay + 7) % 7
+        const d = new Date(base)
+        d.setDate(d.getDate() + diff)
+        return toIsoDate(d)
+      }
+    }
+
+    // D. Wochentag rückwärts: "am Freitag zugestellt", "Montag geliefert"
+    const weekdayBackward = text.match(/\b(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Sonnabend)\b(?:[^\n\r]{0,40}?)(?:zugestellt|geliefert|ankommen)/i)
+    if (weekdayBackward) {
+      const targetDayName = weekdayBackward[1].toLowerCase()
+      const targetDay = weekdayMap[targetDayName]
+      if (targetDay !== undefined) {
+        const currentDay = base.getDay()
+        const diff = (targetDay - currentDay + 7) % 7
+        const d = new Date(base)
+        d.setDate(d.getDate() + diff)
+        return toIsoDate(d)
+      }
+    }
+  }
+
+  return null
+}
 
 async function processEmailWithAi(params: {
   user_id: string;
@@ -688,7 +817,7 @@ Regeln:
 12. WICHTIG zu 'product_name' (falls neues Produkt): Filtere alle Artikelnummern, EANs, SKUs und kryptischen Codes aus dem Produktnamen heraus! 'product_name' darf NUR den menschenlesbaren Namen enthalten. Packe die Artikelnummer stattdessen in das Feld 'sku'.
 13. KATEGORIE: Weise jedem Artikel ZWINGEND eine logische Warengruppe/Kategorie auf Deutsch zu (z.B. "Getränke", "Reinigung", "Lebensmittel", "Hygiene", "Bürobedarf"). Nutze bevorzugt EXAKT eine der vorhandenen Kategorien. Verwende NIEMALS generische Begriffe wie "Importiert" oder "KI-Import".
 14. TELEFON & IBAN: Falls Telefonnummer oder IBAN des Lieferanten auf dem Beleg stehen, trage sie unter supplier_phone bzw. supplier_iban ein.
-15. LIEFERTERMIN: Extrahiere den voraussichtlichen oder tatsächlichen Liefertermin als 'delivery_date' (Format YYYY-MM-DD).
+15. LIEFERTERMIN: Extrahiere den voraussichtlichen oder tatsächlichen Liefertermin als 'delivery_date' (Format YYYY-MM-DD). WICHTIG: Wenn der Liefertermin als relativer Wochentag oder Text angegeben ist (z.B. 'Zustellung: Samstag', 'Lieferung morgen', 'Dienstag, 3. November'), berechne IMMER das exakte Datum im Format YYYY-MM-DD basierend auf 'Heutiges Datum / Belegdatum'! Setze 'delivery_date' NIEMALS auf null, wenn ein Wochentag oder Liefertermin im Text vorkommt!
 16. TRACKING: Extrahiere einen eventuellen Tracking-Link ODER eine Sendungsnummer als 'tracking_link'.
 17. STATUS-NOTIZEN: Fasse wichtige Versand- und Statusinformationen in 'order_notes' zusammen.
 18. EINZELPREIS vs. GESAMTPREIS: 'price' in jedem Item MUSS der EINZELPREIS für 1 Einheit sein! Wenn auf dem Beleg nur der Gesamtpreis der Zeile steht (z.B. 5 Stück für 59,95 € oder Spaltenkopf "Preis" enthält Zeilensumme), teile die Summe durch die Menge: 59,95 / 5 = 11,99 €! Setze 'price' NIEMALS auf den Gesamtpreis mehrerer Stücke!
@@ -702,7 +831,7 @@ Vorhandene Produkte (bevorzugt zuordnen!):
 ${productsHint}
 
 Metadaten:
-Heutiges Datum: ${new Date().toLocaleDateString('de-DE')}
+Heutiges Datum / Belegdatum: ${fallbackOrderDate} (Nutze dieses Datum als Referenzpunkt für relative Zeitangaben wie 'Samstag', 'morgen', etc.)
 Betreff: ${subject}
 Absender: ${fromAddress}
 Text: ${bodyText}
@@ -742,6 +871,20 @@ Antworte ausschließlich als JSON:
   const geminiResult = await callGeminiJson(geminiParts)
   const geminiError = !geminiResult.ok
   const parsedData = geminiResult.parsedData
+
+  // Automatische Datumsauflösung: Falls Liefertermin ein Wochentag oder relativer Text war (z.B. "Zustellung: Samstag")
+  const resolvedDeliveryDate = resolveDeliveryDate(
+    parsedData?.delivery_date,
+    parsedData?.order_notes,
+    bodyText,
+    fallbackOrderDate
+  )
+  if (resolvedDeliveryDate) {
+    if (parsedData.delivery_date !== resolvedDeliveryDate) {
+      console.log(`Resolved delivery_date: ${parsedData.delivery_date || 'null'} -> ${resolvedDeliveryDate}`)
+      parsedData.delivery_date = resolvedDeliveryDate
+    }
+  }
 
   // Mathematische Korrektur: Falls in der Belegtabelle Zeilensummen statt Stückpreise standen
   if (Array.isArray(parsedData?.items)) {
@@ -878,9 +1021,12 @@ Antworte ausschließlich als JSON:
   if (parsedData.order_reference) parsedData.order_reference = cleanRef(parsedData.order_reference)
   if (parsedData.invoice_number) parsedData.invoice_number = cleanRef(parsedData.invoice_number)
 
-  // Globale Metadaten-Aktualisierung (z.B. für Versandbestätigungen)
+  const items = parsedData.items || []
+  const hasItems = items.length > 0
+
+  // Globale Metadaten-Aktualisierung (nur wenn KEINE einzelnen Positionen in der E-Mail erkannt wurden, z.B. Speditions-/DHL-Benachrichtigungen ohne Artikelliste)
   const globalOrderRef = parsedData.order_reference || parsedData.invoice_number || null
-  if (parsedData.tracking_link || parsedData.order_notes || parsedData.delivery_date) {
+  if (!hasItems && (parsedData.tracking_link || parsedData.order_notes || parsedData.delivery_date)) {
     let matchedOrders: any[] | null = null
 
     if (globalOrderRef) {
@@ -916,14 +1062,15 @@ Antworte ausschließlich als JSON:
             updatePayload.notes = `${baseNotes}Update (System): ${parsedData.order_notes}`
           }
         }
-        await supabase.from('orders').update(updatePayload).eq('id', o.id)
+        if (Object.keys(updatePayload).length > 0) {
+          await supabase.from('orders').update(updatePayload).eq('id', o.id)
+        }
       }
       updatedOrdersCount += matchedOrders.length
     }
   }
 
   // Aktualisiere oder lege Produkte & Bestellungen an
-  const items = parsedData.items || []
   console.log(`Found ${items.length} items to process.`)
   const normProd = (s: string) => s.toLowerCase().replace(/[^a-z0-9äöüß]/gi, '').trim()
 

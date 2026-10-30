@@ -14,6 +14,10 @@ export interface InboundEmail {
         items?: { product_name: string; quantity: number; price?: number }[];
         total_price?: number;
         order_date?: string;
+        delivery_date?: string | null;
+        order_notes?: string | null;
+        tracking_link?: string | null;
+        order_reference?: string | null;
         invoice_number?: string;
         parse_error?: string;
         raw_text?: string;
@@ -93,6 +97,7 @@ export const KiLogDetail: React.FC<KiLogDetailProps> = ({ email, onReprocess, re
                     {d.document_type && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Typ:</span> {d.document_type}</span>}
                     {d.supplier_name && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Lieferant:</span> {d.supplier_name}</span>}
                     {d.order_date && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Datum:</span> {d.order_date}</span>}
+                    {d.delivery_date && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Liefertermin:</span> {new Date(d.delivery_date).toLocaleDateString('de-DE')}</span>}
                     {d.invoice_number && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Belegnr.:</span> {d.invoice_number}</span>}
                     {d.total_price != null && <span><span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Gesamt:</span> {fmtPrice(d.total_price)}</span>}
                     {d.confidence != null && (
@@ -107,8 +112,20 @@ export const KiLogDetail: React.FC<KiLogDetailProps> = ({ email, onReprocess, re
                 {reprocessButton}
             </div>
             {email.status === 'processed_duplicate' && (
-                <div style={{ fontSize: '12px', color: '#15803d', padding: '8px 12px', backgroundColor: '#f0fdf4', borderRadius: 'var(--radius-sm)', border: '1px solid #bbf7d0' }}>
-                    🔗 <strong>Mit bestehender Bestellung verknüpft:</strong> Diese Bestellung (bzw. Bestellnummer) existierte bereits im System (z. B. schon unter „Erhalten“ verbucht oder aus einer vorherigen E-Mail angelegt) und wurde deshalb aktualisiert statt doppelt neu angelegt.
+                <div style={{ fontSize: '12px', color: '#15803d', padding: '8px 12px', backgroundColor: '#f0fdf4', borderRadius: 'var(--radius-sm)', border: '1px solid #bbf7d0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div>
+                        🔗 <strong>Mit bestehender Bestellung verknüpft:</strong> Diese Bestellung (bzw. Bestellnummer) existierte bereits im System (z. B. schon unter „Erhalten“ verbucht oder aus einer vorherigen E-Mail angelegt) und wurde deshalb aktualisiert statt doppelt neu angelegt.
+                    </div>
+                    {d.delivery_date && (
+                        <div>
+                            📅 <strong>Liefertermin aktualisiert:</strong> {new Date(d.delivery_date).toLocaleDateString('de-DE')}
+                        </div>
+                    )}
+                    {d.order_notes && (
+                        <div style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>
+                            📝 <em>{d.order_notes}</em>
+                        </div>
+                    )}
                 </div>
             )}
             {d.items?.length ? (
