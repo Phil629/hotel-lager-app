@@ -179,6 +179,40 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(new Set());
 
     const [overviewPage, setOverviewPage] = useState(0);
+    const [aiLoadingSeconds, setAiLoadingSeconds] = useState(0);
+
+    useEffect(() => {
+        if (!aiLoading) {
+            setAiLoadingSeconds(0);
+            return;
+        }
+        const interval = setInterval(() => {
+            setAiLoadingSeconds(s => s + 1);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [aiLoading]);
+
+    const getAiLoadingStatus = (sec: number) => {
+        if (sec < 4) {
+            return {
+                step: 'Schritt 1 von 3',
+                title: 'Analysiere Artikeldaten & bereinige Produktnamen...',
+                detail: 'Kategorien und Schreibweisen werden standardisiert'
+            };
+        }
+        if (sec < 9) {
+            return {
+                step: 'Schritt 2 von 3',
+                title: 'Durchsuche Lieferanten-Kataloge nach Bildern & Shop-Links...',
+                detail: 'Webshops und Großhändler werden nach passenden Artikeln gescannt'
+            };
+        }
+        return {
+            step: 'Schritt 3 von 3',
+            title: 'Prüfe Einkaufspreise & bereite Prüffenster vor...',
+            detail: 'Gefundene Shop-Preise werden geprüft – Prüffenster öffnet gleich'
+        };
+    };
 
     const loadCompletionIdsOnly = async () => {
         if (!supabase) return;
@@ -930,6 +964,23 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     }}
                     onClick={e => e.stopPropagation()}
                 >
+                    <style>{`
+                        .spin {
+                            animation: agy-spin 0.85s linear infinite !important;
+                        }
+                        @keyframes agy-spin {
+                            from { transform: rotate(0deg); }
+                            to { transform: rotate(360deg); }
+                        }
+                        @keyframes agy-progress-indeterminate {
+                            0% { transform: translateX(-100%); }
+                            100% { transform: translateX(250%); }
+                        }
+                        @keyframes agy-pulse-glow {
+                            0%, 100% { opacity: 1; }
+                            50% { opacity: 0.85; }
+                        }
+                    `}</style>
                     {/* Header des Prüffensters */}
                     <div style={{
                         padding: '18px 24px',
@@ -1731,6 +1782,23 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 }}
                 onClick={e => e.stopPropagation()}
             >
+                <style>{`
+                    .spin {
+                        animation: agy-spin 0.85s linear infinite !important;
+                    }
+                    @keyframes agy-spin {
+                        from { transform: rotate(0deg); }
+                        to { transform: rotate(360deg); }
+                    }
+                    @keyframes agy-progress-indeterminate {
+                        0% { transform: translateX(-100%); }
+                        100% { transform: translateX(250%); }
+                    }
+                    @keyframes agy-pulse-glow {
+                        0%, 100% { opacity: 1; }
+                        50% { opacity: 0.85; }
+                    }
+                `}</style>
                 {/* Header */}
                 <div style={{
                     padding: '16px 24px',
@@ -1776,32 +1844,63 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         disabled={aiLoading || (activeTab === 'products' ? filteredProducts.length === 0 : filteredSuppliers.length === 0)}
                         style={{
                             width: '100%',
-                            padding: '18px 24px',
+                            padding: aiLoading ? '16px 24px' : '18px 24px',
                             borderRadius: '14px',
                             border: 'none',
-                            background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+                            background: aiLoading
+                                ? 'linear-gradient(135deg, #1d4ed8 0%, #6d28d9 100%)'
+                                : 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
                             color: '#ffffff',
                             fontSize: '18px',
                             fontWeight: 800,
                             cursor: aiLoading ? 'wait' : 'pointer',
                             display: 'flex',
+                            flexDirection: 'column',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '12px',
-                            boxShadow: '0 10px 25px -5px rgba(124, 58, 237, 0.45)',
-                            transition: 'transform 0.15s ease'
+                            gap: '10px',
+                            boxShadow: aiLoading
+                                ? '0 10px 30px -5px rgba(109, 40, 217, 0.6)'
+                                : '0 10px 25px -5px rgba(124, 58, 237, 0.45)',
+                            transition: 'all 0.2s ease',
+                            animation: aiLoading ? 'agy-pulse-glow 2.5s ease-in-out infinite' : undefined
                         }}
                     >
                         {aiLoading ? (
                             <>
-                                <Loader2 size={24} className="spin" />
-                                KI sucht passende Bilder, Links & Daten – Prüffenster öffnet gleich...
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <Loader2 size={24} className="spin" style={{ color: '#ffffff', flexShrink: 0 }} />
+                                    <span style={{ fontSize: '17px', fontWeight: 800, color: '#ffffff' }}>
+                                        KI analysiert 8 Artikel ({aiLoadingSeconds}s) – {getAiLoadingStatus(aiLoadingSeconds).title}
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#c7d2fe', fontWeight: 500 }}>
+                                    {getAiLoadingStatus(aiLoadingSeconds).step}: {getAiLoadingStatus(aiLoadingSeconds).detail}
+                                </div>
+                                <div style={{
+                                    height: '6px',
+                                    width: '100%',
+                                    maxWidth: '520px',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+                                    borderRadius: '999px',
+                                    overflow: 'hidden',
+                                    marginTop: '2px',
+                                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)'
+                                }}>
+                                    <div style={{
+                                        width: '45%',
+                                        height: '100%',
+                                        backgroundColor: '#ffffff',
+                                        borderRadius: '999px',
+                                        animation: 'agy-progress-indeterminate 1.3s ease-in-out infinite'
+                                    }} />
+                                </div>
                             </>
                         ) : (
-                            <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <Sparkles size={24} />
-                                ✨ KI Daten ergänzen lassen
-                            </>
+                                <span>✨ KI Daten ergänzen lassen ({activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length} offen)</span>
+                            </div>
                         )}
                     </button>
                     <div style={{ marginTop: '8px', fontSize: '13px', color: '#4c1d95', fontWeight: 500 }}>
@@ -1871,8 +1970,66 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '8px',
-                    backgroundColor: '#f8fafc'
+                    backgroundColor: '#f8fafc',
+                    position: 'relative'
                 }}>
+                    {aiLoading && (
+                        <div style={{
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 40,
+                            padding: '12px 18px',
+                            marginBottom: '6px',
+                            borderRadius: '12px',
+                            background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)',
+                            border: '1.5px solid #c7d2fe',
+                            boxShadow: '0 4px 12px -2px rgba(99, 102, 241, 0.15)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '14px'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{
+                                    width: '36px',
+                                    height: '36px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#fff',
+                                    border: '1px solid #c7d2fe',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                }}>
+                                    <Loader2 size={20} className="spin" style={{ color: '#6366f1' }} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e1b4b' }}>
+                                        Recherche läuft im Hintergrund ({aiLoadingSeconds}s)...
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#4338ca' }}>
+                                        {getAiLoadingStatus(aiLoadingSeconds).title}
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{
+                                height: '6px',
+                                width: '140px',
+                                backgroundColor: '#e0e7ff',
+                                borderRadius: '999px',
+                                overflow: 'hidden',
+                                flexShrink: 0
+                            }}>
+                                <div style={{
+                                    width: '45%',
+                                    height: '100%',
+                                    backgroundColor: '#6366f1',
+                                    borderRadius: '999px',
+                                    animation: 'agy-progress-indeterminate 1.3s ease-in-out infinite'
+                                }} />
+                            </div>
+                        </div>
+                    )}
                     {loadingState ? (
                         <div style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                             <Loader2 size={28} className="spin" style={{ margin: '0 auto 12px auto' }} />
