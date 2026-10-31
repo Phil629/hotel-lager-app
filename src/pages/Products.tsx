@@ -351,6 +351,41 @@ export const Products: React.FC = () => {
         await DataService.updateProduct(updatedProduct);
     };
 
+    const handleClearMinStock = async (product: Product) => {
+        const updatedProduct: Product = {
+            ...product,
+            minStock: 0
+        };
+
+        if (showLowStockOnly) {
+            if (!pendingIds.has(product.id) && !exitingIds.has(product.id)) {
+                setPendingIds(prev => new Set([...prev, product.id]));
+                const phase1 = setTimeout(() => {
+                    setPendingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+                    setExitingIds(prev => new Set([...prev, product.id]));
+                    const phase2 = setTimeout(() => {
+                        setExitingIds(prev => { const s = new Set(prev); s.delete(product.id); return s; });
+                        delete exitTimers.current[product.id];
+                    }, 750);
+                    exitTimers.current[product.id] = { ...exitTimers.current[product.id], phase2 };
+                }, 1500);
+                exitTimers.current[product.id] = { phase1 };
+            }
+        }
+
+        setProducts(prev => prev.map(p => p.id === product.id ? updatedProduct : p));
+        try {
+            await DataService.updateProduct(updatedProduct);
+            setNotification({
+                message: `Kein Mindestbestand für „${product.name}" festgelegt.`,
+                type: 'info'
+            });
+        } catch (e: any) {
+            console.error('Failed to clear minStock:', e);
+            setNotification({ message: 'Fehler beim Aktualisieren: ' + (e?.message || e), type: 'error' });
+        }
+    };
+
     const handleQuickAddSubmit = async () => {
         const lines = quickAddText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         if (lines.length === 0 || !quickAddSupplierId) return;
@@ -1216,8 +1251,34 @@ export const Products: React.FC = () => {
                                                                             );
                                                                         } else if (Number(product.minStock) > 0 && Number(product.stock) <= Number(product.minStock)) {
                                                                             badges.push(
-                                                                                <span key="low" className="badge badge-danger" style={{ fontSize: '10px' }}>
-                                                                                    <AlertTriangle size={10} /> Nachbestellen
+                                                                                <span key="low" className="badge badge-danger" style={{ fontSize: '10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                                                        <AlertTriangle size={10} /> Nachbestellen
+                                                                                    </span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            handleClearMinStock(product);
+                                                                                        }}
+                                                                                        title="Kein Mindestbestand"
+                                                                                        style={{
+                                                                                            background: 'none',
+                                                                                            border: 'none',
+                                                                                            cursor: 'pointer',
+                                                                                            padding: '0 1px',
+                                                                                            marginLeft: '2px',
+                                                                                            color: 'currentColor',
+                                                                                            opacity: 0.7,
+                                                                                            display: 'inline-flex',
+                                                                                            alignItems: 'center',
+                                                                                            lineHeight: 1
+                                                                                        }}
+                                                                                        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                                                                                        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.7')}
+                                                                                    >
+                                                                                        <X size={11} strokeWidth={2.5} />
+                                                                                    </button>
                                                                                 </span>
                                                                             );
                                                                         }
@@ -1361,8 +1422,44 @@ export const Products: React.FC = () => {
                                                                                     <ShoppingCart size={10} /> Unterwegs
                                                                                 </span>
                                                                             ) : isLowStock && (
-                                                                                <span className="badge badge-danger" style={{ fontSize: '10.5px' }}>
-                                                                                    <AlertTriangle size={10} /> Nachbestellen
+                                                                                <span
+                                                                                    className="badge badge-danger"
+                                                                                    style={{
+                                                                                        fontSize: '10.5px',
+                                                                                        display: 'inline-flex',
+                                                                                        alignItems: 'center',
+                                                                                        gap: '4px',
+                                                                                        width: 'fit-content'
+                                                                                    }}
+                                                                                >
+                                                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                                                        <AlertTriangle size={10} /> Nachbestellen
+                                                                                    </span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            handleClearMinStock(product);
+                                                                                        }}
+                                                                                        title="Kein Mindestbestand"
+                                                                                        style={{
+                                                                                            background: 'none',
+                                                                                            border: 'none',
+                                                                                            cursor: 'pointer',
+                                                                                            padding: '0 1px',
+                                                                                            marginLeft: '2px',
+                                                                                            color: 'currentColor',
+                                                                                            opacity: 0.7,
+                                                                                            display: 'inline-flex',
+                                                                                            alignItems: 'center',
+                                                                                            borderRadius: '3px',
+                                                                                            lineHeight: 1
+                                                                                        }}
+                                                                                        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                                                                                        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.7')}
+                                                                                    >
+                                                                                        <X size={11} strokeWidth={2.5} />
+                                                                                    </button>
                                                                                 </span>
                                                                             )}
                                                                             {product.consumptionAmount && product.consumptionPeriod && (
