@@ -56,6 +56,7 @@ export interface Supplier {
   customerNumber?: string; // e.g. "Kd-Nr. 12345"
   paymentMethod?: string; // e.g. "Rechnung", "Lastschriftmandat / Bankeinzug", etc.
   defaultCategory?: string; // Default product category for products from this supplier
+  defaultNoMinStock?: boolean; // When true: no minStock alerts by default for this supplier's products
   selectors?: Record<string, any>;
 }
 

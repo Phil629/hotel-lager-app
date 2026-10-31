@@ -512,9 +512,12 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         const newProdNum = !cur.productNumber && s.productNumber ? s.productNumber : cur.productNumber;
                         const isPriceOutlier = !!(s.price && cur.price && Number(cur.price) > Number(s.price) * 2.5);
                         const newPrice = (!cur.price || Number(cur.price) === 0 || isPriceOutlier) && s.price && Number(s.price) > 0 ? Number(s.price) : cur.price;
-                        const newMinStock = (!cur.minStock || Number(cur.minStock) === 0) && s.minStock && Number(s.minStock) > 0
-                            ? Number(s.minStock)
-                            : cur.minStock;
+                        const hasDefaultNoMinStock = !!sup?.defaultNoMinStock;
+                        const newMinStock = hasDefaultNoMinStock && (!cur.minStock || Number(cur.minStock) === 0)
+                            ? 0
+                            : ((!cur.minStock || Number(cur.minStock) === 0) && s.minStock && Number(s.minStock) > 0
+                                ? Number(s.minStock)
+                                : cur.minStock);
                         const newStdQty = (!cur.standardOrderQuantity || Number(cur.standardOrderQuantity) === 0) && s.standardOrderQuantity && Number(s.standardOrderQuantity) > 0
                             ? Number(s.standardOrderQuantity)
                             : cur.standardOrderQuantity;
@@ -536,7 +539,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             productNumber: !cur.productNumber && !!s.productNumber ? true : cur.aiFields?.productNumber,
                             supplierId: !cur.supplierId && !!s.supplierId ? true : cur.aiFields?.supplierId,
                             price: (!cur.price || Number(cur.price) === 0 || isPriceOutlier) && !!s.price && Number(s.price) > 0 ? true : cur.aiFields?.price,
-                            minStock: (!cur.minStock || Number(cur.minStock) === 0) && !!s.minStock && Number(s.minStock) > 0 ? true : cur.aiFields?.minStock,
+                            minStock: hasDefaultNoMinStock ? false : ((!cur.minStock || Number(cur.minStock) === 0) && !!s.minStock && Number(s.minStock) > 0 ? true : cur.aiFields?.minStock),
                             standardOrderQuantity: (!cur.standardOrderQuantity || Number(cur.standardOrderQuantity) === 0) && !!s.standardOrderQuantity && Number(s.standardOrderQuantity) > 0 ? true : cur.aiFields?.standardOrderQuantity,
                             preferredOrderMethod: newOrderMethod !== cur.preferredOrderMethod ? true : cur.aiFields?.preferredOrderMethod,
                             category: shouldUpdateCat && newCat !== cur.category ? true : cur.aiFields?.category,
@@ -2177,7 +2180,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                         <span>{sup?.name || 'Kein Lieferant'}</span>
                                                         {!d.image && <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Kein Bild</span>}
                                                         {isWebshop && !d.orderUrl && <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Kein Shop-Link</span>}
-                                                        {(!d.minStock || d.minStock === 0) && <span style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Mindestbestand fehlt</span>}
+                                                        {(!d.minStock || d.minStock === 0) && !sup?.defaultNoMinStock && <span style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Mindestbestand fehlt</span>}
                                                     </div>
                                                 </div>
                                             </div>

@@ -41,6 +41,7 @@ export const Suppliers: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [overwriteProducts, setOverwriteProducts] = useState(false);
     const [overwriteCategory, setOverwriteCategory] = useState(false);
+    const [resetExistingMinStock, setResetExistingMinStock] = useState(true);
 
     const availableCategories = useMemo(() => {
         const set = new Set(STANDARD_CATEGORIES.filter(c => c !== 'Sonstiges'));
@@ -120,6 +121,7 @@ export const Suppliers: React.FC = () => {
 
     const handleOpenModal = async (supplier?: Supplier) => {
         setShowPassword(false);
+        setResetExistingMinStock(true);
         if (supplier) {
             setEditingSupplier(supplier);
             setFormData(supplier);
@@ -142,7 +144,7 @@ export const Suppliers: React.FC = () => {
             }
         } else {
             setEditingSupplier(null);
-            setFormData({ name: '', contactName: '', email: '', phone: '', url: '', notes: [], documents: [], preferredOrderMethod: 'email' });
+            setFormData({ name: '', contactName: '', email: '', phone: '', url: '', notes: [], documents: [], preferredOrderMethod: 'email', defaultNoMinStock: false });
             setSelectedProductIds([]);
             setOverwriteProducts(false);
             setOverwriteCategory(false);
@@ -188,12 +190,16 @@ export const Suppliers: React.FC = () => {
                 orderPhone: formData.orderPhone,
                 orderUrl: formData.orderUrl,
                 ignoreOrderProposals: formData.ignoreOrderProposals,
+                defaultNoMinStock: !!formData.defaultNoMinStock,
                 customerNumber: formData.customerNumber,
                 paymentMethod: formData.paymentMethod,
                 defaultCategory: formData.defaultCategory || undefined,
                 emailSubjectTemplate: formData.emailSubjectTemplate,
                 emailBodyTemplate: formData.emailBodyTemplate,
-                selectors: formData.selectors,
+                selectors: {
+                    ...(formData.selectors || {}),
+                    defaultNoMinStock: !!formData.defaultNoMinStock
+                },
             } as Supplier;
             
             payloadDebug = JSON.stringify(supplierToSave);
@@ -209,7 +215,7 @@ export const Suppliers: React.FC = () => {
                 });
             }
 
-            // Update assigned products (assignment, category inheritance, and overwrites)
+            // Update assigned products (assignment, category inheritance, overwrites, and minStock reset)
             const productPromises = products.filter(product => {
                 const wasAssigned = product.supplierId === targetSupplierId;
                 const isNowAssigned = selectedProductIds.includes(product.id);
@@ -219,8 +225,9 @@ export const Suppliers: React.FC = () => {
                 const needsCategoryUpdate = isNowAssigned && !!supplierToSave.defaultCategory && (overwriteCategory || isCategoryEmpty);
                 
                 const needsOverwrite = isNowAssigned && overwriteProducts && (product.emailOrderAddress || product.emailOrderSubject || product.emailOrderBody);
+                const needsMinStockReset = isNowAssigned && !!formData.defaultNoMinStock && resetExistingMinStock && (Number(product.minStock) > 0);
                 
-                return needsAssignmentChange || needsCategoryUpdate || needsOverwrite;
+                return needsAssignmentChange || needsCategoryUpdate || needsOverwrite || needsMinStockReset;
             }).map(product => {
                 const isNowAssigned = selectedProductIds.includes(product.id);
                 const isCategoryEmpty = !product.category || product.category.trim() === '' || product.category === 'Keine' || product.category === 'Ohne Kategorie' || product.category === 'Sonstiges';
@@ -238,6 +245,10 @@ export const Suppliers: React.FC = () => {
                     updatedProduct.emailOrderAddress = undefined;
                     updatedProduct.emailOrderSubject = undefined;
                     updatedProduct.emailOrderBody = undefined;
+                }
+
+                if (isNowAssigned && formData.defaultNoMinStock && resetExistingMinStock && Number(product.minStock) > 0) {
+                    updatedProduct.minStock = 0;
                 }
                 
                 return DataService.updateProduct(updatedProduct);
@@ -391,11 +402,21 @@ export const Suppliers: React.FC = () => {
                                     </a>
                                 )}
 
-                                <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                     <span className="badge badge-neutral">
                                         <Package size={12} />
                                         {linkedProductsCount} {linkedProductsCount === 1 ? 'Produkt' : 'Produkte'}
                                     </span>
+                                    {supplier.defaultNoMinStock && (
+                                        <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '11px', fontWeight: 600 }}>
+                                            Kein Mindestbestand
+                                        </span>
+                                    )}
+                                    {supplier.ignoreOrderProposals && (
+                                        <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '11px', fontWeight: 600 }}>
+                                            Keine Autopilot-Vorschläge
+                                        </span>
+                                    )}
                                     {supplier.documents && supplier.documents.length > 0 && (
                                          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                                              + {supplier.documents.length} Dokumente
@@ -593,6 +614,42 @@ export const Suppliers: React.FC = () => {
                                     <label htmlFor="ignoreProposals" style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: '#92400e', cursor: 'pointer' }}>
                                         Diesen Lieferanten aus allen Bestellvorschlägen ausschließen
                                     </label>
+                                </div>
+
+                                {/* Default No Min Stock */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--color-surface-elevated)', padding: '12px var(--spacing-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            id="defaultNoMinStock" 
+                                            checked={!!formData.defaultNoMinStock} 
+                                            onChange={e => {
+                                                const checked = e.target.checked;
+                                                setFormData({ ...formData, defaultNoMinStock: checked });
+                                                if (checked) setResetExistingMinStock(true);
+                                            }} 
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }} 
+                                        />
+                                        <label htmlFor="defaultNoMinStock" style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-main)', cursor: 'pointer' }}>
+                                            Standardmäßig kein Mindestbestand für diesen Lieferanten (keine Nachbestell-Warnungen)
+                                        </label>
+                                    </div>
+                                    <p style={{ margin: '0 0 0 28px', fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                                        Künftige Artikel dieses Lieferanten erhalten standardmäßig keinen Mindestbestand. Manuell bei einem Produkt eingetragene Mindestbestände bleiben erhalten und überschreiben diese Einstellung.
+                                    </p>
+                                    {formData.defaultNoMinStock && (
+                                        <div style={{ margin: '4px 0 0 28px', paddingTop: '8px', borderTop: '1px dashed var(--color-border)' }}>
+                                            <label style={{ fontSize: '12px', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 500 }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={resetExistingMinStock}
+                                                    onChange={e => setResetExistingMinStock(e.target.checked)}
+                                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                                />
+                                                Bestehende Artikel dieses Lieferanten auf Mindestbestand 0 setzen ({products.filter(p => p.supplierId === (editingSupplier?.id || '-1') && Number(p.minStock) > 0).length} Artikel betroffen)
+                                            </label>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Section: Portal Login — admin/owner only */}

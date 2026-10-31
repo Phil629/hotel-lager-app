@@ -39,7 +39,10 @@ const toSupabaseSupplier = (s: Supplier) => {
         default_category: s.defaultCategory?.trim() || null,
         email_subject_template: s.emailSubjectTemplate?.trim() || null,
         email_body_template: s.emailBodyTemplate?.trim() || null,
-        selectors: s.selectors || {}
+        selectors: {
+            ...(s.selectors || {}),
+            ...(s.defaultNoMinStock !== undefined ? { defaultNoMinStock: !!s.defaultNoMinStock } : {})
+        }
     };
     if (s.company_id !== undefined) payload.company_id = s.company_id;
     if (s.user_id !== undefined) payload.user_id = s.user_id;
@@ -71,6 +74,7 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     customerNumber: s.customer_number,
     paymentMethod: s.payment_method,
     defaultCategory: s.default_category,
+    defaultNoMinStock: !!(s.selectors?.defaultNoMinStock ?? s.default_no_min_stock ?? false),
     selectors: s.selectors || {}
 });
 

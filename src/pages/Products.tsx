@@ -4,7 +4,7 @@ import type { Product, Order, Supplier } from '../types';
 import { StorageService } from '../services/storage';
 import { DataService } from '../services/data';
 import { supabase, getSupabaseClient } from '../services/supabase';
-import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database, Sparkles, Wand2, Loader2 } from 'lucide-react';
+import { Building2, ChevronDown, Plus, Edit2, Trash2, ShoppingCart, X, Mail, ExternalLink, CheckSquare, Wifi, Phone, Search, AlertTriangle, Euro, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, Zap, Database, Sparkles, Wand2, Loader2, BellOff, Check } from 'lucide-react';
 import { DuplicateCheckModal } from '../components/DuplicateCheckModal';
 import { DataCompletionModal } from '../components/DataCompletionModal';
 import { useAppContext } from '../contexts/AppContext';
@@ -383,6 +383,88 @@ export const Products: React.FC = () => {
         } catch (e: any) {
             console.error('Failed to clear minStock:', e);
             setNotification({ message: 'Fehler beim Aktualisieren: ' + (e?.message || e), type: 'error' });
+        }
+    };
+
+    const handleSetSupplierNoMinStock = async (supplierId: string) => {
+        const supplier = suppliers.find(s => s.id === supplierId);
+        if (!supplier) return;
+
+        const supplierProducts = products.filter(p => p.supplierId === supplierId);
+        const affectedCount = supplierProducts.filter(p => Number(p.minStock) > 0).length;
+
+        const confirmMsg = affectedCount > 0
+            ? `Möchtest du bei „${supplier.name}" festlegen, dass es standardmäßig keinen Mindestbestand gibt?\n\n• ${affectedCount} bestehende Artikel werden auf Mindestbestand 0 gesetzt\n• Künftige Artikel erhalten standardmäßig keinen Mindestbestand\n• Einzelne Artikel können weiterhin manuell einen Mindestbestand erhalten (dieser überschreibt die Lieferanten-Einstellung)`
+            : `Möchtest du bei „${supplier.name}" festlegen, dass künftige Artikel standardmäßig keinen Mindestbestand erhalten?`;
+
+        if (!window.confirm(confirmMsg)) return;
+
+        try {
+            setIsLoading(true);
+
+            const updatedSupplier: Supplier = {
+                ...supplier,
+                defaultNoMinStock: true,
+                selectors: {
+                    ...(supplier.selectors || {}),
+                    defaultNoMinStock: true
+                }
+            };
+
+            await DataService.saveSupplier(updatedSupplier);
+
+            const productsToUpdate = supplierProducts.filter(p => Number(p.minStock) > 0);
+            if (productsToUpdate.length > 0) {
+                await Promise.all(
+                    productsToUpdate.map(p => DataService.updateProduct({ ...p, minStock: 0 }))
+                );
+            }
+
+            setSuppliers(prev => prev.map(s => s.id === supplierId ? updatedSupplier : s));
+            setProducts(prev => prev.map(p => p.supplierId === supplierId ? { ...p, minStock: 0 } : p));
+
+            setNotification({
+                message: `Standardmäßig kein Mindestbestand für „${supplier.name}" festgelegt.`,
+                type: 'success'
+            });
+        } catch (e: any) {
+            console.error('Failed to set supplier no min stock:', e);
+            setNotification({ message: 'Fehler beim Aktualisieren: ' + (e?.message || e), type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleResetSupplierNoMinStock = async (supplierId: string) => {
+        const supplier = suppliers.find(s => s.id === supplierId);
+        if (!supplier) return;
+
+        if (!window.confirm(`Möchtest du die Einstellung „Kein Mindestbestand" für „${supplier.name}" wieder aufheben?\n\nKünftige Artikel werden wieder nach den normalen Regeln angelegt.`)) return;
+
+        try {
+            setIsLoading(true);
+
+            const updatedSupplier: Supplier = {
+                ...supplier,
+                defaultNoMinStock: false,
+                selectors: {
+                    ...(supplier.selectors || {}),
+                    defaultNoMinStock: false
+                }
+            };
+
+            await DataService.saveSupplier(updatedSupplier);
+
+            setSuppliers(prev => prev.map(s => s.id === supplierId ? updatedSupplier : s));
+            setNotification({
+                message: `Einstellung für „${supplier.name}" zurückgesetzt.`,
+                type: 'info'
+            });
+        } catch (e: any) {
+            console.error('Failed to reset supplier no min stock:', e);
+            setNotification({ message: 'Fehler beim Zurücksetzen: ' + (e?.message || e), type: 'error' });
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -1177,7 +1259,70 @@ export const Products: React.FC = () => {
                                                 return null;
                                             })()}
                                         </h2>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                            {groupBy === 'supplier' && groupKey !== 'unsorted' && (() => {
+                                                const groupSupplier = suppliers.find(sup => sup.id === groupKey);
+                                                const hasNoMinStockActive = !!groupSupplier?.defaultNoMinStock;
+
+                                                if (hasNoMinStockActive) {
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleResetSupplierNoMinStock(groupKey);
+                                                            }}
+                                                            className="btn btn-ghost"
+                                                            style={{
+                                                                padding: '6px 12px',
+                                                                minHeight: 'auto',
+                                                                borderRadius: 'var(--radius-full)',
+                                                                fontSize: '12px',
+                                                                fontWeight: 600,
+                                                                gap: '6px',
+                                                                border: '1px solid #cbd5e1',
+                                                                color: '#475569',
+                                                                backgroundColor: '#f8fafc'
+                                                            }}
+                                                            title="Standardmäßig kein Mindestbestand aktiv. Klicken zum Deaktivieren oder in den Lieferanten-Einstellungen ändern."
+                                                        >
+                                                            <Check size={13} strokeWidth={2.5} color="#16a34a" /> Kein Mindestbestand aktiv
+                                                        </button>
+                                                    );
+                                                }
+
+                                                const hasProductsWithMinStock = groupProds.some(p => Number(p.minStock) > 0);
+                                                if (showLowStockOnly || hasProductsWithMinStock) {
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleSetSupplierNoMinStock(groupKey);
+                                                            }}
+                                                            className="btn btn-ghost"
+                                                            style={{
+                                                                padding: '6px 12px',
+                                                                minHeight: 'auto',
+                                                                borderRadius: 'var(--radius-full)',
+                                                                fontSize: '12px',
+                                                                fontWeight: 600,
+                                                                gap: '6px',
+                                                                border: '1px solid #fecaca',
+                                                                color: '#b91c1c',
+                                                                backgroundColor: '#fff1f2'
+                                                            }}
+                                                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fee2e2'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff1f2'; e.currentTarget.style.borderColor = '#fecaca'; }}
+                                                            title="Mindestbestand für alle Artikel dieses Lieferanten auf 0 setzen und künftige Artikel standardmäßig ohne Mindestbestand anlegen"
+                                                        >
+                                                            <BellOff size={13} strokeWidth={2} /> Bei diesem Lieferanten kein Mindestbestand
+                                                        </button>
+                                                    );
+                                                }
+
+                                                return null;
+                                            })()}
                                             {groupBy === 'supplier' && groupKey !== 'unsorted' && (
                                                 <button 
                                                     onClick={(e) => {
@@ -1900,6 +2045,11 @@ export const Products: React.FC = () => {
                                                         <label className="form-label">Meldebestand (Untergrenze)</label>
                                                         <input type="number" value={newProduct.minStock || 0} onChange={e => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })} className="input-field" />
                                                         <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>0 = keine Bestandswarnung.</span>
+                                                        {suppliers.find(s => s.id === newProduct.supplierId)?.defaultNoMinStock && (
+                                                            <span style={{ fontSize: '11px', color: '#059669', display: 'block', marginTop: '2px', fontWeight: 500 }}>
+                                                                ✓ Lieferant hat standardmäßig keinen Mindestbestand. Ein hier eingetragener Wert überschreibt dies für dieses Produkt.
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div className="form-group">
                                                         <label className="form-label">Standard Bestellmenge</label>
@@ -1944,7 +2094,18 @@ export const Products: React.FC = () => {
                                                             onChange={e => {
                                                                 const sId = e.target.value; const s = suppliers.find(su => su.id === sId);
                                                                 const autoCategory = !newProduct.category && s?.defaultCategory ? s.defaultCategory : newProduct.category;
-                                                                setNewProduct({ ...newProduct, supplierId: sId || undefined, emailOrderAddress: s?.email || '', supplierPhone: s?.phone || '', category: autoCategory });
+                                                                let autoMinStock = newProduct.minStock;
+                                                                if (!editingId && s?.defaultNoMinStock) {
+                                                                    autoMinStock = 0;
+                                                                }
+                                                                setNewProduct({
+                                                                    ...newProduct,
+                                                                    supplierId: sId || undefined,
+                                                                    emailOrderAddress: s?.email || '',
+                                                                    supplierPhone: s?.phone || '',
+                                                                    category: autoCategory,
+                                                                    minStock: autoMinStock
+                                                                });
                                                             }}
                                                             className="input-field"
                                                             style={{ flex: 1 }}
