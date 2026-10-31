@@ -120,6 +120,11 @@ export const Products: React.FC = () => {
         return {};
     });
     const [expandedProductsLimit, setExpandedProductsLimit] = useState<Record<string, boolean>>({});
+    const [supplierNoMinStockConfirm, setSupplierNoMinStockConfirm] = useState<{
+        supplierId: string;
+        mode: 'set' | 'reset';
+        affectedCount: number;
+    } | null>(null);
     
     const toggleSupplier = (id: string) => setExpandedSuppliers(prev => {
         const isCurrentlyExpanded = prev[id] !== false; // default is true
@@ -386,18 +391,34 @@ export const Products: React.FC = () => {
         }
     };
 
-    const handleSetSupplierNoMinStock = async (supplierId: string) => {
+    const handleSetSupplierNoMinStock = (supplierId: string) => {
         const supplier = suppliers.find(s => s.id === supplierId);
         if (!supplier) return;
 
         const supplierProducts = products.filter(p => p.supplierId === supplierId);
         const affectedCount = supplierProducts.filter(p => Number(p.minStock) > 0).length;
 
-        const confirmMsg = affectedCount > 0
-            ? `Möchtest du bei „${supplier.name}" festlegen, dass es standardmäßig keinen Mindestbestand gibt?\n\n• ${affectedCount} bestehende Artikel werden auf Mindestbestand 0 gesetzt\n• Künftige Artikel erhalten standardmäßig keinen Mindestbestand\n• Einzelne Artikel können weiterhin manuell einen Mindestbestand erhalten (dieser überschreibt die Lieferanten-Einstellung)`
-            : `Möchtest du bei „${supplier.name}" festlegen, dass künftige Artikel standardmäßig keinen Mindestbestand erhalten?`;
+        setSupplierNoMinStockConfirm({
+            supplierId,
+            mode: 'set',
+            affectedCount
+        });
+    };
 
-        if (!window.confirm(confirmMsg)) return;
+    const handleResetSupplierNoMinStock = (supplierId: string) => {
+        const supplier = suppliers.find(s => s.id === supplierId);
+        if (!supplier) return;
+
+        setSupplierNoMinStockConfirm({
+            supplierId,
+            mode: 'reset',
+            affectedCount: 0
+        });
+    };
+
+    const executeSetSupplierNoMinStock = async (supplierId: string) => {
+        const supplier = suppliers.find(s => s.id === supplierId);
+        if (!supplier) return;
 
         try {
             setIsLoading(true);
@@ -413,6 +434,7 @@ export const Products: React.FC = () => {
 
             await DataService.saveSupplier(updatedSupplier);
 
+            const supplierProducts = products.filter(p => p.supplierId === supplierId);
             const productsToUpdate = supplierProducts.filter(p => Number(p.minStock) > 0);
             if (productsToUpdate.length > 0) {
                 await Promise.all(
@@ -435,11 +457,9 @@ export const Products: React.FC = () => {
         }
     };
 
-    const handleResetSupplierNoMinStock = async (supplierId: string) => {
+    const executeResetSupplierNoMinStock = async (supplierId: string) => {
         const supplier = suppliers.find(s => s.id === supplierId);
         if (!supplier) return;
-
-        if (!window.confirm(`Möchtest du die Einstellung „Kein Mindestbestand" für „${supplier.name}" wieder aufheben?\n\nKünftige Artikel werden wieder nach den normalen Regeln angelegt.`)) return;
 
         try {
             setIsLoading(true);
@@ -2906,6 +2926,123 @@ export const Products: React.FC = () => {
                     setNotification({ message: msg, type: 'success' });
                 }}
             />
+
+            {/* Custom In-App Modal for Supplier No-MinStock Confirmation */}
+            {supplierNoMinStockConfirm && (() => {
+                const s = suppliers.find(sup => sup.id === supplierNoMinStockConfirm.supplierId);
+                if (!s) return null;
+                const isSet = supplierNoMinStockConfirm.mode === 'set';
+                const count = supplierNoMinStockConfirm.affectedCount;
+
+                return (
+                    <div 
+                        className="modal-overlay" 
+                        style={{ zIndex: 1200 }} 
+                        onClick={() => setSupplierNoMinStockConfirm(null)}
+                    >
+                        <div 
+                            className="card" 
+                            style={{ 
+                                padding: '28px', 
+                                maxWidth: '480px', 
+                                width: '90%', 
+                                boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)', 
+                                borderRadius: 'var(--radius-xl)',
+                                backgroundColor: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)'
+                            }} 
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {/* Header */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                                <div style={{ 
+                                    backgroundColor: isSet ? '#fff1f2' : '#f1f5f9', 
+                                    width: '46px', 
+                                    height: '46px', 
+                                    borderRadius: '12px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    color: isSet ? '#dc2626' : '#475569',
+                                    flexShrink: 0
+                                }}>
+                                    {isSet ? <BellOff size={24} /> : <Check size={24} />}
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--color-text-main)' }}>
+                                        {isSet ? 'Kein Mindestbestand' : 'Einstellung zurücksetzen'}
+                                    </h3>
+                                    <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                                        Lieferant: <strong style={{ color: 'var(--color-text-main)' }}>{s.name}</strong>
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Body */}
+                            {isSet ? (
+                                <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: '1.5', marginBottom: '24px' }}>
+                                    <p style={{ margin: '0 0 12px 0' }}>
+                                        Möchtest du für alle Artikel von <strong style={{ color: 'var(--color-text-main)' }}>{s.name}</strong> standardmäßig keinen Mindestbestand festlegen?
+                                    </p>
+                                    <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                                        {count > 0 && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-main)' }}>
+                                                <span style={{ color: '#dc2626', fontWeight: 700 }}>•</span>
+                                                <span><strong>{count} {count === 1 ? 'Artikel wird' : 'Artikel werden'}</strong> sofort auf Mindestbestand 0 gesetzt</span>
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-main)' }}>
+                                            <span style={{ color: '#16a34a', fontWeight: 700 }}>•</span>
+                                            <span>Künftige Artikel erhalten standardmäßig keinen Mindestbestand</span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-muted)' }}>
+                                            <span style={{ color: '#64748b', fontWeight: 700 }}>•</span>
+                                            <span>Manuell eingetragene Mindestbestände an einzelnen Artikeln bleiben erhalten</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: '1.5', marginBottom: '24px' }}>
+                                    <p style={{ margin: '0 0 10px 0' }}>
+                                        Möchtest du die Ausnahmeregelung für <strong style={{ color: 'var(--color-text-main)' }}>{s.name}</strong> aufheben?
+                                    </p>
+                                    <p style={{ margin: 0, fontSize: '13px' }}>
+                                        Künftige Artikel dieses Lieferanten werden wieder nach den Standardregeln angelegt.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Footer Buttons */}
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setSupplierNoMinStockConfirm(null)} 
+                                    className="btn btn-ghost"
+                                    style={{ padding: '8px 16px' }}
+                                >
+                                    Abbrechen
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={async () => {
+                                        const current = supplierNoMinStockConfirm;
+                                        setSupplierNoMinStockConfirm(null);
+                                        if (current.mode === 'set') {
+                                            await executeSetSupplierNoMinStock(current.supplierId);
+                                        } else {
+                                            await executeResetSupplierNoMinStock(current.supplierId);
+                                        }
+                                    }} 
+                                    className="btn btn-primary"
+                                    style={{ padding: '8px 20px', fontWeight: 600 }}
+                                >
+                                    {isSet ? 'Jetzt festlegen' : 'Zurücksetzen'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div >
     );
 };
