@@ -1269,27 +1269,32 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                 )}
 
                                                 {d.alternatives && d.alternatives.length > 1 && (
-                                                    <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
-                                                        {d.alternatives.slice(0, 4).map((altUrl) => (
-                                                            <img
-                                                                key={altUrl}
-                                                                src={altUrl}
-                                                                alt=""
-                                                                onClick={() => setProductDrafts(prev => ({
-                                                                    ...prev,
-                                                                    [p.id]: { ...prev[p.id], image: altUrl }
-                                                                }))}
-                                                                style={{
-                                                                    width: '20px',
-                                                                    height: '20px',
-                                                                    borderRadius: '4px',
-                                                                    objectFit: 'cover',
-                                                                    cursor: 'pointer',
-                                                                    border: d.image === altUrl ? '2px solid #7c3aed' : '1px solid #cbd5e1'
-                                                                }}
-                                                                title="Anderes Bild wählen"
-                                                            />
-                                                        ))}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', marginTop: '3px' }}>
+                                                        <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>
+                                                            Alternativen:
+                                                        </span>
+                                                        <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
+                                                            {d.alternatives.slice(0, 4).map((altUrl) => (
+                                                                <img
+                                                                    key={altUrl}
+                                                                    src={altUrl}
+                                                                    alt=""
+                                                                    onClick={() => setProductDrafts(prev => ({
+                                                                        ...prev,
+                                                                        [p.id]: { ...prev[p.id], image: altUrl }
+                                                                    }))}
+                                                                    style={{
+                                                                        width: '20px',
+                                                                        height: '20px',
+                                                                        borderRadius: '4px',
+                                                                        objectFit: 'cover',
+                                                                        cursor: 'pointer',
+                                                                        border: d.image === altUrl ? '2px solid #7c3aed' : '1px solid #cbd5e1'
+                                                                    }}
+                                                                    title="Als Hauptbild wählen"
+                                                                />
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
