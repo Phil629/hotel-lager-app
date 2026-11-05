@@ -74,6 +74,7 @@ interface SupplierDraft {
     phone: string;
     url: string;
     customerNumber: string;
+    defaultCategory: string;
     preferredOrderMethod?: 'email' | 'webshop' | 'link' | 'phone';
     loadingRow?: boolean;
     aiSuggested?: boolean;
@@ -83,6 +84,7 @@ interface SupplierDraft {
         email?: boolean;
         phone?: boolean;
         customerNumber?: boolean;
+        defaultCategory?: boolean;
         preferredOrderMethod?: boolean;
     };
 }
@@ -177,6 +179,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     // Welche Einträge wurden gerade von der KI geprüft und liegen im Prüffenster?
     const [reviewedIds, setReviewedIds] = useState<string[]>([]);
     const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(new Set());
+    const [sessionReviewedIds, setSessionReviewedIds] = useState<Set<string>>(new Set());
 
     const [overviewPage, setOverviewPage] = useState(0);
     const [aiLoadingSeconds, setAiLoadingSeconds] = useState(0);
@@ -193,14 +196,35 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     }, [aiLoading]);
 
     const getAiLoadingStatus = (sec: number) => {
-        if (sec < 4) {
+        if (activeTab === 'suppliers') {
+            if (sec < 3) {
+                return {
+                    step: 'Schritt 1 von 3',
+                    title: 'Analysiere Lieferanten & ermittle Standard-Kategorien...',
+                    detail: 'Firmennamen, Bestellwege und Warengruppen werden per KI ausgewertet'
+                };
+            }
+            if (sec < 6) {
+                return {
+                    step: 'Schritt 2 von 3',
+                    title: 'Recherchiere offizielle Webseiten, E-Mail & Telefonnummern...',
+                    detail: 'Webshops, Impressum und vergangene Belege werden nach Kontaktdaten durchsucht'
+                };
+            }
+            return {
+                step: 'Schritt 3 von 3',
+                title: 'Bereite Lieferanten-Prüffenster vor...',
+                detail: 'Gefundene Kontaktdaten & Kategorien werden zusammengestellt'
+            };
+        }
+        if (sec < 3) {
             return {
                 step: 'Schritt 1 von 3',
                 title: 'Analysiere Artikeldaten & bereinige Produktnamen...',
-                detail: 'Kategorien und Schreibweisen werden standardisiert'
+                detail: 'Kategorien und Schreibweisen werden per KI zugeordnet'
             };
         }
-        if (sec < 9) {
+        if (sec < 6) {
             return {
                 step: 'Schritt 2 von 3',
                 title: 'Durchsuche Lieferanten-Kataloge nach Bildern & Shop-Links...',
@@ -239,6 +263,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         setViewMode('overview');
         setOverviewPage(0);
         setReviewedIds([]);
+        setSessionReviewedIds(new Set());
         initDraftsAndState();
     }, [isOpen, initialTab]);
 
@@ -287,8 +312,10 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         const hasValidEmail = !!(s.email && s.email.trim() && s.email !== 'hello@unbekannt.com');
         const hasUrl = !!((s.url && s.url.trim()) || (s.orderUrl && s.orderUrl.trim()));
         const hasPhone = !!(s.phone && s.phone.trim());
-        if (s.preferredOrderMethod === 'phone') return hasPhone;
-        return hasValidEmail && hasUrl;
+        const hasMethod = !!s.preferredOrderMethod;
+        const hasDefaultCat = !!(s.defaultCategory && s.defaultCategory.trim());
+        if (s.preferredOrderMethod === 'phone') return hasPhone && hasDefaultCat;
+        return hasValidEmail && hasUrl && hasMethod && hasDefaultCat;
     };
 
     const initDraftsAndState = async () => {
@@ -323,6 +350,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 phone: s.phone || '',
                 url: s.url || s.orderUrl || '',
                 customerNumber: s.customerNumber || '',
+                defaultCategory: s.defaultCategory || '',
                 preferredOrderMethod: s.preferredOrderMethod,
                 aiFields: {}
             };
@@ -365,6 +393,14 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         suppliers.forEach(s => { if (s.defaultCategory) set.add(s.defaultCategory); });
         return Array.from(set).filter(Boolean);
     }, [products, suppliers]);
+
+    const incompleteMarkedProducts = useMemo(() => {
+        return products.filter(p => completedProductIds.has(p.id) && !isProductNaturallyComplete(p));
+    }, [products, suppliers, completedProductIds]);
+
+    const incompleteMarkedSuppliers = useMemo(() => {
+        return suppliers.filter(s => completedSupplierIds.has(s.id) && !isSupplierNaturallyComplete(s));
+    }, [suppliers, completedSupplierIds]);
 
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
@@ -435,6 +471,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 phone: orig.phone || '',
                 url: orig.url || orig.orderUrl || '',
                 customerNumber: orig.customerNumber || '',
+                defaultCategory: orig.defaultCategory || '',
                 preferredOrderMethod: orig.preferredOrderMethod,
                 aiSuggested: false,
                 isEditing: false,
@@ -570,6 +607,11 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
 
                 setReviewedIds(batchIds);
                 setSelectedReviewIds(new Set(batchIds));
+                setSessionReviewedIds(prev => {
+                    const next = new Set(prev);
+                    batchIds.forEach(id => next.add(id));
+                    return next;
+                });
                 setViewMode('review');
             } else {
                 const availableSuppliers = excludeIds
@@ -588,12 +630,13 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         phone: d?.phone || s.phone || '',
                         url: d?.url || s.url || s.orderUrl || '',
                         customerNumber: d?.customerNumber || s.customerNumber || '',
+                        defaultCategory: d?.defaultCategory || s.defaultCategory || '',
                         preferredOrderMethod: d?.preferredOrderMethod || s.preferredOrderMethod || ''
                     };
                 });
 
                 const { data, error: fnErr } = await supabase.functions.invoke('process-inbound-mail', {
-                    body: { action: 'suggest_completion', items: itemsPayload }
+                    body: { action: 'suggest_completion', items: itemsPayload, categories: availableCategories }
                 });
                 if (fnErr) throw fnErr;
                 if (data?.error) throw new Error(data.error);
@@ -607,12 +650,14 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         const cur = next[s.id];
                         if (!cur) continue;
                         const newMethod = cur.preferredOrderMethod || s.preferredOrderMethod || (cur.url || s.url ? 'webshop' : 'email');
+                        const newDefCat = cur.defaultCategory || s.defaultCategory || '';
                         const aiFields = {
                             ...(cur.aiFields || {}),
                             url: !cur.url && !!s.url ? true : cur.aiFields?.url,
                             email: !cur.email && !!s.email ? true : cur.aiFields?.email,
                             phone: !cur.phone && !!s.phone ? true : cur.aiFields?.phone,
                             customerNumber: !cur.customerNumber && !!s.customerNumber ? true : cur.aiFields?.customerNumber,
+                            defaultCategory: !cur.defaultCategory && !!s.defaultCategory ? true : cur.aiFields?.defaultCategory,
                             preferredOrderMethod: newMethod !== cur.preferredOrderMethod ? true : cur.aiFields?.preferredOrderMethod
                         };
                         next[s.id] = {
@@ -621,6 +666,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             email: cur.email || s.email || '',
                             phone: cur.phone || s.phone || '',
                             customerNumber: cur.customerNumber || s.customerNumber || '',
+                            defaultCategory: newDefCat,
                             preferredOrderMethod: newMethod,
                             aiFields,
                             aiSuggested: Object.values(aiFields).some(Boolean)
@@ -631,6 +677,11 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
 
                 setReviewedIds(batchIds);
                 setSelectedReviewIds(new Set(batchIds));
+                setSessionReviewedIds(prev => {
+                    const next = new Set(prev);
+                    batchIds.forEach(id => next.add(id));
+                    return next;
+                });
                 setViewMode('review');
             }
         } catch (err: any) {
@@ -763,6 +814,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 phone: d.phone || null,
                 url: d.url || null,
                 customer_number: d.customerNumber || null,
+                default_category: d.defaultCategory || null,
                 preferred_order_method: d.preferredOrderMethod || null,
                 markComplete
             };
@@ -883,6 +935,42 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         }
     };
 
+    const handleReopenIncompleteMarked = async (type: 'product' | 'supplier') => {
+        if (!supabase) return;
+        const idsToReopen = type === 'product'
+            ? incompleteMarkedProducts.map(p => p.id)
+            : incompleteMarkedSuppliers.map(s => s.id);
+        if (idsToReopen.length === 0) return;
+
+        setSavingBulk(true);
+        try {
+            await supabase.functions.invoke('process-inbound-mail', {
+                body: {
+                    action: 'save_completion',
+                    unmarkProductIds: type === 'product' ? idsToReopen : [],
+                    unmarkSupplierIds: type === 'supplier' ? idsToReopen : []
+                }
+            });
+            if (type === 'product') {
+                setCompletedProductIds(prev => {
+                    const next = new Set(prev);
+                    idsToReopen.forEach(id => next.delete(id));
+                    return next;
+                });
+            } else {
+                setCompletedSupplierIds(prev => {
+                    const next = new Set(prev);
+                    idsToReopen.forEach(id => next.delete(id));
+                    return next;
+                });
+            }
+            setShowCompleted(false);
+            setOverviewPage(0);
+        } finally {
+            setSavingBulk(false);
+        }
+    };
+
     const handleBulkAcceptReview = async (continueNextBatch = false) => {
         const ids = Array.from(selectedReviewIds);
         if (ids.length === 0) return;
@@ -898,7 +986,9 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
 
         try {
             if (activeTab === 'products') {
-                const doneSet = new Set([...completedProductIds, ...ids]);
+                const doneSet = showCompleted
+                    ? new Set([...sessionReviewedIds, ...ids])
+                    : new Set([...completedProductIds, ...sessionReviewedIds, ...ids]);
                 const remaining = filteredProducts.filter(p => !doneSet.has(p.id));
 
                 if (continueNextBatch && remaining.length > 0) {
@@ -911,7 +1001,9 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     onSaved(`${ids.length} ${ids.length === 1 ? 'Produkt' : 'Produkte'} übernommen & als erledigt abgehakt!`);
                 }
             } else {
-                const doneSet = new Set([...completedSupplierIds, ...ids]);
+                const doneSet = showCompleted
+                    ? new Set([...sessionReviewedIds, ...ids])
+                    : new Set([...completedSupplierIds, ...sessionReviewedIds, ...ids]);
                 const remaining = filteredSuppliers.filter(s => !doneSet.has(s.id));
 
                 if (continueNextBatch && remaining.length > 0) {
@@ -1034,7 +1126,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                     {aiLoading ? (
                                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                                             <Loader2 size={18} className="spin" style={{ color: '#6d28d9' }} />
-                                            Nächste Artikel werden geladen... ({aiLoadingSeconds}s)
+                                            Nächste {activeTab === 'products' ? 'Artikel' : 'Lieferanten'} werden geladen... ({aiLoadingSeconds}s)
                                         </span>
                                     ) : (
                                         <>✨ KI-Vorschläge prüfen & abhaken ({reviewedIds.length})</>
@@ -1043,7 +1135,9 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                 <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#4c1d95' }}>
                                     {aiLoading
                                         ? getAiLoadingStatus(aiLoadingSeconds).detail
-                                        : 'Schau kurz über die gefundenen Bilder & Daten – was passt, kannst du direkt rechts (oder unten gesammelt) abhaken.'}
+                                        : activeTab === 'products'
+                                            ? 'Schau kurz über die gefundenen Bilder & Artikeldaten – was passt, kannst du direkt rechts (oder unten gesammelt) abhaken.'
+                                            : 'Schau kurz über die gefundenen Kontaktdaten, Webseiten & Standard-Kategorien – was passt, kannst du direkt rechts (oder unten gesammelt) abhaken.'}
                                 </p>
                             </div>
                         </div>
@@ -1129,7 +1223,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '18px', fontWeight: 800, color: '#1e1b4b', marginBottom: '6px' }}>
-                                        Nächste 8 Artikel werden analysiert... ({aiLoadingSeconds}s)
+                                        Nächste {activeTab === 'products' ? 'Artikel' : 'Lieferanten'} werden analysiert... ({aiLoadingSeconds}s)
                                     </div>
                                     <div style={{ fontSize: '14px', color: '#4338ca', fontWeight: 600 }}>
                                         {getAiLoadingStatus(aiLoadingSeconds).title}
@@ -1630,106 +1724,237 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                             borderRadius: '14px',
                                             padding: '14px 18px',
                                             border: isChecked ? '2px solid #7c3aed' : '1px solid var(--color-border)',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '12px',
+                                            boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+                                        }}
+                                    >
+                                        <div style={{
                                             display: 'grid',
                                             gridTemplateColumns: '28px 1fr auto',
                                             gap: '16px',
                                             alignItems: 'center'
-                                        }}
-                                    >
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setSelectedReviewIds(prev => {
-                                                    const next = new Set(prev);
-                                                    if (next.has(s.id)) next.delete(s.id);
-                                                    else next.add(s.id);
-                                                    return next;
-                                                });
-                                            }}
-                                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isChecked ? '#7c3aed' : '#94a3b8' }}
-                                        >
-                                            {isChecked ? <CheckSquare size={22} /> : <Square size={22} />}
-                                        </button>
+                                        }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedReviewIds(prev => {
+                                                        const next = new Set(prev);
+                                                        if (next.has(s.id)) next.delete(s.id);
+                                                        else next.add(s.id);
+                                                        return next;
+                                                    });
+                                                }}
+                                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isChecked ? '#7c3aed' : '#94a3b8' }}
+                                            >
+                                                {isChecked ? <CheckSquare size={22} /> : <Square size={22} />}
+                                            </button>
 
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>{d.name}</span>
-                                                <span style={{ backgroundColor: d.aiFields?.preferredOrderMethod ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.preferredOrderMethod ? '#6d28d9' : '#475569', fontSize: '11px', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
-                                                    Bestellweg: {d.preferredOrderMethod === 'webshop' || d.preferredOrderMethod === 'link' ? '🌐 Webshop' : d.preferredOrderMethod === 'phone' ? '📞 Telefon' : '📧 E-Mail'} {d.aiFields?.preferredOrderMethod && '✨'}
-                                                </span>
-                                                {d.aiFields?.url && d.url && (
-                                                    <span style={{ backgroundColor: '#f5f3ff', color: '#6d28d9', fontSize: '11px', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
-                                                        ✨ Webseite gefunden
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>{d.name}</span>
+                                                </div>
+
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', fontSize: '12px', color: '#475569' }}>
+                                                    <span style={{ backgroundColor: d.aiFields?.preferredOrderMethod ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.preferredOrderMethod ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                        Bestellweg: {d.preferredOrderMethod === 'webshop' || d.preferredOrderMethod === 'link' ? '🌐 Webshop' : d.preferredOrderMethod === 'phone' ? '📞 Telefon' : '📧 E-Mail'} {d.aiFields?.preferredOrderMethod && '✨'}
                                                     </span>
+                                                    <span style={{ backgroundColor: d.aiFields?.defaultCategory ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.defaultCategory ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                        Standard-Kategorie: {d.defaultCategory || 'Nicht gesetzt'} {d.aiFields?.defaultCategory && '✨'}
+                                                    </span>
+                                                    {d.email ? (
+                                                        <span style={{ backgroundColor: d.aiFields?.email ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.email ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                            📧 {d.email} {d.aiFields?.email && '✨'}
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                            ⚠️ E-Mail fehlt
+                                                        </span>
+                                                    )}
+                                                    {d.phone && (
+                                                        <span style={{ backgroundColor: d.aiFields?.phone ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.phone ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                            📞 {d.phone} {d.aiFields?.phone && '✨'}
+                                                        </span>
+                                                    )}
+                                                    {d.customerNumber && (
+                                                        <span style={{ backgroundColor: d.aiFields?.customerNumber ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.customerNumber ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                            Kunden-Nr.: {d.customerNumber} {d.aiFields?.customerNumber && '✨'}
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {d.url ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px' }}>
+                                                        <a
+                                                            href={/^https?:\/\//i.test(d.url) ? d.url : `https://${d.url}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            style={{ color: '#2563eb', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                                                        >
+                                                            <ExternalLink size={13} />
+                                                            Webseite prüfen ({d.url})
+                                                        </a>
+                                                        {d.aiFields?.url && (
+                                                            <span style={{ backgroundColor: '#f5f3ff', color: '#6d28d9', fontSize: '11px', padding: '1px 7px', borderRadius: '6px', fontWeight: 700 }}>
+                                                                ✨ Webseite ergänzt
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ fontSize: '12px', color: '#b45309' }}>
+                                                        Keine Webseite hinterlegt – klicke auf „Ändern“, um eine URL einzutragen.
+                                                    </div>
                                                 )}
                                             </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px' }}>
-                                                <input
-                                                    type="url"
-                                                    placeholder="Webseite (https://...)"
-                                                    value={d.url}
-                                                    onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], url: e.target.value } }))}
-                                                    className="input-field"
-                                                    style={{ padding: '6px 10px', fontSize: '12px' }}
-                                                />
-                                                <input
-                                                    type="email"
-                                                    placeholder="E-Mail"
-                                                    value={d.email}
-                                                    onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], email: e.target.value } }))}
-                                                    className="input-field"
-                                                    style={{ padding: '6px 10px', fontSize: '12px' }}
-                                                />
-                                                <input
-                                                    type="tel"
-                                                    placeholder="Telefon"
-                                                    value={d.phone}
-                                                    onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], phone: e.target.value } }))}
-                                                    className="input-field"
-                                                    style={{ padding: '6px 10px', fontSize: '12px' }}
-                                                />
-                                                <select
-                                                    value={d.preferredOrderMethod || (d.url ? 'webshop' : 'email')}
-                                                    onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], preferredOrderMethod: e.target.value as any } }))}
-                                                    className="input-field"
-                                                    style={{ padding: '6px 10px', fontSize: '12px' }}
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSupplierDrafts(prev => ({
+                                                        ...prev,
+                                                        [s.id]: { ...prev[s.id], isEditing: !prev[s.id].isEditing }
+                                                    }))}
+                                                    style={{
+                                                        padding: '8px 12px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid var(--color-border)',
+                                                        backgroundColor: '#fff',
+                                                        color: '#334155',
+                                                        fontSize: '12px',
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px'
+                                                    }}
+                                                    title="Manuell korrigieren"
                                                 >
-                                                    <option value="webshop">🌐 Webshop</option>
-                                                    <option value="email">📧 E-Mail</option>
-                                                    <option value="phone">📞 Telefon</option>
-                                                </select>
+                                                    <Edit2 size={13} /> Ändern
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => revertSupplierDraft(s.id)}
+                                                    style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}
+                                                    title="KI-Vorschlag ablehnen & zurücksetzen"
+                                                >
+                                                    <RotateCcw size={14} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSaveSingleRow(s.id, 'supplier')}
+                                                    disabled={savingRowId === s.id}
+                                                    style={{
+                                                        padding: '9px 16px',
+                                                        borderRadius: '8px',
+                                                        border: 'none',
+                                                        backgroundColor: '#16a34a',
+                                                        color: '#fff',
+                                                        fontWeight: 700,
+                                                        fontSize: '13px',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    {savingRowId === s.id ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
+                                                    ✓ Abhaken
+                                                </button>
                                             </div>
                                         </div>
 
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => revertSupplierDraft(s.id)}
-                                                style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}
-                                            >
-                                                <RotateCcw size={14} />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleSaveSingleRow(s.id, 'supplier')}
-                                                disabled={savingRowId === s.id}
-                                                style={{
-                                                    padding: '9px 16px',
-                                                    borderRadius: '8px',
-                                                    border: 'none',
-                                                    backgroundColor: '#16a34a',
-                                                    color: '#fff',
-                                                    fontWeight: 700,
-                                                    fontSize: '13px',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px'
-                                                }}
-                                            >
-                                                <CheckCircle2 size={15} /> ✓ Abhaken
-                                            </button>
-                                        </div>
+                                        {d.isEditing && (
+                                            <div style={{
+                                                marginTop: '4px',
+                                                paddingTop: '12px',
+                                                borderTop: '1px dashed var(--color-border)',
+                                                display: 'grid',
+                                                gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                                                gap: '10px'
+                                            }}>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Lieferantenname</label>
+                                                    <input
+                                                        type="text"
+                                                        value={d.name}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], name: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Webseite / Shop-URL</label>
+                                                    <input
+                                                        type="url"
+                                                        placeholder="https://..."
+                                                        value={d.url}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], url: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>E-Mail-Adresse</label>
+                                                    <input
+                                                        type="email"
+                                                        placeholder="service@..."
+                                                        value={d.email}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], email: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Telefonnummer</label>
+                                                    <input
+                                                        type="tel"
+                                                        placeholder="+49..."
+                                                        value={d.phone}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], phone: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Kundennummer</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Optional"
+                                                        value={d.customerNumber}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], customerNumber: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Standard-Kategorie</label>
+                                                    <select
+                                                        value={d.defaultCategory}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], defaultCategory: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    >
+                                                        <option value="">-- Kategorie wählen --</option>
+                                                        {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>Bestellweg</label>
+                                                    <select
+                                                        value={d.preferredOrderMethod || (d.url ? 'webshop' : 'email')}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], preferredOrderMethod: e.target.value as any } }))}
+                                                        className="input-field"
+                                                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                                                    >
+                                                        <option value="webshop">🌐 Webshop</option>
+                                                        <option value="email">📧 E-Mail</option>
+                                                        <option value="phone">📞 Telefon</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })
@@ -1770,7 +1995,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                     fontWeight: 700
                                 }}>
                                     <Loader2 size={16} className="spin" />
-                                    <span>Nächste Artikel werden analysiert ({aiLoadingSeconds}s)...</span>
+                                    <span>Nächste {activeTab === 'products' ? 'Artikel' : 'Lieferanten'} werden analysiert ({aiLoadingSeconds}s)...</span>
                                 </div>
                             ) : (
                                 <>
@@ -1959,7 +2184,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <Loader2 size={24} className="spin" style={{ color: '#ffffff', flexShrink: 0 }} />
                                     <span style={{ fontSize: '17px', fontWeight: 800, color: '#ffffff' }}>
-                                        KI analysiert 8 Artikel ({aiLoadingSeconds}s) – {getAiLoadingStatus(aiLoadingSeconds).title}
+                                        KI analysiert {Math.min(BATCH_SIZE, Math.max(1, activeTab === 'products' ? filteredProducts.length : filteredSuppliers.length))} {activeTab === 'products' ? 'Artikel' : 'Lieferanten'} ({aiLoadingSeconds}s) – {getAiLoadingStatus(aiLoadingSeconds).title}
                                     </span>
                                 </div>
                                 <div style={{ fontSize: '13px', color: '#c7d2fe', fontWeight: 500 }}>
@@ -1992,7 +2217,9 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         )}
                     </button>
                     <div style={{ marginTop: '8px', fontSize: '13px', color: '#4c1d95', fontWeight: 500 }}>
-                        Ergänzt automatisch Produktbilder, Shop-Links (mit Preis-Check), Kategorien, Mindestbestand & Bestellmenge, Bestellweg (Webshop/E-Mail) und bereinigt Produktnamen – danach öffnet sich das Prüffenster zum einfachen Abhaken.
+                        {activeTab === 'products'
+                            ? 'Ergänzt automatisch Produktbilder, Shop-Links (mit Preis-Check), Kategorien, Mindestbestand & Bestellmenge, Bestellweg (Webshop/E-Mail) und bereinigt Produktnamen – danach öffnet sich das Prüffenster zum einfachen Abhaken.'
+                            : 'Ergänzt per KI & Web-Recherche automatisch offizielle Webseiten, Kundenservice-E-Mails, Telefonnummern, Bestellwege (Webshop/E-Mail) und Standard-Kategorien für deine Lieferanten.'}
                     </div>
                 </div>
 
@@ -2002,46 +2229,101 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     borderBottom: '1px solid var(--color-border)',
                     display: 'flex',
                     gap: '8px',
-                    backgroundColor: 'var(--color-surface)'
+                    backgroundColor: 'var(--color-surface)',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
                 }}>
-                    <button
-                        type="button"
-                        onClick={() => { setActiveTab('products'); setOverviewPage(0); }}
-                        style={{
-                            padding: '8px 16px',
-                            borderRadius: '8px',
-                            border: activeTab === 'products' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                            backgroundColor: activeTab === 'products' ? 'var(--color-primary)' : 'var(--color-surface)',
-                            color: activeTab === 'products' ? '#fff' : 'var(--color-text-main)',
-                            fontWeight: 600,
-                            fontSize: '13px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                        }}
-                    >
-                        <Package size={15} /> Offene Produkte ({filteredProducts.length})
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => { setActiveTab('suppliers'); setOverviewPage(0); }}
-                        style={{
-                            padding: '8px 16px',
-                            borderRadius: '8px',
-                            border: activeTab === 'suppliers' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                            backgroundColor: activeTab === 'suppliers' ? 'var(--color-primary)' : 'var(--color-surface)',
-                            color: activeTab === 'suppliers' ? '#fff' : 'var(--color-text-main)',
-                            fontWeight: 600,
-                            fontSize: '13px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                        }}
-                    >
-                        <Building2 size={15} /> Offene Lieferanten ({filteredSuppliers.length})
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                            type="button"
+                            onClick={() => { setActiveTab('products'); setOverviewPage(0); setSessionReviewedIds(new Set()); }}
+                            style={{
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                border: activeTab === 'products' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                backgroundColor: activeTab === 'products' ? 'var(--color-primary)' : 'var(--color-surface)',
+                                color: activeTab === 'products' ? '#fff' : 'var(--color-text-main)',
+                                fontWeight: 600,
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}
+                        >
+                            <Package size={15} /> Offene Produkte ({filteredProducts.length})
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setActiveTab('suppliers'); setOverviewPage(0); setSessionReviewedIds(new Set()); }}
+                            style={{
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                border: activeTab === 'suppliers' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                backgroundColor: activeTab === 'suppliers' ? 'var(--color-primary)' : 'var(--color-surface)',
+                                color: activeTab === 'suppliers' ? '#fff' : 'var(--color-text-main)',
+                                fontWeight: 600,
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}
+                        >
+                            <Building2 size={15} /> Offene Lieferanten ({filteredSuppliers.length})
+                        </button>
+                    </div>
+
+                    {activeTab === 'products' && incompleteMarkedProducts.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => handleReopenIncompleteMarked('product')}
+                            disabled={savingBulk}
+                            style={{
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #fcd34d',
+                                backgroundColor: '#fffbeb',
+                                color: '#b45309',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}
+                            title="Bereits abgehakte Artikel, denen noch ein Bild, Shop-Link oder eine Kategorie fehlt, erneut zur KI-Prüfung öffnen"
+                        >
+                            <RotateCcw size={13} />
+                            {incompleteMarkedProducts.length} abgehakte Artikel mit Rest-Lücken erneut prüfen
+                        </button>
+                    )}
+
+                    {activeTab === 'suppliers' && incompleteMarkedSuppliers.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => handleReopenIncompleteMarked('supplier')}
+                            disabled={savingBulk}
+                            style={{
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #fcd34d',
+                                backgroundColor: '#fffbeb',
+                                color: '#b45309',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}
+                            title="Bereits abgehakte Lieferanten mit fehlenden Angaben erneut zur KI-Prüfung öffnen"
+                        >
+                            <RotateCcw size={13} />
+                            {incompleteMarkedSuppliers.length} abgehakte Lieferanten mit Rest-Lücken erneut prüfen
+                        </button>
+                    )}
                 </div>
 
                 {error && (
@@ -2314,11 +2596,20 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                             <div>
                                                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{d.name}</div>
                                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginTop: '3px', fontSize: '11px', color: '#64748b' }}>
-                                                    <span>{d.email || 'Keine E-Mail'}</span>
+                                                    {d.email ? (
+                                                        <span>{d.email}</span>
+                                                    ) : (
+                                                        <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>E-Mail fehlt</span>
+                                                    )}
                                                     {d.url ? (
                                                         <span>· {d.url}</span>
                                                     ) : (
                                                         <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Webseite fehlt</span>
+                                                    )}
+                                                    {d.defaultCategory ? (
+                                                        <span style={{ backgroundColor: '#eef2ff', color: '#4338ca', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>{d.defaultCategory}</span>
+                                                    ) : (
+                                                        <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Standard-Kategorie fehlt</span>
                                                     )}
                                                     {!d.phone && (
                                                         <span style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Telefon fehlt</span>
@@ -2382,6 +2673,23 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                         className="input-field"
                                                         style={{ padding: '6px 8px', fontSize: '12px' }}
                                                     />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Kundennummer (optional)"
+                                                        value={d.customerNumber}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], customerNumber: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ padding: '6px 8px', fontSize: '12px' }}
+                                                    />
+                                                    <select
+                                                        value={d.defaultCategory}
+                                                        onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], defaultCategory: e.target.value } }))}
+                                                        className="input-field"
+                                                        style={{ padding: '6px 8px', fontSize: '12px' }}
+                                                    >
+                                                        <option value="">-- Standard-Kategorie --</option>
+                                                        {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
                                                     <select
                                                         value={d.preferredOrderMethod || (d.url ? 'webshop' : 'email')}
                                                         onChange={e => setSupplierDrafts(prev => ({ ...prev, [s.id]: { ...prev[s.id], preferredOrderMethod: e.target.value as any } }))}

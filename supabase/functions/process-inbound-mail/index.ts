@@ -21,25 +21,18 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
   apiErrorData: any;
   rawText: string;
 }> {
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${GEMINI_API_KEY}`
-  const geminiBody = JSON.stringify({
-    contents: [{ parts: geminiParts }],
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: "application/json"
-    }
-  })
-
-  // Intelligentes Modell-Routing: Starte mit vollwertigem Gemini Flash für präzise Beleg- & Tabellenanalyse,
-  // danach gemini-flash-latest, und flash-lite nur als Notfall-Fallback bei extremen Rate-Limits
+  // Intelligentes Modell-Routing: Starte mit aktuellem Gemini 2.5 Flash / Flash-Lite für schnelle & präzise Analyse
   const GEMINI_MODELS = [
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
   ]
   const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
-  const MAX_ATTEMPTS_PER_MODEL = 2
-  const PER_ATTEMPT_TIMEOUT_MS = 18_000
+  const isFastInteractive = totalBudgetMs <= 35_000
+  const MAX_ATTEMPTS_PER_MODEL = isFastInteractive ? 1 : 2
+  const PER_ATTEMPT_TIMEOUT_MS = isFastInteractive ? 8_000 : 18_000
   const startedAt = Date.now()
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -48,15 +41,26 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
 
   modelLoop:
   for (let m = 0; m < GEMINI_MODELS.length; m++) {
+    const modelUrl = GEMINI_MODELS[m]
+    const supportsThinkingConfig = /gemini-2\.5|gemini-flash-latest|gemini-flash-lite-latest/i.test(modelUrl)
+    const geminiBody = JSON.stringify({
+      contents: [{ parts: geminiParts }],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        ...(isFastInteractive && supportsThinkingConfig ? { thinkingConfig: { thinkingBudget: 0 } } : {})
+      }
+    })
+
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
       const remaining = totalBudgetMs - (Date.now() - startedAt)
-      if (remaining < 4_000) break modelLoop
+      if (remaining < 2_500) break modelLoop
 
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), Math.min(PER_ATTEMPT_TIMEOUT_MS, remaining))
       let retryAfterMs = 0
       try {
-        geminiRes = await fetch(GEMINI_MODELS[m], {
+        geminiRes = await fetch(modelUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: geminiBody,
@@ -402,11 +406,11 @@ const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: s
   // WICHTIG: Milchreiniger/Entkalker sind IMMER Reinigung, selbst wenn sie von Coffee Perfect stammen!
   const isCleaning = /(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|seife|schwamm|entkalker|schaben|kakerlaken|ungeziefer|putztuch|wischmopp|fettlöser|sahnereiniger|milchreiniger|maschinenreiniger|rohrreiniger|glasreiniger|allzweckreiniger|spültabs|sanitärreiniger)/i.test(lower)
 
-  // 2. Hygiene & Körperpflege (Toilettenpapier, Kosmetiktücher, Handseife, Desinfektion, Shampoo, Handschuhe)
-  const isHygiene = !isCleaning && /(?:toilettenpapier|kosmetiktücher|taschentücher|küchenrollen|händedesinfektion|desinfektionsmittel|desinfektion|shampoo|duschgel|handseife|seifenspender|wandspender|handschuh|handschuhe|nitril|latex|hotelkosmetik|badelotion|zahnbürste|duschhaube)/i.test(lower)
+  // 2. Hygiene & Körperpflege (Toilettenpapier, Kosmetiktücher, Handseife, Waschgel, Desinfektion, Shampoo, Handschuhe)
+  const isHygiene = !isCleaning && /(?:toilettenpapier|kosmetiktücher|taschentücher|küchenrollen|händedesinfektion|desinfektionsmittel|desinfektion|shampoo|duschgel|waschgel|waschlotion|handseife|seifenspender|wandspender|handschuh|handschuhe|nitril|latex|hotelkosmetik|badelotion|zahnbürste|duschhaube)/i.test(lower)
 
   // 3. Instandhaltung & Technik (Werkzeuge, LED/Leuchtmittel, Batterien, Sanitär, Duschköpfe, Dichtungen, Reparatur, Klebstoffe, Ersatzteile wie Türfächer, Wasserfilter)
-  const isMaintenance = /(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|duschbrause|kühlschrank|türfach|filter|filterkartusche|lampe|leuchtmittel|led|glühbirne|batterie|bohrer|zange|schraubendreher|dichtung|ersatzdichtung|abfluss|ventil|kabel|stecker|rauchmelder)/i.test(lower)
+  const isMaintenance = /(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|duschbrause|kühlschrank|türfach|filter|filterkartusche|lampe|leuchtmittel|dulux|led|glühbirne|batterie|bohrer|zange|schraubendreher|dichtung|ersatzdichtung|abfluss|ventil|kabel|stecker|rauchmelder)/i.test(lower)
 
   // 4. Bürobedarf (Papier, Marker, Stifte, Ordner, Etiketten, Umschläge, Tacker, RFID-Karten)
   const isOffice = /(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro|notizblock|post-it|toner|druckerpatrone|kassenrolle|laminier)/i.test(lower)
@@ -415,12 +419,13 @@ const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: s
   const isHotelGastro = /(?:porzellan|teller|tasse|becher|glas|gläser|besteck|messer|gabel|löffel|serviette|servietten|tischdecke|dessertdeckchen|salzstreuer|pfefferstreuer|türschild|duschhocker|menagen|buffet|tablett|ascher|speisekarte)/i.test(lower)
 
   // 6. Lebensmittel (Frühstück, Obst, Gemüse, Molkerei, Brot, Wurst, Käse, Gewürze, Küchenfolien)
-  const isFood = /(?:melone|käse|schinken|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre|brot|brötchen|croissant|müsli|haferflocken|alufolie|frischhaltefolie|backpapier|salz\b|pfeffer\b|öl\b|essig\b|ketchup|mayonnaise|senf)/i.test(lower)
+  const isFood = /(?:melone|melonen|limette|limetten|käse|mozzarella|bavaria blu|bergader|camembert|weichkäse|schnittkäse|frischkäse|quark|schmand|sahne|schinken|lyoner|jagdwurst|salami|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre|brot|brötchen|croissant|müsli|haferflocken|alufolie|frischhaltefolie|backpapier|salz\b|pfeffer\b|öl\b|essig\b|ketchup|mayonnaise|senf)/i.test(lower)
 
   // 7. Getränke (Kaffee, Tee, Wasser, Säfte, Bier, Wein, Softdrinks)
   const isDrink = !isCleaning && /(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|\bmilch\b|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk|sirup|limonade)/i.test(lower)
 
   let category = normalizeCategory(currentCat)
+  const isReplaceableCat = !category || category === 'Sonstiges' || category === 'Ohne Kategorie' || category === 'Reinigung' || category === 'Bürobedarf'
 
   if (isCleaning) {
     category = 'Reinigung'
@@ -432,9 +437,9 @@ const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: s
     category = 'Bürobedarf'
   } else if (isHotelGastro) {
     category = 'Hotel & Gastro'
-  } else if (isFood && (category === 'Reinigung' || category === 'Bürobedarf' || !category)) {
+  } else if (isFood && isReplaceableCat) {
     category = 'Lebensmittel'
-  } else if (isDrink && (category === 'Reinigung' || category === 'Bürobedarf' || !category)) {
+  } else if (isDrink && isReplaceableCat) {
     category = 'Getränke'
   } else if (!category || category === 'Ohne Kategorie') {
     category = 'Sonstiges'
@@ -2418,14 +2423,23 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           return { orderUrl: '', image: '', shopPrice: null }
         }
 
-        // Echte KI-Analyse für Stammdaten (Kategorie, Einheit, Bereinigter Name, Mindestbestand)
+        // Echte KI-Analyse für Stammdaten (Produkte & Lieferanten)
         const productItemsToAnalyze = items.filter(it => it.type !== 'supplier')
+        const supplierItemsToAnalyze = items.filter(it => it.type === 'supplier')
         const aiAnalysisById = new Map<string, {
           clean_name?: string
+          search_term?: string
           category?: string
           unit?: string
           min_stock?: number
           standard_order_quantity?: number
+        }>()
+        const aiSupplierById = new Map<string, {
+          url?: string
+          email?: string
+          phone?: string
+          preferred_order_method?: 'webshop' | 'email'
+          default_category?: string
         }>()
 
         const standardCats = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro']
@@ -2434,6 +2448,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           ...(existingSuppliers || []).map((s: any) => (s.default_category as string || '').trim())
         ])].filter(c => c && c !== 'Sonstiges' && c !== 'Ohne Kategorie' && c !== 'Importiert')
         const customCategories = allHotelCategories.filter(c => !standardCats.some(s => s.toLowerCase() === c.toLowerCase()))
+
+        const aiPromises: Promise<void>[] = []
 
         if (productItemsToAnalyze.length > 0) {
           const aiPrompt = `
@@ -2445,18 +2461,19 @@ ${customCategories.length > 0 ? `>>> VOM HOTEL INDIVIDUELL EINGERICHTET (bevorzu
 - "Lebensmittel" (Frühstück, Obst, Gemüse, Molkerei, Brot, Belag, Wurst, Käse, Eier, Trockenwaren, Gewürze, Küchenfolien)
 - "Getränke" (Kaffee, Espresso, Tee, Wasser, Säfte, Bier, Wein, Softdrinks, Spirituosen)
 - "Reinigung" (Kaffeemaschinen-Reiniger, Milch- & Sahnereiniger, Entkalker, Spülmittel, Allzweckreiniger, Wischbezüge, Müllbeutel, Schwämme)
-- "Hygiene" (Toilettenpapier, Kosmetiktücher, Handseife, Desinfektion, Shampoo, Duschgel, Gästekosmetik, Handtücher, Handschuhe)
+- "Hygiene" (Toilettenpapier, Kosmetiktücher, Handseife, Waschgel, Waschlotion, Desinfektion, Shampoo, Duschgel, Gästekosmetik, Handtücher, Handschuhe)
 - "Bürobedarf" (Kopierpapier, Stifte, Marker, Edding, Ordner, Etiketten, Notizblöcke, Umschläge, Tacker, Druckertoner, RFID-Karten)
-- "Instandhaltung" (Werkzeug, Leuchtmittel/LED, Batterien, Sanitär/Duschköpfe/Dichtungen, Schrauben, Klebstoffe, Ersatzteile, Kühlschranktürfächer, Wasserfilter)
+- "Instandhaltung" (Werkzeug, Leuchtmittel/LED/Dulux, Batterien, Sanitär/Duschköpfe/Dichtungen, Schrauben, Klebstoffe, Ersatzteile, Kühlschranktürfächer, Wasserfilter)
 - "Hotel & Gastro" (Geschirr, Besteck, Gläser, Servietten, Buffet-Zubehör, Zimmerausstattung, Türschilder, Duschhocker)
 - "Sonstiges" (NUR im absoluten Notfall)
 
 Regeln:
-1. 'clean_name': Saubere, ansprechende Produktbezeichnung auf Deutsch ohne kryptische Artikelnummern, EANs oder Lieferanten-Codes.
-2. 'category': Zwingend eine der obigen Kategorien.${customCategories.length > 0 ? ` Falls ein Artikel zu einer der individuellen Kategorien des Hotels (${customCategories.join(', ')}) passt, ordne ihn ZWINGEND dort ein!` : ''} Kaffeereiniger/Milchreiniger/Entkalker sind IMMER "Reinigung" (niemals "Getränke"). LED/Lampen/Dichtungen/Kleber sind IMMER "Instandhaltung". Duschhocker/Türschilder/Geschirr sind "Hotel & Gastro".
-3. 'unit': Typische Bestelleinheit ("Karton", "Kasten", "Flasche", "Packung", "Rolle", "Dose", "Kanister" oder "Stück").
-4. 'min_stock': Empfohlener Mindestbestand für ein mittelgroßes Stadthotel (ganze Zahl >= 1).
-5. 'standard_order_quantity': Empfohlene Bestellmenge (ganze Zahl >= 1).
+1. 'clean_name': Saubere, ansprechende Produktbezeichnung auf Deutsch ohne kryptische Artikelnummern, EANs oder Großhandels-Kürzel (wie "Kl.I BR", "Kal.105", "-Kt:200 St.-"). WICHTIG: Behalte relevante Gebinde-/Inhaltsangaben (wie "12x0,33L", "24x0,33L", "500g", "20 l", "11W", "6er-Pack") im Namen bei!
+2. 'search_term': Kurzer, optimaler Bild-Suchbegriff (2–4 Wörter auf Deutsch) für eine Produktbild-Suche ohne Mengenangaben/Maße/Kürzel (z. B. "Wassermelone ganz", "Limetten im Netz", "Lyoner mit Paprika Aufschnitt", "Mozzarella Scheiben Frischpack", "Müllbeutel 20L transparent", "Osram Dulux S/E 11W Lampe", "Lepro E14 LED Kerzenlampe").
+3. 'category': Zwingend eine der obigen Kategorien.${customCategories.length > 0 ? ` Falls ein Artikel zu einer der individuellen Kategorien des Hotels (${customCategories.join(', ')}) passt, ordne ihn ZWINGEND dort ein!` : ''} Kaffeereiniger/Milchreiniger/Entkalker sind IMMER "Reinigung" (niemals "Getränke"). Handseife/Waschgel/Duschgel sind "Hygiene". LED/Lampen/Dichtungen/Kleber sind IMMER "Instandhaltung". Duschhocker/Türschilder/Geschirr sind "Hotel & Gastro".
+4. 'unit': Typische Bestelleinheit ("Karton", "Kasten", "Flasche", "Packung", "Rolle", "Dose", "Kanister" oder "Stück").
+5. 'min_stock': Empfohlener Mindestbestand für ein mittelgroßes Stadthotel (ganze Zahl >= 1).
+6. 'standard_order_quantity': Empfohlene Bestellmenge (ganze Zahl >= 1).
 
 Artikel:
 ${JSON.stringify(productItemsToAnalyze.map(p => ({ id: p.id, name: p.name, supplier: p.supplierName || '' })), null, 2)}
@@ -2467,6 +2484,7 @@ Antworte ausschließlich als JSON im Format:
     {
       "id": "...",
       "clean_name": "...",
+      "search_term": "...",
       "category": "...",
       "unit": "...",
       "min_stock": 2,
@@ -2475,57 +2493,153 @@ Antworte ausschließlich als JSON im Format:
   ]
 }
 `
-          try {
-            const aiRes = await callGeminiJson([{ text: aiPrompt }], 25_000)
-            if (aiRes.ok && Array.isArray(aiRes.parsedData?.results)) {
-              for (const r of aiRes.parsedData.results) {
-                if (r.id) aiAnalysisById.set(String(r.id), r)
+          aiPromises.push((async () => {
+            try {
+              const aiRes = await callGeminiJson([{ text: aiPrompt }], 22_000)
+              if (aiRes.ok && Array.isArray(aiRes.parsedData?.results)) {
+                for (const r of aiRes.parsedData.results) {
+                  if (r.id) aiAnalysisById.set(String(r.id), r)
+                }
               }
+            } catch (e) {
+              console.warn("AI product completion error:", e)
             }
-          } catch (e) {
-            console.warn("AI completion error:", e)
-          }
+          })())
+        }
+
+        if (supplierItemsToAnalyze.length > 0) {
+          const supplierContextList = supplierItemsToAnalyze.map(s => {
+            const sampleProds = (existingProducts || [])
+              .filter((p: any) => p.supplier_id === s.id)
+              .slice(0, 5)
+              .map((p: any) => p.name)
+            return {
+              id: s.id,
+              name: s.name,
+              current_url: s.url || '',
+              current_email: (s.email && s.email !== 'hello@unbekannt.com') ? s.email : '',
+              current_phone: s.phone || '',
+              sample_products: sampleProds
+            }
+          })
+
+          const supAiPrompt = `
+Du bist ein erfahrener Hotel-Einkaufsleiter in Deutschland.
+Vervollständige die fehlenden Stammdaten der folgenden Lieferanten für unser Hotel-Bestellwesen.
+
+Erlaubte Standard-Kategorien ('default_category'):
+${customCategories.length > 0 ? `>>> VOM HOTEL INDIVIDUELL EINGERICHTET (bevorzuge diese, wenn die Produkte des Lieferanten dazu passen!):\n${customCategories.map(c => `- "${c}"`).join('\n')}\n` : ''}Standard-Kategorien:
+- "Lebensmittel"
+- "Getränke"
+- "Reinigung"
+- "Hygiene"
+- "Bürobedarf"
+- "Instandhaltung"
+- "Hotel & Gastro"
+- "Sonstiges"
+
+Regeln für jeden Lieferanten:
+1. 'url': Offizielle deutsche Webseite bzw. Online-Shop URL (mit https://, z. B. "https://www.lusini.com/de-de/", "https://www.fixpart.de", "https://www.reinigungsberater.de").
+2. 'email': Offizielle deutsche Kundenservice-, Info- oder Bestell-E-Mail-Adresse des Unternehmens (z. B. "service@lusini.com", "kundenservice@fixpart.de", "info@gottron.de"). NIEMALS "hello@unbekannt.com" verwenden!
+3. 'phone': Offizielle deutsche Kundenservice- oder Zentral-Telefonnummer (z. B. "+49 8272 807350") falls bekannt, sonst leerer String "".
+4. 'preferred_order_method': "webshop" für Online-Shops, Selbstbedienungs-Portale & SaaS, oder "email" für klassische Großhändler (Frischdienst, Getränkegroßhandel, Direktbestellung per E-Mail).
+5. 'default_category': Die treffendste Kategorie aus der obigen Liste anhand des Lieferantennamens und seiner 'sample_products'.
+
+Lieferanten:
+${JSON.stringify(supplierContextList, null, 2)}
+
+Antworte ausschließlich als JSON im Format:
+{
+  "suppliers": [
+    {
+      "id": "...",
+      "url": "https://...",
+      "email": "...",
+      "phone": "...",
+      "preferred_order_method": "webshop",
+      "default_category": "..."
+    }
+  ]
+}
+`
+          aiPromises.push((async () => {
+            try {
+              const supAiRes = await callGeminiJson([{ text: supAiPrompt }], 22_000)
+              if (supAiRes.ok && Array.isArray(supAiRes.parsedData?.suppliers)) {
+                for (const sr of supAiRes.parsedData.suppliers) {
+                  if (sr.id) aiSupplierById.set(String(sr.id), sr)
+                }
+              }
+            } catch (e) {
+              console.warn("AI supplier completion error:", e)
+            }
+          })())
+        }
+
+        if (aiPromises.length > 0) {
+          await Promise.all(aiPromises)
         }
 
         const results = await Promise.all(items.map(async (item: any) => {
           if (item.type === 'supplier') {
+            const aiSup = aiSupplierById.get(String(item.id))
             const lowerName = String(item.name || '').trim().toLowerCase()
             const fromMail = emailMetaBySupplier.get(lowerName) || {}
-            let effectiveEmail = (item.email && item.email !== 'hello@unbekannt.com') ? item.email : (fromMail.email || '')
-            let effectivePhone = item.phone || fromMail.phone || ''
-            const domHint = resolveSupplierDomainHint(item.name, item.url, effectiveEmail) || shopDomainBySupplierName.get(lowerName) || ''
-            const suggestedUrl = item.url || (domHint ? (domHint.startsWith('shop.') || domHint.startsWith('cloud.') ? `https://${domHint}` : `https://www.${domHint.replace(/^www\./, '')}`) : '')
+            let effectiveEmail = (item.email && item.email !== 'hello@unbekannt.com')
+              ? item.email
+              : (fromMail.email || (aiSup?.email && aiSup.email !== 'hello@unbekannt.com' ? aiSup.email : ''))
+            let effectivePhone = item.phone || fromMail.phone || aiSup?.phone || ''
+            const domHint = resolveSupplierDomainHint(item.name, item.url || aiSup?.url, effectiveEmail) || shopDomainBySupplierName.get(lowerName) || ''
+            const suggestedUrl = item.url || aiSup?.url || (domHint ? (domHint.startsWith('shop.') || domHint.startsWith('cloud.') ? `https://${domHint}` : `https://www.${domHint.replace(/^www\./, '')}`) : '')
             const isEmailOnly = isEmailOnlyWholesaler(item.name, effectiveEmail)
             const suggestedOrderMethod: 'email' | 'webshop' = isEmailOnly
               ? 'email'
-              : (suggestedUrl || domHint ? 'webshop' : 'email')
+              : (aiSup?.preferred_order_method || (suggestedUrl || domHint ? 'webshop' : 'email'))
+            const existingSupObj = supplierById.get(String(item.id))
+            const rawDefCat = item.defaultCategory || existingSupObj?.default_category || aiSup?.default_category || ''
+            const suggestedDefaultCategory = normalizeCategory(rawDefCat, customCategories) || ''
 
-            // Falls Telefon oder E-Mail noch fehlen und eine Webseite bekannt ist, kurz nach tel: / mailto: auf der Seite schauen
+            // Falls Telefon oder E-Mail noch fehlen und eine Webseite bekannt ist, parallel auf Startseite & /impressum schauen
             if (suggestedUrl && (!effectivePhone || !effectiveEmail)) {
-              const ctrl = new AbortController()
-              const t = setTimeout(() => ctrl.abort(), 2400)
-              try {
-                const r = await fetch(suggestedUrl, {
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept-Language': 'de-DE,de;q=0.9'
-                  },
-                  signal: ctrl.signal
-                })
-                if (r.ok) {
-                  const html = await r.text()
-                  if (!effectivePhone) {
-                    const telMatch = html.match(/href=["']tel:([+0-9\s()/.-]{7,22})["']/i)
-                    if (telMatch?.[1]) effectivePhone = telMatch[1].trim()
-                  }
-                  if (!effectiveEmail) {
-                    const mailMatch = html.match(/href=["']mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/i)
-                    if (mailMatch?.[1]) effectiveEmail = mailMatch[1].trim()
-                  }
+              const extractContactFromHtml = (html: string) => {
+                if (!effectivePhone) {
+                  const telMatch = html.match(/href=["']tel:([+0-9\s()/.-]{7,22})["']/i) ||
+                    html.match(/(?:Telefon|Tel\.?|Fon|Hotline)\s*[:.]?\s*(\+49[\s()/0-9.-]{7,20}|0[1-9][0-9\s()/.-]{6,18})/i)
+                  if (telMatch?.[1]) effectivePhone = telMatch[1].replace(/\s+/g, ' ').trim()
                 }
-              } catch {} finally {
-                clearTimeout(t)
+                if (!effectiveEmail) {
+                  const mailMatch = html.match(/href=["']mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/i) ||
+                    html.match(/\b((?:info|service|kundenservice|kontakt|bestellung|order|mail|office|support)@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/i)
+                  if (mailMatch?.[1]) effectiveEmail = mailMatch[1].trim()
+                }
               }
+
+              let baseOrigin = ''
+              try {
+                baseOrigin = new URL(suggestedUrl).origin
+              } catch {}
+
+              const pagesToTry = [...new Set([suggestedUrl, ...(baseOrigin ? [`${baseOrigin}/impressum`, `${baseOrigin}/kontakt`] : [])])]
+              await Promise.allSettled(pagesToTry.map(async (pageUrl) => {
+                if (effectivePhone && effectiveEmail) return
+                const ctrl = new AbortController()
+                const t = setTimeout(() => ctrl.abort(), 1800)
+                try {
+                  const r = await fetch(pageUrl, {
+                    headers: {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                      'Accept-Language': 'de-DE,de;q=0.9'
+                    },
+                    signal: ctrl.signal
+                  })
+                  if (r.ok) {
+                    const html = await r.text()
+                    extractContactFromHtml(html)
+                  }
+                } catch {} finally {
+                  clearTimeout(t)
+                }
+              }))
             }
 
             return {
@@ -2535,7 +2649,8 @@ Antworte ausschließlich als JSON im Format:
               email: effectiveEmail,
               phone: effectivePhone,
               customerNumber: item.customerNumber || fromMail.customer_number || '',
-              preferredOrderMethod: item.preferredOrderMethod || suggestedOrderMethod
+              preferredOrderMethod: item.preferredOrderMethod || suggestedOrderMethod,
+              defaultCategory: suggestedDefaultCategory
             }
           } else {
             const aiResult = aiAnalysisById.get(String(item.id))
@@ -2543,7 +2658,7 @@ Antworte ausschließlich als JSON im Format:
             const lowerProdName = String(item.name || '').trim().toLowerCase()
             const lowerCleanName = cleanedName.toLowerCase()
             const mailSku = skuByProductName.get(lowerProdName) || skuByProductName.get(lowerCleanName) || ''
-            const effectiveSku = String(item.productNumber || mailSku || '').trim()
+            let effectiveSku = String(item.productNumber || mailSku || '').trim()
             const mailPrice = priceByProductName.get(lowerProdName) || priceByProductName.get(lowerCleanName) || null
             const knownPrice = (item.price && Number(item.price) > 0) ? Number(item.price) : mailPrice
 
@@ -2566,7 +2681,7 @@ Antworte ausschließlich als JSON im Format:
             // 2. Bildersuche über Bing (mit Artikelnummer + bereinigtem Namen!)
             const normalizedSearchName = (cleanedName || item.name || '').replace(/[×]/g, 'x')
             const query = `${normalizedSearchName} ${effectiveSku} ${webshopDomain}`.trim()
-            const bingRes = await searchBingProductMeta(query, webshopDomain)
+            let bingRes = await searchBingProductMeta(query, webshopDomain)
 
             if (!suggestedOrderUrl && webshopDomain && bingRes.orderUrl && isDeepProductUrl(bingRes.orderUrl)) {
               suggestedOrderUrl = bingRes.orderUrl
@@ -2600,11 +2715,19 @@ Antworte ausschließlich als JSON im Format:
               } catch {}
             }
 
+            // Lieferanten-Standardkategorie als zusätzlichen Hinweis nutzen, falls vorhanden
+            const supObj = suggestedSupplierId ? supplierById.get(suggestedSupplierId) : null
+            const supDefaultCat = supObj?.default_category ? normalizeCategory(supObj.default_category, customCategories) : ''
+
             let effectiveCategory = normalizeCategory(aiResult?.category || item.category, customCategories)
             let effectiveUnit = aiResult?.unit || item.unit
             if (!effectiveCategory || effectiveCategory === 'Sonstiges') {
               const fallback = inferCategoryAndUnit(cleanedName || item.name, effectiveCategory, effectiveUnit, customCategories)
-              if (!effectiveCategory || effectiveCategory === 'Sonstiges') effectiveCategory = fallback.category
+              if (!effectiveCategory || effectiveCategory === 'Sonstiges') {
+                effectiveCategory = (fallback.category && fallback.category !== 'Sonstiges')
+                  ? fallback.category
+                  : (supDefaultCat || fallback.category)
+              }
               if (!effectiveUnit || effectiveUnit === 'Stück' || effectiveUnit === 'Stk') effectiveUnit = fallback.unit
             }
             effectiveCategory = normalizeCategory(effectiveCategory, customCategories) || 'Sonstiges'
@@ -2645,6 +2768,27 @@ Antworte ausschließlich als JSON im Format:
                 }
               } catch {} finally {
                 clearTimeout(t)
+              }
+            }
+
+            // 4. Zweiter Bild-Fallback: Wenn die spezifische Suche (mit interner Großhandels-SKU / Domain / Maßen) kein Bild geliefert hat,
+            // mit dem prägnanten KI-Suchbegriff (oder bereinigtem Kern-Namen ohne SKU/Maße) auf Bing Images suchen!
+            if (!item.image && !directImage && !bingRes.image) {
+              const simplifiedCore = (aiResult?.search_term || cleanedName || item.name || '')
+                .replace(/["„“”]/g, ' ')
+                .replace(/\b(?:Kl\.?\s*[I123]+|Kal\.?\s*\d+|Fächerpack|ca\.?\s*\d+[xX×.,\d\s]*(?:g|kg|ml|l|cm)?|Ø\s*\d+\s*cm|H\s*\d+\s*x\s*B\s*\d+\s*cm|\d+\s*my)\b/gi, ' ')
+                .replace(/\s{2,}/g, ' ')
+                .trim()
+              if (simplifiedCore && simplifiedCore.toLowerCase() !== query.toLowerCase()) {
+                const fallbackBing = await searchBingProductMeta(simplifiedCore)
+                if (fallbackBing.image) {
+                  bingRes = {
+                    ...bingRes,
+                    image: fallbackBing.image,
+                    highResImage: fallbackBing.highResImage || fallbackBing.image,
+                    alternatives: [...new Set([...(bingRes.alternatives || []), ...(fallbackBing.alternatives || [])])]
+                  }
+                }
               }
             }
 
@@ -2756,14 +2900,18 @@ Antworte ausschließlich als JSON im Format:
 
         const supIdsToFetch = supUpdates.map((s: any) => s?.id).filter(Boolean)
         const oldSupNameById = new Map<string, string>()
+        const oldSupById = new Map<string, any>()
         if (supIdsToFetch.length > 0) {
           const { data: oldSups } = await supabase
             .from('suppliers')
-            .select('id, name')
+            .select('id, name, url, order_url')
             .eq('company_id', company_id)
             .in('id', supIdsToFetch)
           for (const os of (oldSups || [])) {
-            if (os?.id && os?.name) oldSupNameById.set(os.id, String(os.name))
+            if (os?.id) {
+              oldSupById.set(os.id, os)
+              if (os.name) oldSupNameById.set(os.id, String(os.name))
+            }
           }
         }
 
@@ -2815,16 +2963,21 @@ Antworte ausschließlich als JSON im Format:
 
         for (const s of supUpdates) {
           if (!s?.id) continue
+          const oldSup = oldSupById.get(s.id)
           const patch: any = { is_auto_generated: false }
           if (s.name !== undefined && String(s.name).trim()) patch.name = String(s.name).trim()
           if (s.email !== undefined) patch.email = s.email || 'hello@unbekannt.com'
           if (s.phone !== undefined) patch.phone = s.phone || null
           if (s.url !== undefined) {
             patch.url = s.url || null
-            if (s.url) patch.order_url = s.url
+            // WICHTIG: Einen bereits hinterlegten dedizierten B2B-Bestellportal-Link (order_url != url) niemals mit der allgemeinen Startseite überschreiben!
+            if (s.url && (!oldSup?.order_url || oldSup.order_url === oldSup.url)) {
+              patch.order_url = s.url
+            }
           }
           if (s.customer_number !== undefined) patch.customer_number = s.customer_number || null
           if (s.preferred_order_method !== undefined) patch.preferred_order_method = s.preferred_order_method || null
+          if (s.default_category !== undefined) patch.default_category = s.default_category || null
 
           const oldSupName = oldSupNameById.get(s.id)
           const { error: sErr } = await supabase
