@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { callGeminiApi, GEMINI_MODELS_LIST } from "../_shared/gemini.ts"
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -183,7 +184,7 @@ serve(async (req) => {
         context,
         failed_selector,
         html_snippet: html_snippet ? html_snippet.substring(0, 50_000) : null,
-        ai_model:     'gemini-1.5-flash-latest',
+        ai_model:     GEMINI_MODELS_LIST[0],
         healed:       false,
       })
       .select('id')
@@ -234,41 +235,35 @@ Antworte ausschließlich als JSON:
     }
     geminiParts.push({ text: taskPrompt })
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`
-    const geminiRes = await fetch(
-      geminiUrl,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: geminiParts }],
-          generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-        }),
-      }
-    )
+    const geminiResult = await callGeminiApi({
+      apiKey: GEMINI_API_KEY,
+      parts: geminiParts,
+      totalBudgetMs: 28_000,
+      temperature: 0.2,
+      responseMimeType: 'application/json',
+    })
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text()
-      console.error('[self-heal] Gemini HTTP', geminiRes.status, errText.substring(0, 300))
+    if (!geminiResult.ok) {
+      const apiErrMsg = geminiResult.apiErrorData?.error?.message || geminiResult.parsedData?.parse_error || 'Gemini nicht erreichbar'
+      console.error('[self-heal] Gemini failed across model chain:', apiErrMsg)
       if (logId) {
         await adminClient.from('selector_heal_log')
-          .update({ ai_response: { error: `HTTP ${geminiRes.status}` } }).eq('id', logId)
+          .update({ ai_response: { error: apiErrMsg } }).eq('id', logId)
       }
-      return respond({ new_selector: null, healed: false, error: `Gemini ${geminiRes.status}: ${errText.substring(0, 150)}` })
+      return respond({
+        new_selector: null,
+        healed: false,
+        error: 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.',
+        errorCode: 'GEMINI_UNAVAILABLE',
+      })
     }
 
-    const geminiData = await geminiRes.json()
-    const rawText    = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    const inputTokens: number | null = geminiData?.usageMetadata?.promptTokenCount ?? null
+    const aiParsed = (geminiResult.parsedData && typeof geminiResult.parsedData === 'object')
+      ? (geminiResult.parsedData as { selector?: string; confidence?: number; reasoning?: string })
+      : {}
+    const inputTokens: number | null = geminiResult.usageMetadata?.promptTokenCount ?? null
 
-    console.log('[self-heal] Gemini output:', rawText.substring(0, 400))
-
-    let aiParsed: { selector?: string; confidence?: number; reasoning?: string } = {}
-    try {
-      aiParsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim())
-    } catch (e) {
-      console.error('[self-heal] JSON parse failed:', e, '— raw:', rawText)
-    }
+    console.log(`[self-heal] Gemini (${geminiResult.model}) output:`, geminiResult.rawText.substring(0, 400))
 
     const newSelector = (typeof aiParsed.selector === 'string' && aiParsed.selector.trim())
       ? aiParsed.selector.trim() : null
@@ -280,6 +275,7 @@ Antworte ausschließlich als JSON:
     if (logId) {
       await adminClient.from('selector_heal_log').update({
         new_selector:     newSelector,
+        ai_model:         geminiResult.model || GEMINI_MODELS_LIST[0],
         ai_prompt_tokens: inputTokens,
         ai_response:      aiParsed,
         healed,

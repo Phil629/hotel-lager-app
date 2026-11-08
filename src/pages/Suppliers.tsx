@@ -9,9 +9,8 @@ import type { Supplier, Product } from '../types';
 import { DataService } from '../services/data';
 import { getSupabaseClient } from '../services/supabase';
 import { Notification, type NotificationType } from '../components/Notification';
-import { normalizeCategory } from './Products';
-
-const STANDARD_CATEGORIES = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro', 'Sonstiges'];
+import { STANDARD_CATEGORIES, normalizeCategory } from '../lib/categories';
+import { sanitizeSupplierEmail } from '../lib/supplierHelpers';
 
 export const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -44,7 +43,7 @@ export const Suppliers: React.FC = () => {
     const [resetExistingMinStock, setResetExistingMinStock] = useState(true);
 
     const availableCategories = useMemo(() => {
-        const set = new Set(STANDARD_CATEGORIES.filter(c => c !== 'Sonstiges'));
+        const set = new Set<string>(STANDARD_CATEGORIES.filter(c => c !== 'Sonstiges'));
         products.forEach(p => {
             const norm = normalizeCategory(p.category);
             if (norm && norm !== 'Ohne Kategorie' && norm !== 'Sonstiges') set.add(norm);
@@ -124,7 +123,11 @@ export const Suppliers: React.FC = () => {
         setResetExistingMinStock(true);
         if (supplier) {
             setEditingSupplier(supplier);
-            setFormData(supplier);
+            setFormData({
+                ...supplier,
+                email: sanitizeSupplierEmail(supplier.email),
+                defaultCategory: normalizeCategory(supplier.defaultCategory) || undefined,
+            });
             setSelectedProductIds(products.filter(p => p.supplierId === supplier.id).map(p => p.id));
             // Fetch credentials (only works for admins/owners, backend will reject otherwise)
             if (userRole === 'owner' || userRole === 'admin' || canSeePasswords) {
@@ -177,7 +180,7 @@ export const Suppliers: React.FC = () => {
                 is_auto_generated: editingSupplier?.is_auto_generated,
                 name: formData.name,
                 contactName: formData.contactName,
-                email: formData.email || '',
+                email: sanitizeSupplierEmail(formData.email) || undefined,
                 phone: formData.phone,
                 url: formData.url,
                 notes: formData.notes || [],
@@ -193,7 +196,7 @@ export const Suppliers: React.FC = () => {
                 defaultNoMinStock: !!formData.defaultNoMinStock,
                 customerNumber: formData.customerNumber,
                 paymentMethod: formData.paymentMethod,
-                defaultCategory: formData.defaultCategory || undefined,
+                defaultCategory: normalizeCategory(formData.defaultCategory) || undefined,
                 emailSubjectTemplate: formData.emailSubjectTemplate,
                 emailBodyTemplate: formData.emailBodyTemplate,
                 selectors: {
@@ -287,7 +290,7 @@ export const Suppliers: React.FC = () => {
 
     const filteredSuppliers = suppliers.filter(s =>
         s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+        sanitizeSupplierEmail(s.email).toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Modal product grouping
@@ -383,10 +386,12 @@ export const Suppliers: React.FC = () => {
 
                             {/* Body */}
                             <div style={{ padding: 'var(--spacing-xl)', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <a href={`mailto:${supplier.email}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#475569', textDecoration: 'none', fontSize: '14px', padding: '8px', borderRadius: 'var(--radius-md)', transition: 'background-color 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}  onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                    <div style={{ padding: '6px', backgroundColor: '#e0e7ff', color: '#4f46e5', borderRadius: '50%' }}><Mail size={14} /></div>
-                                    {supplier.email}
-                                </a>
+                                {sanitizeSupplierEmail(supplier.email) && (
+                                    <a href={`mailto:${sanitizeSupplierEmail(supplier.email)}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#475569', textDecoration: 'none', fontSize: '14px', padding: '8px', borderRadius: 'var(--radius-md)', transition: 'background-color 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}  onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                        <div style={{ padding: '6px', backgroundColor: '#e0e7ff', color: '#4f46e5', borderRadius: '50%' }}><Mail size={14} /></div>
+                                        {sanitizeSupplierEmail(supplier.email)}
+                                    </a>
+                                )}
                                 
                                 {supplier.phone && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#475569', fontSize: '14px', padding: '8px', borderRadius: 'var(--radius-md)' }}>
@@ -473,7 +478,7 @@ export const Suppliers: React.FC = () => {
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
                                             <div className="form-group">
                                                 <label className="form-label">Email (Bestellung)</label>
-                                                <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="input-field" />
+                                                <input type="email" value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} className="input-field" />
                                             </div>
                                             <div className="form-group">
                                                 <label className="form-label">Webseite / Portal URL</label>

@@ -17,6 +17,13 @@ import {
 } from 'lucide-react';
 import type { Product, Supplier } from '../types';
 import { supabase } from '../services/supabase';
+import { STANDARD_CATEGORIES, normalizeCategory } from '../lib/categories';
+import {
+    sanitizeSupplierEmail,
+    isDeepProductUrl,
+    isSupplierWebshop,
+    isSupplierNaturallyComplete
+} from '../lib/supplierHelpers';
 
 interface DataCompletionModalProps {
     isOpen: boolean;
@@ -88,64 +95,6 @@ interface SupplierDraft {
         preferredOrderMethod?: boolean;
     };
 }
-
-const STANDARD_CATEGORIES = [
-    'Lebensmittel',
-    'Getränke',
-    'Reinigung',
-    'Hygiene',
-    'Bürobedarf',
-    'Instandhaltung',
-    'Hotel & Gastro',
-    'Hotelbedarf',
-    'Gastronomiebedarf',
-    'Technik',
-    'Sonstiges'
-];
-
-const KNOWN_WEBSHOP_KEYWORDS = [
-    'amazon',
-    'böttcher',
-    'bueromarkt',
-    'hygi',
-    'reinigungsberater',
-    'lusini',
-    'papstar',
-    'ronnefeldt',
-    'coffee perfect',
-    'porzellantreff',
-    'deutsche post',
-    'ada cosmetics',
-    'eofficeshop',
-    'tecserv',
-    'gottron',
-    'hamburgpapier',
-    'kaeferling',
-    'zoells',
-    'cent direktvertrieb',
-    'otto office',
-    'viking',
-    'metro',
-    'vega',
-    'gastro hero',
-    'intergastro',
-    'fixpart',
-    'faironto'
-];
-
-const EMAIL_ONLY_SUPPLIER_KEYWORDS = [
-    'hewo',
-    'schwälbchen',
-    'schwaelbchen',
-    'frischdienst',
-    'getränke-vertrieb',
-    'getraenke-vertrieb',
-    'wäscherei',
-    'waescherei',
-    'bäckerei',
-    'baeckerei',
-    'metzgerei'
-];
 
 const BATCH_SIZE = 8;
 
@@ -267,55 +216,15 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
         initDraftsAndState();
     }, [isOpen, initialTab]);
 
-    const isEmailOnlySupplier = (sup?: Supplier | null): boolean => {
-        if (!sup) return false;
-        const lower = `${sup.name || ''} ${sup.email || ''}`.toLowerCase();
-        return EMAIL_ONLY_SUPPLIER_KEYWORDS.some(k => lower.includes(k));
-    };
-
-    const isSupplierWebshop = (sup?: Supplier | null, prod?: Product | ProductDraft | null): boolean => {
-        if (isEmailOnlySupplier(sup)) return false;
-        if (prod?.preferredOrderMethod === 'webshop' || prod?.preferredOrderMethod === 'link') return true;
-        if (isDeepProductUrl(prod?.orderUrl)) return true;
-        if (!sup) return false;
-        if (sup.preferredOrderMethod === 'webshop' || sup.preferredOrderMethod === 'link') return true;
-        if (isDeepProductUrl(sup.orderUrl)) return true;
-        const lowerName = (sup.name || '').toLowerCase();
-        if (KNOWN_WEBSHOP_KEYWORDS.some(k => lowerName.includes(k))) return true;
-        const lowerUrl = (sup.url || '').toLowerCase();
-        if (lowerUrl.includes('shop.') || lowerUrl.includes('store.')) return true;
-        return false;
-    };
-
-    const isDeepProductUrl = (url?: string): boolean => {
-        if (!url || !url.trim()) return false;
-        try {
-            const u = new URL(url.startsWith('http') ? url : `https://${url}`);
-            const cleanPath = u.pathname.replace(/^\/(de|en)?\/?$/i, '').trim();
-            return cleanPath.length > 1;
-        } catch {
-            return false;
-        }
-    };
-
     const isProductNaturallyComplete = (p: Product): boolean => {
         const hasImage = !!(p.image && p.image.trim());
         const hasSupplier = !!p.supplierId;
         const sup = suppliers.find(s => s.id === p.supplierId);
         const needsShopLink = isSupplierWebshop(sup, p);
         const hasOrderLinkOrEmailMethod = !needsShopLink || isDeepProductUrl(p.orderUrl);
-        const hasCategory = !!(p.category && p.category !== 'Sonstiges' && p.category !== 'Ohne Kategorie');
+        const normCat = normalizeCategory(p.category);
+        const hasCategory = !!(normCat && normCat !== 'Sonstiges');
         return hasImage && hasSupplier && hasOrderLinkOrEmailMethod && hasCategory;
-    };
-
-    const isSupplierNaturallyComplete = (s: Supplier): boolean => {
-        const hasValidEmail = !!(s.email && s.email.trim() && s.email !== 'hello@unbekannt.com');
-        const hasUrl = !!((s.url && s.url.trim()) || (s.orderUrl && s.orderUrl.trim()));
-        const hasPhone = !!(s.phone && s.phone.trim());
-        const hasMethod = !!s.preferredOrderMethod;
-        const hasDefaultCat = !!(s.defaultCategory && s.defaultCategory.trim());
-        if (s.preferredOrderMethod === 'phone') return hasPhone && hasDefaultCat;
-        return hasValidEmail && hasUrl && hasMethod && hasDefaultCat;
     };
 
     const initDraftsAndState = async () => {
@@ -325,7 +234,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 id: p.id,
                 name: p.name || '',
                 originalName: p.name || '',
-                category: p.category || 'Sonstiges',
+                category: normalizeCategory(p.category) || 'Sonstiges',
                 unit: p.unit || 'Stück',
                 price: p.price || 0,
                 minStock: p.minStock || 0,
@@ -346,11 +255,11 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             sDrafts[s.id] = {
                 id: s.id,
                 name: s.name || '',
-                email: s.email && s.email !== 'hello@unbekannt.com' ? s.email : '',
+                email: sanitizeSupplierEmail(s.email),
                 phone: s.phone || '',
                 url: s.url || s.orderUrl || '',
                 customerNumber: s.customerNumber || '',
-                defaultCategory: s.defaultCategory || '',
+                defaultCategory: normalizeCategory(s.defaultCategory) || '',
                 preferredOrderMethod: s.preferredOrderMethod,
                 aiFields: {}
             };
@@ -388,9 +297,15 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
     }, [openProductsCount, openSuppliersCount]);
 
     const availableCategories = useMemo(() => {
-        const set = new Set([...STANDARD_CATEGORIES]);
-        products.forEach(p => { if (p.category) set.add(p.category); });
-        suppliers.forEach(s => { if (s.defaultCategory) set.add(s.defaultCategory); });
+        const set = new Set<string>([...STANDARD_CATEGORIES]);
+        products.forEach(p => {
+            const norm = normalizeCategory(p.category);
+            if (norm) set.add(norm);
+        });
+        suppliers.forEach(s => {
+            const norm = normalizeCategory(s.defaultCategory);
+            if (norm) set.add(norm);
+        });
         return Array.from(set).filter(Boolean);
     }, [products, suppliers]);
 
@@ -435,7 +350,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 id: orig.id,
                 name: orig.name || '',
                 originalName: orig.name || '',
-                category: orig.category || 'Sonstiges',
+                category: normalizeCategory(orig.category) || 'Sonstiges',
                 unit: orig.unit || 'Stück',
                 price: orig.price || 0,
                 minStock: orig.minStock || 0,
@@ -467,11 +382,11 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             [supplierId]: {
                 id: orig.id,
                 name: orig.name || '',
-                email: orig.email && orig.email !== 'hello@unbekannt.com' ? orig.email : '',
+                email: sanitizeSupplierEmail(orig.email),
                 phone: orig.phone || '',
                 url: orig.url || orig.orderUrl || '',
                 customerNumber: orig.customerNumber || '',
-                defaultCategory: orig.defaultCategory || '',
+                defaultCategory: normalizeCategory(orig.defaultCategory) || '',
                 preferredOrderMethod: orig.preferredOrderMethod,
                 aiSuggested: false,
                 isEditing: false,
@@ -519,7 +434,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         orderUrl: d?.orderUrl || '',
                         supplierName: sup?.name || '',
                         supplierUrl: sup?.url || sup?.orderUrl || '',
-                        supplierEmail: sup?.email || '',
+                        supplierEmail: sanitizeSupplierEmail(sup?.email),
+                        supplierOrderMethod: sup?.preferredOrderMethod || '',
                         isWebshopSupplier: webshop
                     };
                 });
@@ -541,7 +457,8 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         if (!cur) continue;
                         const newSupplierId = !cur.supplierId && s.supplierId ? s.supplierId : cur.supplierId;
                         const sup = suppliers.find(supItem => supItem.id === newSupplierId);
-                        const allowShopLink = !isEmailOnlySupplier(sup);
+                        const supMethod = sup?.preferredOrderMethod;
+                        const allowShopLink = supMethod !== 'email' && supMethod !== 'phone';
 
                         const validSuggestedUrl = isDeepProductUrl(s.orderUrl) ? s.orderUrl : '';
                         const newName = s.cleanName && s.cleanName !== cur.name ? s.cleanName : cur.name;
@@ -561,17 +478,18 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                             : cur.standardOrderQuantity;
                         const newOrderMethod = newOrderUrl
                             ? 'webshop'
-                            : (s.preferredOrderMethod || cur.preferredOrderMethod || (isEmailOnlySupplier(sup) ? 'email' : 'webshop'));
-                        const isMismatch = (cur.category === 'Getränke' || cur.category === 'Lebensmittel') && (s.category === 'Reinigung' || s.category === 'Instandhaltung' || s.category === 'Bürobedarf');
-                        const shouldUpdateCat = (!cur.category || cur.category === 'Sonstiges' || cur.category === 'Ohne Kategorie' || isMismatch) && s.category && s.category !== 'Sonstiges';
-                        const newCat = shouldUpdateCat ? s.category : cur.category;
+                            : (s.preferredOrderMethod || cur.preferredOrderMethod || (supMethod === 'email' || supMethod === 'phone' ? supMethod : 'email'));
+                        const normSuggestedCat = normalizeCategory(s.category) || s.category;
+                        const isMismatch = (cur.category === 'Getränke' || cur.category === 'Lebensmittel') && (normSuggestedCat === 'Reinigung' || normSuggestedCat === 'Instandhaltung' || normSuggestedCat === 'Bürobedarf');
+                        const shouldUpdateCat = (!cur.category || cur.category === 'Sonstiges' || cur.category === 'Ohne Kategorie' || isMismatch) && normSuggestedCat && normSuggestedCat !== 'Sonstiges';
+                        const newCat = shouldUpdateCat ? normSuggestedCat : cur.category;
                         const newUnit = (!cur.unit || cur.unit === 'Stück' || cur.unit === 'Stk') && s.unit && s.unit !== cur.unit
                             ? s.unit
                             : cur.unit;
 
                         const aiFields = {
                             ...(cur.aiFields || {}),
-                            name: !!(s.cleanName && s.cleanName !== cur.name) ? true : cur.aiFields?.name,
+                            name: (s.cleanName && s.cleanName !== cur.name) ? true : cur.aiFields?.name,
                             image: !cur.image && !!s.image ? true : cur.aiFields?.image,
                             orderUrl: allowShopLink && !cur.orderUrl && !!validSuggestedUrl ? true : cur.aiFields?.orderUrl,
                             productNumber: !cur.productNumber && !!s.productNumber ? true : cur.aiFields?.productNumber,
@@ -627,7 +545,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         id: s.id,
                         type: 'supplier',
                         name: d?.name || s.name,
-                        email: d?.email || s.email || '',
+                        email: sanitizeSupplierEmail(d?.email || s.email),
                         phone: d?.phone || s.phone || '',
                         url: d?.url || s.url || s.orderUrl || '',
                         customerNumber: d?.customerNumber || s.customerNumber || '',
@@ -652,21 +570,23 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         const cur = next[s.id];
                         if (!cur) continue;
                         const newMethod = cur.preferredOrderMethod || s.preferredOrderMethod || (cur.url || s.url ? 'webshop' : 'email');
+                        const normSuggestedDefCat = normalizeCategory(s.defaultCategory) || s.defaultCategory || '';
                         const hasMeaningfulDefCat = !!cur.defaultCategory && cur.defaultCategory !== 'Sonstiges' && cur.defaultCategory !== 'Ohne Kategorie';
-                        const newDefCat = hasMeaningfulDefCat ? cur.defaultCategory : (s.defaultCategory || cur.defaultCategory || '');
+                        const newDefCat = hasMeaningfulDefCat ? cur.defaultCategory : (normSuggestedDefCat || cur.defaultCategory || '');
+                        const cleanSuggestedEmail = sanitizeSupplierEmail(s.email);
                         const aiFields = {
                             ...(cur.aiFields || {}),
                             url: !cur.url && !!s.url ? true : cur.aiFields?.url,
-                            email: !cur.email && !!s.email ? true : cur.aiFields?.email,
+                            email: !cur.email && !!cleanSuggestedEmail ? true : cur.aiFields?.email,
                             phone: !cur.phone && !!s.phone ? true : cur.aiFields?.phone,
                             customerNumber: !cur.customerNumber && !!s.customerNumber ? true : cur.aiFields?.customerNumber,
-                            defaultCategory: !hasMeaningfulDefCat && !!s.defaultCategory ? true : cur.aiFields?.defaultCategory,
+                            defaultCategory: !hasMeaningfulDefCat && !!normSuggestedDefCat ? true : cur.aiFields?.defaultCategory,
                             preferredOrderMethod: newMethod !== cur.preferredOrderMethod ? true : cur.aiFields?.preferredOrderMethod
                         };
                         next[s.id] = {
                             ...cur,
                             url: cur.url || s.url || '',
-                            email: cur.email || s.email || '',
+                            email: cur.email || cleanSuggestedEmail,
                             phone: cur.phone || s.phone || '',
                             customerNumber: cur.customerNumber || s.customerNumber || '',
                             defaultCategory: newDefCat,
@@ -727,7 +647,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     if (!cur) return prev;
                     const aiFields = {
                         ...(cur.aiFields || {}),
-                        image: !!data.image ? true : cur.aiFields?.image,
+                        image: data.image ? true : cur.aiFields?.image,
                         productNumber: !cur.productNumber && !!data.sku ? true : cur.aiFields?.productNumber,
                         price: (!cur.price || cur.price === 0) && !!data.price ? true : cur.aiFields?.price,
                         category: (!cur.category || cur.category === 'Sonstiges') && !!data.category && data.category !== 'Sonstiges' ? true : cur.aiFields?.category,
@@ -752,6 +672,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     };
                 });
             } else {
+                if (data?.error) setError(data.error);
                 setProductDrafts(prev => ({
                     ...prev,
                     [productId]: { ...prev[productId], loadingRow: false }
@@ -817,11 +738,11 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             return {
                 id,
                 name: d.name,
-                email: d.email || 'hello@unbekannt.com',
+                email: sanitizeSupplierEmail(d.email) || null,
                 phone: d.phone || null,
                 url: d.url || null,
                 customer_number: d.customerNumber || null,
-                default_category: d.defaultCategory || null,
+                default_category: normalizeCategory(d.defaultCategory) || null,
                 preferred_order_method: d.preferredOrderMethod || null,
                 markComplete
             };
@@ -1841,16 +1762,24 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                         <span style={{ backgroundColor: d.aiFields?.email ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.email ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
                                                             📧 {d.email} {d.aiFields?.email && '✨'}
                                                         </span>
-                                                    ) : (
+                                                    ) : (d.preferredOrderMethod === 'email' || !d.preferredOrderMethod) ? (
                                                         <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
                                                             ⚠️ E-Mail fehlt
                                                         </span>
+                                                    ) : (
+                                                        <span style={{ backgroundColor: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: '6px', fontWeight: 500 }}>
+                                                            Keine E-Mail (optional)
+                                                        </span>
                                                     )}
-                                                    {d.phone && (
+                                                    {d.phone ? (
                                                         <span style={{ backgroundColor: d.aiFields?.phone ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.phone ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
                                                             📞 {d.phone} {d.aiFields?.phone && '✨'}
                                                         </span>
-                                                    )}
+                                                    ) : d.preferredOrderMethod === 'phone' ? (
+                                                        <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                                                            ⚠️ Telefon fehlt
+                                                        </span>
+                                                    ) : null}
                                                     {d.customerNumber && (
                                                         <span style={{ backgroundColor: d.aiFields?.customerNumber ? '#f5f3ff' : '#f1f5f9', color: d.aiFields?.customerNumber ? '#6d28d9' : '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
                                                             Kunden-Nr.: {d.customerNumber} {d.aiFields?.customerNumber && '✨'}
@@ -1875,9 +1804,13 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                             </span>
                                                         )}
                                                     </div>
-                                                ) : (
+                                                ) : (d.preferredOrderMethod === 'webshop' || d.preferredOrderMethod === 'link' || !d.preferredOrderMethod) ? (
                                                     <div style={{ fontSize: '12px', color: '#b45309' }}>
                                                         Keine Webseite hinterlegt – klicke auf „Ändern“, um eine URL einzutragen.
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                                        Keine Webseite hinterlegt (Bestellweg: {d.preferredOrderMethod === 'phone' ? 'Telefon' : 'E-Mail'})
                                                     </div>
                                                 )}
                                             </div>
@@ -2712,21 +2645,27 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginTop: '3px', fontSize: '11px', color: '#64748b' }}>
                                                     {d.email ? (
                                                         <span>{d.email}</span>
-                                                    ) : (
+                                                    ) : (!d.preferredOrderMethod || d.preferredOrderMethod === 'email') ? (
                                                         <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>E-Mail fehlt</span>
-                                                    )}
+                                                    ) : null}
                                                     {d.url ? (
-                                                        <span>· {d.url}</span>
-                                                    ) : (
+                                                        <span>{d.email ? '· ' : ''}{d.url}</span>
+                                                    ) : (!d.preferredOrderMethod || d.preferredOrderMethod === 'webshop' || d.preferredOrderMethod === 'link') ? (
                                                         <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Webseite fehlt</span>
-                                                    )}
+                                                    ) : null}
                                                     {d.defaultCategory ? (
                                                         <span style={{ backgroundColor: '#eef2ff', color: '#4338ca', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>{d.defaultCategory}</span>
                                                     ) : (
                                                         <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Standard-Kategorie fehlt</span>
                                                     )}
                                                     {!d.phone && (
-                                                        <span style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: '999px', fontWeight: 600 }}>Telefon fehlt</span>
+                                                        <span style={{
+                                                            backgroundColor: d.preferredOrderMethod === 'phone' ? '#fef3c7' : '#f1f5f9',
+                                                            color: d.preferredOrderMethod === 'phone' ? '#92400e' : '#475569',
+                                                            padding: '1px 6px',
+                                                            borderRadius: '999px',
+                                                            fontWeight: 600
+                                                        }}>Telefon fehlt</span>
                                                     )}
                                                 </div>
                                             </div>

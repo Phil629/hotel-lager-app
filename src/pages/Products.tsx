@@ -17,22 +17,8 @@ import { PriceHistoryChart } from '../components/products/PriceHistoryChart';
 import { ProductIoTModal } from '../components/products/ProductIoTModal';
 import { StockUpdateModal } from '../components/products/StockUpdateModal';
 import { QuickAddModal } from '../components/products/QuickAddModal';
-
-const CATEGORIES = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro', 'Sonstiges'];
-
-export const normalizeCategory = (cat?: string | null): string => {
-    if (!cat) return '';
-    const lower = cat.trim().toLowerCase();
-    if (lower === 'büro' || lower === 'büroartikel' || lower === 'schreibwaren' || lower === 'büro & verwaltung') return 'Bürobedarf';
-    if (lower === 'reinigungsmittel' || lower === 'putzmittel') return 'Reinigung';
-    if (lower === 'hygieneartikel' || lower === 'drogerie' || lower === 'hygiene & sanitär') return 'Hygiene';
-    if (lower === 'technik' || lower === 'reparatur' || lower === 'ersatzteile' || lower === 'werkzeug' || lower === 'wasserfilter' || lower === 'instandhaltung & technik') return 'Instandhaltung';
-    if (lower === 'hotelbedarf' || lower === 'gastronomie' || lower === 'gastro' || lower === 'geschirr' || lower === 'tischwäsche') return 'Hotel & Gastro';
-    if (lower === 'speisen' || lower === 'frühstück' || lower === 'frühstück & küche') return 'Lebensmittel';
-    if (lower === 'drinks' || lower === 'getränke & minibar') return 'Getränke';
-    const found = CATEGORIES.find(c => c.toLowerCase() === lower);
-    return found || cat.trim();
-};
+import { STANDARD_CATEGORIES as CATEGORIES, normalizeCategory } from '../lib/categories';
+import { sanitizeSupplierEmail, isSupplierWebshop } from '../lib/supplierHelpers';
 
 export const Products: React.FC = () => {
     const { canSeePrices, isAiCartEnabled } = useAppContext();
@@ -40,7 +26,7 @@ export const Products: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
     const allAvailableCategories = useMemo(() => {
-        const set = new Set(CATEGORIES.filter(c => c !== 'Sonstiges'));
+        const set = new Set<string>(CATEGORIES.filter(c => c !== 'Sonstiges'));
         products.forEach(p => {
             const norm = normalizeCategory(p.category);
             if (norm && norm !== 'Ohne Kategorie' && norm !== 'Sonstiges') set.add(norm);
@@ -548,7 +534,11 @@ export const Products: React.FC = () => {
                     knownPrice: newProduct.price || 0,
                 }
             });
-            if (error || !data?.success) return;
+            if (error) return;
+            if (!data?.success) {
+                if (data?.error) setNotification({ message: data.error, type: 'error' });
+                return;
+            }
             const meta = data;
             if (Array.isArray(meta.alternatives) && meta.alternatives.length > 0) {
                 setUrlMetaAlternatives(meta.alternatives);
@@ -619,7 +609,12 @@ export const Products: React.FC = () => {
                         supplierId: newProduct.supplierId || '',
                         supplierName: sup?.name || '',
                         supplierUrl: sup?.url || sup?.orderUrl || '',
-                        supplierEmail: sup?.email || '',
+                        supplierEmail: sanitizeSupplierEmail(sup?.email),
+                        supplierOrderMethod: sup?.preferredOrderMethod || '',
+                        isWebshopSupplier: isSupplierWebshop(sup, {
+                            orderUrl: newProduct.orderUrl,
+                            preferredOrderMethod: newProduct.preferredOrderMethod,
+                        }),
                         category: newProduct.category || '',
                         unit: newProduct.unit || '',
                         image: newProduct.image || '',

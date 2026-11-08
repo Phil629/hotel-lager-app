@@ -12,6 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
 import { chromium }     from "npm:playwright-core@1.44.0"
 import type { Page, Locator } from "npm:playwright-core@1.44.0"
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts"
+import { callGeminiApi } from "../_shared/gemini.ts"
 
 // ── Env ───────────────────────────────────────────────────────────────────────
 
@@ -1207,28 +1208,22 @@ async function learnCartFlow(
       const textContent = await page.evaluate(() => document.body.innerText.substring(0, 15000)).catch(() => "")
       if (textContent) {
         try {
-          const geminiController = new AbortController()
-          const geminiTimeoutId = setTimeout(() => geminiController.abort(), 15000)
-          const geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: `Analysiere diesen Text einer B2B-Website und nenne EINEN einzigen, sehr generischen Suchbegriff (1-2 Worte, z.B. "Ordner", "Arbeitshandschuhe", "Kopierpapier", "Karton"), der mit hoher Wahrscheinlichkeit viele Standard-Produkte in diesem Shop liefert. Nenne keine Markennamen und keine Sale-Aktionsprodukte. Antworte NUR mit dem Suchbegriff, keine weiteren Worte.\n\nText: ${textContent}` }] }],
-                generationConfig: { temperature: 0.1 },
-              }),
-              signal: geminiController.signal,
+          const geminiResult = await callGeminiApi({
+            apiKey: GEMINI_API_KEY,
+            parts: [{ text: `Analysiere diesen Text einer B2B-Website und nenne EINEN einzigen, sehr generischen Suchbegriff (1-2 Worte, z.B. "Ordner", "Arbeitshandschuhe", "Kopierpapier", "Karton"), der mit hoher Wahrscheinlichkeit viele Standard-Produkte in diesem Shop liefert. Nenne keine Markennamen und keine Sale-Aktionsprodukte. Antworte NUR mit dem Suchbegriff, keine weiteren Worte.\n\nText: ${textContent}` }],
+            totalBudgetMs: 20_000,
+            temperature: 0.1,
+            responseMimeType: null,
+          })
+
+          if (geminiResult.ok) {
+            const rawText = geminiResult.rawText.trim()
+            if (rawText && rawText.length > 2 && rawText.length < 30) {
+              resolvedTestProduct = rawText.replace(/['"]/g, '')
+              logDojo("success", `🤖 KI (${geminiResult.model}) hat generischen Suchbegriff für diesen Shop gefunden: "${resolvedTestProduct}"`)
             }
-          ).finally(() => clearTimeout(geminiTimeoutId))
-          
-          if (geminiRes.ok) {
-             const geminiData = await geminiRes.json()
-             const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
-             if (rawText && rawText.length > 2 && rawText.length < 30) {
-               resolvedTestProduct = rawText.replace(/['"]/g, '')
-               logDojo("success", `🤖 KI hat generischen Suchbegriff für diesen Shop gefunden: "${resolvedTestProduct}"`)
-             }
+          } else {
+            logDojo("warning", `KI Produkt-Vorschlag fehlgeschlagen: Gemini vorübergehend nicht erreichbar.`)
           }
         } catch (e) {
           logDojo("warning", `KI Produkt-Vorschlag fehlgeschlagen: ${(e as Error).message}`)
@@ -2563,48 +2558,29 @@ Antworte ausschließlich als JSON:
     }
     geminiParts.push({ text: taskPrompt })
 
-    const geminiController = new AbortController();
-    const geminiTimeoutId = setTimeout(() => geminiController.abort(), 25000);
-    let geminiRes;
-    try {
-      geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: geminiParts }],
-            generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-          }),
-          signal: geminiController.signal,
-        }
-      )
-    } catch (err) {
-      const isAbort = err instanceof DOMException && err.name === "AbortError";
-      logDojo("warning", `🤖 Dojo AI-Healing fehlgeschlagen: ${isAbort ? "Gemini API-Timeout (25s) überschritten." : (err as Error).message}`)
-      return null;
-    } finally {
-      clearTimeout(geminiTimeoutId);
-    }
+    const geminiResult = await callGeminiApi({
+      apiKey: GEMINI_API_KEY,
+      parts: geminiParts,
+      totalBudgetMs: 30_000,
+      temperature: 0.2,
+      responseMimeType: 'application/json',
+    })
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text()
-      logDojo("warning", `🤖 Dojo AI-Healing fehlgeschlagen: API Fehler ${geminiRes.status} — ${errText.substring(0, 100)}`)
+    if (!geminiResult.ok) {
+      const apiErrMsg = geminiResult.apiErrorData?.error?.message || geminiResult.parsedData?.parse_error || 'Gemini nicht erreichbar'
+      logDojo("warning", `🤖 Dojo AI-Healing fehlgeschlagen: ${apiErrMsg.substring(0, 120)}`)
       return null
     }
 
-    const geminiData = await geminiRes.json()
-    const rawText    = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    const aiParsed   = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim())
-
+    const aiParsed = geminiResult.parsedData || {}
     const selector = aiParsed.selector?.trim() ?? null
     const confidence = aiParsed.confidence ?? 0
 
     if (selector && confidence >= 0.6) {
-      logDojo("success", `🤖 Dojo AI-Healing erfolgreich! Neuer Selektor: "${selector}" (Grund: ${aiParsed.reasoning})`)
+      logDojo("success", `🤖 Dojo AI-Healing (${geminiResult.model}) erfolgreich! Neuer Selektor: "${selector}" (Grund: ${aiParsed.reasoning})`)
       return selector
     } else {
-      logDojo("warning", `🤖 Dojo AI-Healing unzureichend: Konfidenz ${confidence.toFixed(2)} für Selektor "${selector}"`)
+      logDojo("warning", `🤖 Dojo AI-Healing unzureichend: Konfidenz ${Number(confidence).toFixed(2)} für Selektor "${selector}"`)
     }
   } catch (err) {
     logDojo("warning", `🤖 Dojo AI-Healing unerwarteter Fehler: ${(err as Error).message}`)

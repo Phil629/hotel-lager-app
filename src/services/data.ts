@@ -1,6 +1,7 @@
 import { generateId } from "../utils";
 import { getSupabaseClient } from './supabase';
 import { logError } from './errors';
+import { sanitizeSupplierEmail } from '../lib/supplierHelpers';
 import type { Product, Order, Supplier, Note, CompanySettings } from '../types';
 
 const parseLegacyNotes = (notesStr: string | null | undefined, showNoteOnOrder: boolean | undefined): Note[] => {
@@ -22,7 +23,7 @@ const toSupabaseSupplier = (s: Supplier) => {
         id: s.id,
         name: s.name?.trim() || 'Unbenannt',
         contact_name: s.contactName?.trim() || null,
-        email: s.email?.trim() || null,
+        email: sanitizeSupplierEmail(s.email) || null,
         phone: s.phone?.trim() || null,
         url: s.url?.trim() || null,
         notes: s.notes ? JSON.stringify(s.notes) : null,
@@ -56,7 +57,7 @@ const fromSupabaseSupplier = (s: any): Supplier => ({
     company_id: s.company_id,
     user_id: s.user_id,
     contactName: s.contact_name,
-    email: s.email,
+    email: sanitizeSupplierEmail(s.email) || undefined,
     phone: s.phone,
     url: s.url,
     notes: parseLegacyNotes(s.notes, s.show_note_on_order),

@@ -1,6 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { callGeminiApi } from "../_shared/gemini.ts"
+import { assertSafePublicUrl, safeFetchPublicUrl, pickVerifiedImageCandidates } from "../_shared/urlSecurity.ts"
+import { STANDARD_CATEGORIES, normalizeCategory } from "../_shared/categories.ts"
+import {
+  cleanProductName,
+  toSearchQueryName,
+  resolveSupplierDomainHint,
+  resolveWebshopDomain,
+  isDeepProductUrl,
+  sanitizeSupplierEmail,
+  getEffectiveSupplierNoMinStock,
+  computeSuggestedMinStock,
+} from "../_shared/productHelpers.ts"
 
 // Initialisiere Supabase Client
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -21,308 +34,24 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
   apiErrorData: any;
   rawText: string;
 }> {
-  if (!GEMINI_API_KEY) {
-    return {
-      ok: false,
-      parsedData: {
-        parse_error: "GEMINI_API_KEY fehlt",
-        raw_text: ""
-      },
-      apiErrorData: { error: { code: 500, message: "GEMINI_API_KEY not configured" } },
-      rawText: "",
-    }
-  }
-
-  // Intelligentes Modell-Routing: Starte mit aktuellem Gemini 2.5 Flash / Flash-Lite für schnelle & präzise Analyse
-  const GEMINI_MODELS = [
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${GEMINI_API_KEY}`,
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-  ]
-  const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
-  const isFastInteractive = totalBudgetMs <= 35_000
-  const MAX_ATTEMPTS_PER_MODEL = isFastInteractive ? 1 : 2
-  const PER_ATTEMPT_TIMEOUT_MS = isFastInteractive ? 8_000 : 18_000
-  const startedAt = Date.now()
-  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
-  let geminiRes: Response | null = null
-  let geminiData: any = null
-
-  modelLoop:
-  for (let m = 0; m < GEMINI_MODELS.length; m++) {
-    const modelUrl = GEMINI_MODELS[m]
-    const supportsThinkingConfig = /gemini-2\.5|gemini-flash-latest|gemini-flash-lite-latest/i.test(modelUrl)
-    const geminiBody = JSON.stringify({
-      contents: [{ parts: geminiParts }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
-        ...(isFastInteractive && supportsThinkingConfig ? { thinkingConfig: { thinkingBudget: 0 } } : {})
-      }
-    })
-
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
-      const remaining = totalBudgetMs - (Date.now() - startedAt)
-      if (remaining < 2_500) break modelLoop
-
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), Math.min(PER_ATTEMPT_TIMEOUT_MS, remaining))
-      let retryAfterMs = 0
-      try {
-        geminiRes = await fetch(modelUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: geminiBody,
-          signal: controller.signal,
-        })
-        geminiData = await geminiRes.json().catch(() => ({ error: { code: geminiRes!.status, message: 'Invalid JSON from Gemini' } }))
-
-        if (geminiRes.ok && geminiData?.candidates?.length) break modelLoop
-        if (!RETRYABLE_STATUS.has(geminiRes.status) && geminiRes.ok) {
-          break modelLoop
-        }
-        if (!geminiRes.ok && !RETRYABLE_STATUS.has(geminiRes.status)) {
-          if (geminiRes.status === 404) continue modelLoop
-          break modelLoop
-        }
-        if (geminiRes.status === 429) {
-          const errText = JSON.stringify(geminiData)
-          const delayMatch = errText.match(/"retryDelay":"(\d+)s"/)
-          const retryDelaySec = delayMatch ? Number(delayMatch[1]) : 0
-          if (/PerDay|FreeTier|quota/i.test(errText) || retryDelaySec > 30) {
-            console.warn(`Gemini model #${m + 1}: quota exhausted (retryDelay ${retryDelaySec}s) – switching model`)
-            continue modelLoop
-          }
-        }
-        const ra = Number(geminiRes.headers.get('retry-after'))
-        if (Number.isFinite(ra) && ra > 0) retryAfterMs = ra * 1000
-        if (retryAfterMs > 30_000) continue modelLoop
-        console.warn(`Gemini model #${m + 1} attempt ${attempt} failed with ${geminiRes.status}, retrying...`)
-      } catch (err) {
-        console.warn(`Gemini model #${m + 1} attempt ${attempt} network/timeout error:`, String(err))
-        geminiRes = null
-        geminiData = { error: { code: 504, message: `Network/timeout error: ${String(err)}` } }
-      } finally {
-        clearTimeout(timer)
-      }
-
-      if (attempt < MAX_ATTEMPTS_PER_MODEL) {
-        const backoff = Math.max(retryAfterMs, 1000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 400)
-        const remainingAfter = totalBudgetMs - (Date.now() - startedAt)
-        if (backoff > remainingAfter - 4_000) break
-        await sleep(backoff)
-      }
-    }
-  }
-
-  const geminiOk = !!(geminiRes?.ok && geminiData?.candidates?.length)
-  console.log("Raw Gemini API response snippet:", JSON.stringify(geminiData).substring(0, 500))
-
-  if (!geminiOk) {
-    return {
-      ok: false,
-      parsedData: {
-        parse_error: "Gemini API HTTP Error",
-        raw_text: JSON.stringify(geminiData)
-      },
-      apiErrorData: geminiData,
-      rawText: JSON.stringify(geminiData),
-    }
-  }
-
-  let extractedJsonText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
-  extractedJsonText = extractedJsonText.replace(/```json/g, '').replace(/```/g, '').trim()
-
-  try {
-    const parsedData = JSON.parse(extractedJsonText)
-    return { ok: true, parsedData, apiErrorData: null, rawText: extractedJsonText }
-  } catch (e) {
-    console.error("Error parsing JSON from Gemini:", e)
-    return {
-      ok: false,
-      parsedData: {
-        parse_error: String(e),
-        raw_text: extractedJsonText
-      },
-      apiErrorData: null,
-      rawText: extractedJsonText,
-    }
+  const res = await callGeminiApi({
+    apiKey: GEMINI_API_KEY,
+    parts: geminiParts,
+    totalBudgetMs,
+    temperature: 0.2,
+    responseMimeType: 'application/json',
+  })
+  return {
+    ok: res.ok,
+    parsedData: res.parsedData,
+    apiErrorData: res.ok ? null : res.apiErrorData,
+    rawText: res.rawText,
   }
 }
 
 // =====================================================================
 // HILFSFUNKTIONEN FÜR BILD-, LINK- & DATEN-VERVOLLSTÄNDIGUNG
 // =====================================================================
-const SUPPLIER_DOMAIN_HINTS: Record<string, string> = {
-  'amazon business': 'amazon.de',
-  'amazon': 'amazon.de',
-  'böttcher ag': 'bueromarkt-ag.de',
-  'böttcher': 'bueromarkt-ag.de',
-  'hygi.de': 'hygi.de',
-  'hygi': 'hygi.de',
-  'reinigungsberater': 'reinigungsberater.de',
-  'lusini': 'lusini.com',
-  'papstar': 'papstar.de',
-  'ronnefeldt': 'ronnefeldt.com',
-  'coffee perfect': 'coffee-perfect.de',
-  'porzellantreff': 'porzellantreff.de',
-  'deutsche post': 'shop.deutschepost.de',
-  'ada cosmetics': 'ada-cosmetics.com',
-  'eofficeshop': 'eofficeshop.de',
-  'tecserv': 'eofficeshop.de',
-  'gottron': 'gottron-hygiene.de',
-  'hamburgpapier': 'hamburgpapier-shop.de',
-  'kaeferling': 'kaeferlingpro.com',
-  'zoells': 'zoells.de',
-  'cent direktvertrieb': 'cent-online.de',
-  'fixpart': 'fixpart.de',
-  'faironto': 'faironto.com',
-  'google cloud': 'cloud.google.com',
-  'hewo': 'hewo-mainz.de',
-  'schwälbchen': 'schwaelbchen-frischdienst.de',
-  'schwaelbchen': 'schwaelbchen-frischdienst.de'
-}
-
-const EMAIL_ONLY_SUPPLIER_KEYWORDS = [
-  'hewo',
-  'schwälbchen',
-  'schwaelbchen',
-  'frischdienst',
-  'getränke-vertrieb',
-  'getraenke-vertrieb',
-  'wäscherei',
-  'waescherei',
-  'bäckerei',
-  'baeckerei',
-  'metzgerei'
-]
-
-const isEmailOnlyWholesaler = (supplierName?: string, supplierEmail?: string): boolean => {
-  const lower = `${supplierName || ''} ${supplierEmail || ''}`.toLowerCase()
-  return EMAIL_ONLY_SUPPLIER_KEYWORDS.some(k => lower.includes(k))
-}
-
-const cleanProductName = (rawName: string): string => {
-  if (!rawName) return ''
-  let s = rawName.replace(/\s+/g, ' ').trim()
-
-  // 1. Großhandels-Zusätze wie "Kl.I CR", "Kl. I", "HKL A", "1 Stück" am Ende bereinigen
-  s = s
-    .replace(/\bKl\.?\s*(?:I{1,3}|1|2)\b(?:\s+[A-Z]{2,3})?/gi, '')
-    .replace(/\b(?:HKL|Handelsklasse)\s*[A-Z1-3]+\b/gi, '')
-    .replace(/\s+\b(?:CR|ES|IT|NL|FR|BE|GR|PL|TR|MA|PE|CL|ZA|BR|EC|WS)\b$/g, '')
-    .replace(/[-–\s]*Kt:\s*\d+\s*St\.?[-–\s]*/gi, ' ')
-    .replace(/\b1\s+(?:Stück|Stk\.?|Karton|Kasten|Packung|Pack|Beutel|Flasche|Rolle|Kanister)\b/gi, '')
-    .replace(/\bStück\s+(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
-    .replace(/\b(ca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml))\s+1\s*Stück\b/gi, '($1)')
-
-  // 2. Überlange Amazon-/Webshop-SEO-Titel am Bindestrich " - " / " – " / " | " sinnvoll kürzen
-  const dashParts = s.split(/\s+[-–|]\s+/)
-  if (dashParts.length >= 2 && s.length > 48) {
-    const first = dashParts[0].trim()
-    const second = dashParts[1].trim()
-    // Falls im zweiten Teil eine wichtige Stückzahl wie "30x ..." steht, diese in Klammern retten
-    const countMatch = second.match(/\b(\d+\s*(?:x|Stück|Stk\.?|er\s*Pack|Rollen|Blatt))\b/i)
-    if (first.length >= 12) {
-      s = countMatch && !first.toLowerCase().includes(countMatch[1].toLowerCase())
-        ? `${first} (${countMatch[1]})`
-        : first
-    }
-  }
-
-  // 3. Falls noch ein langer Komma-SEO-Schweif anhängt (ab > 55 Zeichen)
-  if (s.length > 55 && s.includes(', ')) {
-    const commaParts = s.split(', ')
-    if (commaParts[0].length >= 15) {
-      s = commaParts[0].trim()
-    }
-  }
-
-  // 4. Führende Stückzahl wie "50 Stück Türschild Hotel Bitte nicht stören" -> "Türschild Hotel Bitte nicht stören (50 Stück)"
-  const leadingCount = s.match(/^(\d+\s*(?:Stück|Stk\.?|x|er|Pack|Rollen))\s+(.{8,})$/i)
-  if (leadingCount) {
-    const countStr = leadingCount[1].trim()
-    const rest = leadingCount[2].trim()
-    if (!rest.includes(`(${countStr})`)) {
-      s = `${rest} (${countStr})`
-    }
-  }
-
-  s = s.replace(/\s{2,}/g, ' ').replace(/[,;:\-–|]+$/, '').trim()
-  return s || rawName.trim()
-}
-
-const resolveSupplierDomainHint = (supplierName?: string, supplierUrl?: string, supplierEmail?: string): string => {
-  if (supplierUrl) {
-    try {
-      const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
-      return u.hostname.replace(/^www\./i, '').toLowerCase()
-    } catch {}
-  }
-  const lowerSup = (supplierName || '').toLowerCase().trim()
-  for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
-    if (lowerSup.includes(k)) return dom
-  }
-  if (supplierEmail && supplierEmail.includes('@') && supplierEmail !== 'hello@unbekannt.com') {
-    const dom = supplierEmail.split('@')[1]?.trim().toLowerCase()
-    const generic = new Set(['gmail.com', 'googlemail.com', 'web.de', 'gmx.de', 'gmx.net', 't-online.de', 'outlook.com', 'hotmail.com', 'icloud.com', 'yahoo.com'])
-    if (dom && !generic.has(dom)) return dom
-  }
-  return ''
-}
-
-const resolveWebshopDomain = (supplierName?: string, supplierUrl?: string, isWebshopMethod?: boolean, supplierEmail?: string): string => {
-  if (isEmailOnlyWholesaler(supplierName, supplierEmail)) return ''
-  const lowerSup = (supplierName || '').toLowerCase().trim()
-  for (const [k, dom] of Object.entries(SUPPLIER_DOMAIN_HINTS)) {
-    if (lowerSup.includes(k)) return dom
-  }
-  if (supplierUrl) {
-    try {
-      const u = new URL(supplierUrl.startsWith('http') ? supplierUrl : `https://${supplierUrl}`)
-      const host = u.hostname.replace(/^www\./i, '').toLowerCase()
-      if (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt|fixpart|faironto/i.test(host)) {
-        return host
-      }
-    } catch {}
-  }
-  const domFromEmail = resolveSupplierDomainHint(supplierName, supplierUrl, supplierEmail)
-  if (domFromEmail && (isWebshopMethod || /shop\.|store\.|bueromarkt|amazon|hygi|lusini|papstar|kaeferling|eofficeshop|gottron|hamburgpapier|zoells|porzellantreff|reinigungsberater|ada-cosmetics|ronnefeldt|fixpart|faironto|deutschepost/i.test(domFromEmail))) {
-    return domFromEmail
-  }
-  return ''
-}
-
-const isDeepProductUrl = (url?: string): boolean => {
-  if (!url || typeof url !== 'string' || !url.trim()) return false
-  try {
-    const u = new URL(url.startsWith('http') ? url : `https://${url}`)
-    const p = u.pathname.toLowerCase()
-    const cleanPath = p.replace(/^\/(de|en|de-de|de_de)?\/?$/i, '').trim()
-    if (cleanPath.length <= 2) return false
-    if (/^\/(index\.(html|php|asp)|home|startseite|default\.(html|aspx?))\/?$/i.test(cleanPath)) return false
-
-    // Keine Such- oder Katalogübersichtsseiten als Produkt-URL (verhindert Landen auf Shop-Startseite/Suche)
-    if (/(?:\/|^)(suche|search|catalogsearch|find|results|query|katalog|categories|kategorien)(?:\/|$)/i.test(p) || u.searchParams.has('q') || u.searchParams.has('k') || u.searchParams.has('query')) {
-      return false
-    }
-    // Keine Warenkorb-, Login- oder Kontoseiten
-    if (/(?:\/|^)(warenkorb|cart|basket|checkout|kasse|login|signin|anmelden|account|mein-konto|register|auth)(?:\/|$)/i.test(p)) {
-      return false
-    }
-    // Keine Tracking-, Hilfe- oder Benachrichtigungslinks
-    if (/(?:\/|^)(progress-tracker|tracking|order-history|notification|widerruf|agb|impressum|datenschutz|hilfe|faq|kontakt)(?:\/|$)/i.test(p)) {
-      return false
-    }
-
-    return true
-  } catch {
-    return false
-  }
-}
 
 const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
   const controller = new AbortController()
@@ -379,30 +108,6 @@ const searchBingProductMeta = async (query: string, webshopDomain?: string) => {
   } finally {
     clearTimeout(timer)
   }
-}
-
-function normalizeCategory(rawCat?: string | null, customAllowed: string[] = []): string {
-  if (!rawCat || typeof rawCat !== 'string') return ''
-  const c = rawCat.trim()
-  const lower = c.toLowerCase()
-
-  // 1. Wenn der Hotelier selbst eine Kategorie angelegt hat, exakt beibehalten
-  const matchedCustom = customAllowed.find(ca => ca && ca.trim().toLowerCase() === lower)
-  if (matchedCustom) return matchedCustom.trim()
-
-  // 2. Bekannte Synonyme auf Standard-Kategorien normalisieren
-  if (lower === 'büro' || lower === 'büroartikel' || lower === 'schreibwaren' || lower === 'office' || lower === 'büro & verwaltung') return 'Bürobedarf'
-  if (lower === 'reinigungsmittel' || lower === 'putzmittel' || lower === 'cleaning') return 'Reinigung'
-  if (lower === 'hygieneartikel' || lower === 'drogerie' || lower === 'körperpflege' || lower === 'hygiene & sanitär') return 'Hygiene'
-  if (lower === 'technik' || lower === 'reparatur' || lower === 'ersatzteile' || lower === 'werkzeug' || lower === 'wasserfilter' || lower === 'sanitär' || lower === 'instandhaltung & technik') return 'Instandhaltung'
-  if (lower === 'hotelbedarf' || lower === 'gastronomie' || lower === 'gastro' || lower === 'geschirr' || lower === 'porzellan' || lower === 'tischwäsche' || lower === 'zimmerausstattung' || lower === 'rezeption & lobby') return 'Hotel & Gastro'
-  if (lower === 'speisen' || lower === 'frühstück' || lower === 'food' || lower === 'frühstück & küche') return 'Lebensmittel'
-  if (lower === 'drinks' || lower === 'beverages' || lower === 'getränke & minibar') return 'Getränke'
-  if (lower === 'ohne kategorie' || lower === 'importiert' || lower === 'ki-import') return ''
-
-  const valid = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro', 'Sonstiges']
-  const matched = valid.find(v => v.toLowerCase() === lower)
-  return matched || c
 }
 
 const formatEuro = (val: number) => val.toFixed(2).replace('.', ',')
@@ -519,6 +224,7 @@ async function enrichSingleProduct(params: {
   supplierName?: string | null;
   supplierUrl?: string | null;
   supplierEmail?: string | null;
+  supplierOrderMethod?: string | null;
   knownPrice?: number | null;
 }): Promise<{
   cleanName: string;
@@ -528,93 +234,107 @@ async function enrichSingleProduct(params: {
   sku: string;
 }> {
   const cleanName = cleanProductName(params.name) || params.name
-  const webshopDomain = resolveWebshopDomain(params.supplierName || '', params.supplierUrl || '', false, params.supplierEmail || '')
+  const isNonWebshop = params.supplierOrderMethod === 'email' || params.supplierOrderMethod === 'phone'
+  const webshopDomain = resolveWebshopDomain({
+    supplierUrl: params.supplierUrl,
+    supplierEmail: params.supplierEmail,
+    supplierOrderMethod: params.supplierOrderMethod,
+    isWebshopFlag: !isNonWebshop && !!(params.supplierUrl || params.supplierOrderMethod === 'webshop' || params.supplierOrderMethod === 'link'),
+  })
   let orderUrl = ''
-  let image = ''
-  let alternatives: string[] = []
+  const rawCandidates: string[] = []
   let effectiveSku = params.sku || ''
 
   // 1. Amazon ASIN Direkt-Check
-  if ((webshopDomain === 'amazon.de' || (params.supplierName || '').toLowerCase().includes('amazon')) && effectiveSku && /^B0[A-Z0-9]{8}$/i.test(effectiveSku)) {
+  if (webshopDomain === 'amazon.de' && effectiveSku && /^B0[A-Z0-9]{8}$/i.test(effectiveSku)) {
     orderUrl = `https://www.amazon.de/dp/${effectiveSku.toUpperCase()}`
     try {
       const ctrl = new AbortController()
       const t = setTimeout(() => ctrl.abort(), 2600)
-      const r = await fetch(orderUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-        signal: ctrl.signal
-      })
-      clearTimeout(t)
-      if (r.ok) {
-        const html = await r.text()
-        const m = html.match(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
-          html.match(/"large"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
-          html.match(/src=["'](https:\/\/m\.media-amazon\.com\/images\/I\/[^"']+)["']/i)
-        if (m?.[1]) {
-          image = m[1]
-          alternatives.push(image)
+      try {
+        const { response: r } = await safeFetchPublicUrl(orderUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
+          signal: ctrl.signal
+        })
+        if (r.ok) {
+          const html = await r.text()
+          const m = html.match(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
+            html.match(/"large"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
+            html.match(/src=["'](https:\/\/m\.media-amazon\.com\/images\/I\/[^"']+)["']/i)
+          if (m?.[1]) {
+            rawCandidates.push(m[1])
+          }
         }
+      } finally {
+        clearTimeout(t)
       }
     } catch {}
   }
 
-  // 2. Reinigungsberater Direkt-Check
-  if (!image && webshopDomain === 'reinigungsberater.de') {
+  // 2. Reinigungsberater / Böttcher AG Direkt-Check (über Shop-Domain)
+  if (rawCandidates.length === 0 && (webshopDomain === 'reinigungsberater.de' || webshopDomain === 'bueromarkt-ag.de')) {
     const skuCandidate = effectiveSku || params.name.match(/\b([1-9]\d{4,6})\b/)?.[1]
     if (skuCandidate) {
       try {
-        const targetUrl = `https://www.reinigungsberater.de/,p-${skuCandidate}.html`
+        const targetUrl = `https://www.${webshopDomain}/,p-${skuCandidate}.html`
         const ctrl = new AbortController()
         const t = setTimeout(() => ctrl.abort(), 2600)
-        const r = await fetch(targetUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-          signal: ctrl.signal,
-          redirect: 'follow'
-        })
-        clearTimeout(t)
-        if (r.ok && r.url && /-p-[A-Za-z0-9_-]+/i.test(r.url)) {
-          orderUrl = r.url
-          effectiveSku = skuCandidate
-          const html = await r.text()
-          let ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
-          if (!ogImg || /manifest|favicon|icon[-_.]|apple-touch|logo/i.test(ogImg)) {
-            const cdnImg = html.match(/src=["'](https:\/\/cdn\.reinigungsberater\.de\/products\/[^"']+)["']/i)?.[1]
-            ogImg = cdnImg || ''
+        try {
+          const { response: r, finalUrl } = await safeFetchPublicUrl(targetUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            signal: ctrl.signal,
+          })
+          if (r.ok && finalUrl && /-p-[A-Za-z0-9_-]+/i.test(finalUrl)) {
+            orderUrl = finalUrl
+            effectiveSku = skuCandidate
+            const html = await r.text()
+            let ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
+            if (!ogImg || /manifest|favicon|icon[-_.]|apple-touch|logo/i.test(ogImg)) {
+              const cdnImg = html.match(/src=["'](https:\/\/cdn\.reinigungsberater\.de\/products\/[^"']+)["']/i)?.[1]
+              ogImg = cdnImg || ''
+            }
+            if (ogImg) {
+              rawCandidates.push(ogImg)
+            }
           }
-          if (ogImg) {
-            image = ogImg
-            alternatives.push(ogImg)
-          }
+        } finally {
+          clearTimeout(t)
         }
       } catch {}
     }
   }
 
-  // 3. Fallback: Gezielte Bing-Suche
-  if (!image) {
-    const coreName = cleanName
+  // 3. Fallback: Gezielte Bing-Suche (nutzt Suchbegriff ohne gespeicherten Produktnamen zu beschädigen)
+  if (rawCandidates.length === 0) {
+    const queryBase = toSearchQueryName(params.name)
+    const coreName = queryBase
       .replace(/\s*\(\s*(?:\d+\s*(?:st(?:ü|ue)ck|x|er|pack|rollen|kg|g|l|ml)|ca\.[^)]+)\s*\)/gi, '')
-      .replace(/\b\d+\s*x\s*\d+[,\.]?\d*\s*(?:l|g|kg|ml)\b/gi, '')
+      .replace(/\b\d+\s*x\s*\d+[,.]?\d*\s*(?:l|g|kg|ml)\b/gi, '')
       .replace(/\bca\.\s*\d+[.,]?\d*\s*(?:kg|g|l|ml)\b/gi, '')
       .replace(/\b\d+[.,]?\d*\s*(?:kg|g|l|ml)\b/gi, '')
       .trim()
     const query = webshopDomain
       ? `site:${webshopDomain} ${effectiveSku ? effectiveSku + ' ' : ''}${coreName}`.trim()
-      : `${cleanName} ${params.supplierName || ''}`.trim()
+      : `${queryBase} ${params.supplierName || ''}`.trim()
 
     const bingRes = await searchBingProductMeta(query, webshopDomain)
-    if (bingRes.image) {
-      image = bingRes.highResImage || bingRes.image
-      if (!orderUrl && bingRes.orderUrl && isDeepProductUrl(bingRes.orderUrl)) orderUrl = bingRes.orderUrl
-      alternatives = bingRes.alternatives || []
+    if (bingRes.image) rawCandidates.push(bingRes.image)
+    if (bingRes.highResImage) rawCandidates.push(bingRes.highResImage)
+    for (const alt of (bingRes.alternatives || [])) {
+      rawCandidates.push(alt)
+    }
+    if (!isNonWebshop && !orderUrl && bingRes.orderUrl && isDeepProductUrl(bingRes.orderUrl)) {
+      orderUrl = bingRes.orderUrl
     }
   }
 
+  const verified = await pickVerifiedImageCandidates(rawCandidates, { timeoutMs: 1800, maxToProbe: 4 })
+
   return {
     cleanName: cleanName || params.name,
-    orderUrl: isDeepProductUrl(orderUrl) ? orderUrl : '',
-    image,
-    alternatives,
+    orderUrl: !isNonWebshop && isDeepProductUrl(orderUrl) ? orderUrl : '',
+    image: verified.bestImage,
+    alternatives: verified.validAlternatives,
     sku: effectiveSku
   }
 }
@@ -768,7 +488,7 @@ async function processEmailWithAi(params: {
   // Vorhandene Lieferanten & Produkte dieser Firma laden (verhindert Duplikate direkt beim Import!)
   const [{ data: existingSuppliersData }, { data: existingProductsData }] = await Promise.all([
     supabase.from('suppliers')
-      .select('id, name, email, customer_number, phone, iban, default_category')
+      .select('id, name, email, url, order_url, preferred_order_method, customer_number, phone, iban, default_category, selectors')
       .eq('company_id', company_id)
       .order('name', { ascending: true }),
     supabase.from('products')
@@ -780,7 +500,7 @@ async function processEmailWithAi(params: {
   const allSuppliers = existingSuppliersData || []
   const allProducts = existingProductsData || []
 
-  const standardCats = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro']
+  const standardCats = STANDARD_CATEGORIES.filter((c) => c !== 'Sonstiges')
   const allHotelCategories = [...new Set([
     ...allProducts.map((r: any) => (r.category as string || '').trim()),
     ...allSuppliers.map((s: any) => (s.default_category as string || '').trim())
@@ -845,7 +565,7 @@ ${customCategories.length > 0 ? `    - Falls ein Artikel thematisch zu einer der
     - Werkzeug, Leuchtmittel, Duschköpfe, Dichtungen, Türfächer, Wasserfilter sind IMMER "Instandhaltung"!
     - Edding, Marker, Kugelschreiber, Papier sind IMMER "Bürobedarf" (niemals "Büro")!
     - Seife, Desinfektion, Toilettenpapier, Kosmetiktücher, Shampoo sind IMMER "Hygiene"!
-14. TELEFON & IBAN: Falls Telefonnummer oder IBAN des Lieferanten auf dem Beleg stehen, trage sie unter supplier_phone bzw. supplier_iban ein.
+14. TELEFON, WEBSEITE & IBAN: Falls Telefonnummer, Webseite/Online-Shop-URL (z. B. aus Kopf- oder Fußzeile wie "www.bueromarkt-ag.de") oder IBAN des Lieferanten auf dem Beleg stehen, trage sie unter supplier_phone, supplier_url bzw. supplier_iban ein.
 15. LIEFERTERMIN: Extrahiere den voraussichtlichen oder tatsächlichen Liefertermin als 'delivery_date' (Format YYYY-MM-DD). WICHTIG: Wenn der Liefertermin als relativer Wochentag oder Text angegeben ist (z.B. 'Zustellung: Samstag', 'Lieferung morgen', 'Dienstag, 3. November'), berechne IMMER das exakte Datum im Format YYYY-MM-DD basierend auf 'Heutiges Datum / Belegdatum'! Setze 'delivery_date' NIEMALS auf null, wenn ein Wochentag oder Liefertermin im Text vorkommt!
 16. TRACKING: Extrahiere einen eventuellen Tracking-Link ODER eine Sendungsnummer als 'tracking_link'.
 17. STATUS-NOTIZEN: Fasse wichtige Versand- und Statusinformationen in 'order_notes' zusammen.
@@ -872,6 +592,7 @@ Antworte ausschließlich als JSON:
   "matched_supplier_id": "string | null",
   "supplier_name": "string | null",
   "supplier_email": "string | null",
+  "supplier_url": "string | null",
   "supplier_phone": "string | null",
   "supplier_iban": "string | null",
   "customer_number": "string | null",
@@ -994,14 +715,14 @@ Antworte ausschließlich als JSON:
   }
 
   // 2. Exakte E-Mail oder gleiche Domain prüfen
-  const emailToMatch = parsedData.supplier_email?.trim().toLowerCase()
+  const emailToMatch = sanitizeSupplierEmail(parsedData.supplier_email)?.toLowerCase() || ''
   const genericDomains = new Set(['gmail.com', 'googlemail.com', 'web.de', 'gmx.de', 'gmx.net', 't-online.de', 'outlook.com', 'hotmail.com', 'icloud.com', 'yahoo.com', 'unbekannt.com'])
-  if (!matchedSupplier && emailToMatch && emailToMatch !== 'hello@unbekannt.com') {
-    matchedSupplier = allSuppliers.find((s: any) => (s.email || '').trim().toLowerCase() === emailToMatch) || null
+  if (!matchedSupplier && emailToMatch) {
+    matchedSupplier = allSuppliers.find((s: any) => (sanitizeSupplierEmail(s.email) || '').toLowerCase() === emailToMatch) || null
     if (!matchedSupplier && emailToMatch.includes('@')) {
       const domain = emailToMatch.split('@')[1]
       if (domain && !genericDomains.has(domain)) {
-        matchedSupplier = allSuppliers.find((s: any) => (s.email || '').toLowerCase().endsWith(`@${domain}`)) || null
+        matchedSupplier = allSuppliers.find((s: any) => (sanitizeSupplierEmail(s.email) || '').toLowerCase().endsWith(`@${domain}`)) || null
       }
     }
   }
@@ -1018,6 +739,14 @@ Antworte ausschließlich als JSON:
     }
   }
 
+  let validatedParsedSupplierUrl: string | null = null
+  if (parsedData.supplier_url && String(parsedData.supplier_url).trim()) {
+    const urlCheck = await assertSafePublicUrl(String(parsedData.supplier_url).trim())
+    if (urlCheck.safe && urlCheck.normalizedUrl) {
+      validatedParsedSupplierUrl = urlCheck.normalizedUrl
+    }
+  }
+
   if (matchedSupplier) {
     supplier_id = matchedSupplier.id
     // WICHTIG: Verwende den kanonischen Lieferantennamen aus der Datenbank!
@@ -1026,8 +755,23 @@ Antworte ausschließlich als JSON:
     console.log("Matched existing supplier:", supplier_id, supName)
 
     const updatePayload: any = {}
-    if (parsedData.supplier_email && parsedData.supplier_email.trim() !== '' && parsedData.supplier_email !== 'hello@unbekannt.com' && (!matchedSupplier.email || matchedSupplier.email === 'hello@unbekannt.com')) {
-      updatePayload.email = parsedData.supplier_email.trim()
+    const cleanEmail = sanitizeSupplierEmail(parsedData.supplier_email)
+    if (cleanEmail && !sanitizeSupplierEmail(matchedSupplier.email)) {
+      updatePayload.email = cleanEmail
+      matchedSupplier.email = cleanEmail
+    } else if (matchedSupplier.email === 'hello@unbekannt.com') {
+      updatePayload.email = null
+      matchedSupplier.email = null
+    }
+    if (validatedParsedSupplierUrl) {
+      if (!matchedSupplier.url) {
+        updatePayload.url = validatedParsedSupplierUrl
+        matchedSupplier.url = validatedParsedSupplierUrl
+      }
+      if (!matchedSupplier.order_url) {
+        updatePayload.order_url = validatedParsedSupplierUrl
+        matchedSupplier.order_url = validatedParsedSupplierUrl
+      }
     }
     if (parsedData.customer_number && parsedData.customer_number.trim() !== '' && !matchedSupplier.customer_number) {
       updatePayload.customer_number = parsedData.customer_number.trim()
@@ -1043,22 +787,27 @@ Antworte ausschließlich als JSON:
       await supabase.from('suppliers').update(updatePayload).eq('id', supplier_id)
     }
   } else if (supName !== 'Unbekannter Lieferant (KI)' && docType !== 'unknown') {
+    const cleanNewEmail = sanitizeSupplierEmail(parsedData.supplier_email)
     const { data: newSupp, error: newSupErr } = await supabase.from('suppliers').insert({
       id: crypto.randomUUID(),
       user_id: user_id,
       company_id: company_id,
       name: supName,
-      email: parsedData.supplier_email || 'hello@unbekannt.com',
+      email: cleanNewEmail,
+      url: validatedParsedSupplierUrl,
+      order_url: validatedParsedSupplierUrl,
       customer_number: parsedData.customer_number || null,
       phone: parsedData.supplier_phone || null,
       iban: parsedData.supplier_iban || null,
       is_auto_generated: true
-    }).select('id').single()
+    }).select('id, name, email, url, order_url, preferred_order_method, default_category, selectors').single()
 
     if (newSupErr) {
       console.error("Error creating new supplier:", JSON.stringify(newSupErr, null, 2))
     } else if (newSupp) {
       supplier_id = newSupp.id
+      matchedSupplier = newSupp
+      allSuppliers.push(newSupp)
       console.log("Successfully created new supplier:", supplier_id)
     }
   }
@@ -1188,8 +937,9 @@ Antworte ausschließlich als JSON:
           name: canonicalProductName,
           sku: item.sku || matchedProd?.product_number || null,
           supplierName: supName,
-          supplierUrl: matchedSupplier?.url || matchedSupplier?.order_url || '',
-          supplierEmail: parsedData.supplier_email || matchedSupplier?.email || fromAddress,
+          supplierUrl: matchedSupplier?.order_url || matchedSupplier?.url || validatedParsedSupplierUrl || '',
+          supplierEmail: sanitizeSupplierEmail(parsedData.supplier_email) || sanitizeSupplierEmail(matchedSupplier?.email) || fromAddress,
+          supplierOrderMethod: matchedSupplier?.preferred_order_method || null,
           knownPrice: Number(item.price) || 0
         })
         if (enriched.image && !resolvedImage) resolvedImage = enriched.image
@@ -1352,11 +1102,12 @@ Antworte ausschließlich als JSON:
           supplier_id: supplier_id,
           is_auto_generated: true,
           stock: 0,
+          min_stock: 0,
           unit: resolvedUnit || 'Stück',
           image: resolvedImage || null,
           order_url: resolvedOrderUrl || null,
           product_number: resolvedSku || null,
-          preferred_order_method: resolvedOrderUrl ? 'webshop' : undefined
+          preferred_order_method: resolvedOrderUrl ? 'webshop' : (matchedSupplier?.preferred_order_method || undefined)
         }
         const { error: newProdErr } = await supabase.from('products').insert(newProd)
         if (!newProdErr) {
@@ -1906,15 +1657,27 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           })
         }
 
-        const normalizedUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`
+        const urlSafety = await assertSafePublicUrl(rawUrl)
+        if (!urlSafety.safe || !urlSafety.normalizedUrl) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: urlSafety.reason || 'Ungültige oder blockierte URL'
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
+        const normalizedUrl = urlSafety.normalizedUrl
 
         // Falls es bereits ein direkter Bild-Link ist (.jpg, .png, .webp, etc.)
         if (/\.(jpg|jpeg|png|webp|gif|avif|svg)(\?.*)?$/i.test(normalizedUrl)) {
+          const verifiedDirect = await pickVerifiedImageCandidates([normalizedUrl], { timeoutMs: 2000, maxToProbe: 1 })
           return new Response(JSON.stringify({
             success: true,
             isDirectImage: true,
-            image: normalizedUrl,
-            alternatives: [normalizedUrl]
+            image: verifiedDirect.bestImage || null,
+            alternatives: verifiedDirect.validAlternatives
           }), {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -1925,13 +1688,14 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         let extractedTitle = ''
         let extractedSku = ''
         let extractedPrice: number | null = null
+        let effectiveOrderUrl = normalizedUrl
         const candidateImages: string[] = []
 
         // 1. Versuche die Shop-Seite direkt abzurufen (og:image, JSON-LD, Amazon-Bild)
         const controller = new AbortController()
         const timer = setTimeout(() => controller.abort(), 4500)
         try {
-          const resp = await fetch(normalizedUrl, {
+          const { response: resp, finalUrl } = await safeFetchPublicUrl(normalizedUrl, {
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -1939,6 +1703,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             },
             signal: controller.signal
           })
+          if (finalUrl) effectiveOrderUrl = finalUrl
           if (resp.ok) {
             const html = await resp.text()
             const ogImgMatch =
@@ -1946,7 +1711,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i)
             if (ogImgMatch?.[1]) {
               try {
-                const cand = new URL(ogImgMatch[1].replace(/&amp;/g, '&'), normalizedUrl).href
+                const cand = new URL(ogImgMatch[1].replace(/&amp;/g, '&'), effectiveOrderUrl).href
                 if (!/manifest|favicon|icon[-_.]|apple-touch|logo/i.test(cand)) {
                   extractedImage = cand
                   candidateImages.push(cand)
@@ -1993,7 +1758,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
                     }
                     const imgField = Array.isArray(node.image) ? node.image[0] : (node.image?.url || node.image)
                     if (typeof imgField === 'string' && imgField) {
-                      const absImg = new URL(imgField, normalizedUrl).href
+                      const absImg = new URL(imgField, effectiveOrderUrl).href
                       if (!extractedImage) extractedImage = absImg
                       if (!candidateImages.includes(absImg)) candidateImages.push(absImg)
                     }
@@ -2018,7 +1783,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         let hostname = ''
         let slugQuery = ''
         try {
-          const u = new URL(normalizedUrl)
+          const u = new URL(effectiveOrderUrl)
           hostname = u.hostname.replace(/^www\./i, '').toLowerCase()
           slugQuery = u.pathname
             .replace(/\.(html?|php|aspx?)$/i, '')
@@ -2053,7 +1818,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             .eq('company_id', company_id)
           const brandPart = hostname.split('.')[0]
           for (const s of (sups || [])) {
-            const sDom = resolveSupplierDomainHint(s.name, s.url || s.order_url, s.email)
+            const sDom = resolveSupplierDomainHint(s.url || s.order_url, s.email)
             if (
               (sDom && (hostname.includes(sDom) || sDom.includes(hostname))) ||
               (brandPart.length >= 4 && (s.name || '').toLowerCase().includes(brandPart))
@@ -2071,12 +1836,13 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         if (extractedImage && !filteredCandidates.includes(extractedImage)) {
           filteredCandidates.unshift(extractedImage)
         }
+        const verifiedImages = await pickVerifiedImageCandidates(filteredCandidates, { timeoutMs: 1800, maxToProbe: 5 })
 
         return new Response(JSON.stringify({
           success: true,
-          orderUrl: normalizedUrl,
-          image: extractedImage || filteredCandidates[0] || null,
-          alternatives: filteredCandidates.slice(0, 4),
+          orderUrl: effectiveOrderUrl,
+          image: verifiedImages.bestImage || null,
+          alternatives: verifiedImages.validAlternatives.slice(0, 4),
           title: extractedTitle || null,
           sku: extractedSku || null,
           price: extractedPrice,
@@ -2135,7 +1901,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             .eq('company_id', company_id),
           supabase
             .from('suppliers')
-            .select('id, name, email, url, order_url, default_category')
+            .select('id, name, email, url, order_url, preferred_order_method, default_category, selectors')
             .eq('company_id', company_id)
         ])
 
@@ -2176,7 +1942,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             const cleanDom = domainHint.replace(/^www\./i, '').toLowerCase()
             const brand = cleanDom.split('.')[0]
             for (const sup of (existingSuppliers || [])) {
-              const sDom = resolveSupplierDomainHint(sup.name, sup.url || sup.order_url, sup.email)
+              const sDom = resolveSupplierDomainHint(sup.url || sup.order_url, sup.email)
               if (
                 (sDom && (cleanDom.includes(sDom) || sDom.includes(cleanDom))) ||
                 (brand.length >= 4 && String(sup.name || '').toLowerCase().includes(brand))
@@ -2239,7 +2005,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           const sName = (ed.supplier_name || row.supplier_name || '').trim().toLowerCase()
           if (sName) {
             const prev = emailMetaBySupplier.get(sName) || {}
-            if (!prev.email && ed.supplier_email && ed.supplier_email !== 'hello@unbekannt.com') prev.email = ed.supplier_email
+            const cleanEdEmail = sanitizeSupplierEmail(ed.supplier_email)
+            if (!prev.email && cleanEdEmail) prev.email = cleanEdEmail
             if (!prev.phone && ed.supplier_phone) prev.phone = ed.supplier_phone
             if (!prev.customer_number && ed.customer_number) prev.customer_number = ed.customer_number
             emailMetaBySupplier.set(sName, prev)
@@ -2280,15 +2047,14 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
               const t = setTimeout(() => ctrl.abort(), 3200)
               try {
                 const directSkuUrl = `https://www.${webshopDomain}/artikel-p-${encodeURIComponent(sku)}`
-                const r = await fetch(directSkuUrl, {
+                const { response: r, finalUrl } = await safeFetchPublicUrl(directSkuUrl, {
                   headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                     'Accept-Language': 'de-DE,de;q=0.9'
                   },
-                  redirect: 'follow',
                   signal: ctrl.signal
                 })
-                if (r.ok && r.url && /-p-[A-Za-z0-9_-]+/i.test(r.url)) {
+                if (r.ok && finalUrl && /-p-[A-Za-z0-9_-]+/i.test(finalUrl)) {
                   const html = await r.text()
                   let ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
                   if (!ogImg || /manifest|favicon|icon[-_.]|apple-touch|logo/i.test(ogImg)) {
@@ -2296,7 +2062,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
                     ogImg = cdnImg || ''
                   }
                   const sp = extractPriceFromHtml(html)
-                  return { orderUrl: r.url, image: ogImg, shopPrice: sp }
+                  return { orderUrl: finalUrl, image: ogImg, shopPrice: sp }
                 }
               } catch {} finally {
                 clearTimeout(t)
@@ -2309,19 +2075,18 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             try {
               const qStr = sku ? `${sku} ${coreName}` : coreName
               const searchUrl = `https://www.${webshopDomain}/suche?q=${encodeURIComponent(qStr)}`
-              const r2 = await fetch(searchUrl, {
+              const { response: r2, finalUrl: finalSearchUrl } = await safeFetchPublicUrl(searchUrl, {
                 headers: {
                   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                   'Accept-Language': 'de-DE,de;q=0.9'
                 },
-                redirect: 'follow',
                 signal: ctrl2.signal
               })
               if (r2.ok) {
-                if (r2.url && /-p-[A-Za-z0-9_-]+/i.test(r2.url)) {
+                if (finalSearchUrl && /-p-[A-Za-z0-9_-]+/i.test(finalSearchUrl)) {
                   const html = await r2.text()
                   const ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || ''
-                  return { orderUrl: r2.url, image: ogImg, shopPrice: extractPriceFromHtml(html) }
+                  return { orderUrl: finalSearchUrl, image: ogImg, shopPrice: extractPriceFromHtml(html) }
                 }
                 const html = await r2.text()
                 const absMatches = [...html.matchAll(/href=["'](https?:\/\/www\.(?:reinigungsberater|bueromarkt-ag)\.de\/[^"'?]*-p-[A-Za-z0-9_-]+)["']/gi)].map(m => m[1])
@@ -2345,16 +2110,19 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
             try {
               const ctrl = new AbortController()
               const t = setTimeout(() => ctrl.abort(), 2400)
-              const r = await fetch(amzUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-                signal: ctrl.signal
-              })
-              clearTimeout(t)
-              if (r.ok) {
-                const html = await r.text()
-                const m = html.match(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
-                  html.match(/src=["'](https:\/\/m\.media-amazon\.com\/images\/I\/[^"']+)["']/i)
-                if (m?.[1]) amzImg = m[1]
+              try {
+                const { response: r } = await safeFetchPublicUrl(amzUrl, {
+                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
+                  signal: ctrl.signal
+                })
+                if (r.ok) {
+                  const html = await r.text()
+                  const m = html.match(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/I\/[^"]+)"/i) ||
+                    html.match(/src=["'](https:\/\/m\.media-amazon\.com\/images\/I\/[^"']+)["']/i)
+                  if (m?.[1]) amzImg = m[1]
+                }
+              } finally {
+                clearTimeout(t)
               }
             } catch {}
             return { orderUrl: amzUrl, image: amzImg, shopPrice: null }
@@ -2390,7 +2158,7 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           default_category?: string
         }>()
 
-        const standardCats = ['Lebensmittel', 'Getränke', 'Reinigung', 'Hygiene', 'Bürobedarf', 'Instandhaltung', 'Hotel & Gastro']
+        const standardCats = STANDARD_CATEGORIES.filter((c) => c !== 'Sonstiges')
         const allHotelCategories = [...new Set([
           ...(existingProducts || []).map((p: any) => (p.category as string || '').trim()),
           ...(existingSuppliers || []).map((s: any) => (s.default_category as string || '').trim())
@@ -2566,17 +2334,34 @@ Antworte ausschließlich als JSON im Format:
         const results = await Promise.all(items.map(async (item: any) => {
           if (item.type === 'supplier') {
             const aiSup = aiSupplierById.get(String(item.id))
+            const existingSupObj = supplierById.get(String(item.id))
             const lowerName = String(item.name || '').trim().toLowerCase()
             const fromMail = emailMetaBySupplier.get(lowerName) || {}
-            let effectiveEmail = (item.email && item.email !== 'hello@unbekannt.com')
-              ? item.email
-              : (fromMail.email || (aiSup?.email && aiSup.email !== 'hello@unbekannt.com' ? aiSup.email : ''))
+            let effectiveEmail =
+              sanitizeSupplierEmail(item.email) ||
+              sanitizeSupplierEmail(fromMail.email) ||
+              sanitizeSupplierEmail(aiSup?.email) ||
+              ''
             let effectivePhone = item.phone || fromMail.phone || aiSup?.phone || ''
-            const domHint = resolveSupplierDomainHint(item.name, item.url || aiSup?.url, effectiveEmail) || shopDomainBySupplierName.get(lowerName) || ''
-            const suggestedUrl = item.url || aiSup?.url || (domHint ? (domHint.startsWith('shop.') || domHint.startsWith('cloud.') ? `https://${domHint}` : `https://www.${domHint.replace(/^www\./, '')}`) : '')
-            const isEmailOnly = isEmailOnlyWholesaler(item.name, effectiveEmail)
-            const suggestedOrderMethod: 'email' | 'webshop' = aiSup?.preferred_order_method || (isEmailOnly ? 'email' : (suggestedUrl || domHint ? 'webshop' : 'email'))
-            const existingSupObj = supplierById.get(String(item.id))
+            const domHint = resolveSupplierDomainHint(item.url || existingSupObj?.order_url || existingSupObj?.url || aiSup?.url, effectiveEmail) || shopDomainBySupplierName.get(lowerName) || ''
+            const rawSuggestedUrl = item.url || existingSupObj?.url || existingSupObj?.order_url || aiSup?.url || (domHint ? (domHint.startsWith('shop.') || domHint.startsWith('cloud.') ? `https://${domHint}` : `https://www.${domHint.replace(/^www\./, '')}`) : '')
+            let suggestedUrl = ''
+            let safeScrapeUrl = ''
+            if (rawSuggestedUrl) {
+              const urlCheck = await assertSafePublicUrl(rawSuggestedUrl)
+              if (urlCheck.safe && urlCheck.normalizedUrl) {
+                suggestedUrl = item.url ? String(item.url).trim() : urlCheck.normalizedUrl
+                safeScrapeUrl = urlCheck.normalizedUrl
+              }
+            }
+
+            const existingMethod = item.preferredOrderMethod || existingSupObj?.preferred_order_method || ''
+            const isExplicitNonWebshop = existingMethod === 'email' || existingMethod === 'phone'
+            const suggestedOrderMethod: 'email' | 'webshop' | 'link' | 'phone' =
+              existingMethod ||
+              aiSup?.preferred_order_method ||
+              (isExplicitNonWebshop ? 'email' : (suggestedUrl || domHint ? 'webshop' : (effectivePhone && !effectiveEmail ? 'phone' : 'email')))
+
             const curSupCat = normalizeCategory(item.defaultCategory, customCategories)
             const dbSupCat = normalizeCategory(existingSupObj?.default_category, customCategories)
             const aiSupCat = normalizeCategory(aiSup?.default_category, customCategories)
@@ -2586,7 +2371,7 @@ Antworte ausschließlich als JSON im Format:
             const suggestedDefaultCategory = normalizeCategory(rawDefCat, customCategories) || ''
 
             // Falls Telefon oder E-Mail noch fehlen und eine Webseite bekannt ist, parallel auf Startseite & /impressum schauen
-            if (suggestedUrl && (!effectivePhone || !effectiveEmail)) {
+            if (safeScrapeUrl && (!effectivePhone || !effectiveEmail)) {
               const extractContactFromHtml = (html: string) => {
                 if (!effectivePhone) {
                   const telMatch = html.match(/href=["']tel:([+0-9\s()/.-]{7,22})["']/i) ||
@@ -2596,22 +2381,23 @@ Antworte ausschließlich als JSON im Format:
                 if (!effectiveEmail) {
                   const mailMatch = html.match(/href=["']mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/i) ||
                     html.match(/\b((?:info|service|kundenservice|kontakt|bestellung|order|mail|office|support)@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/i)
-                  if (mailMatch?.[1]) effectiveEmail = mailMatch[1].trim()
+                  const cleanedScraped = sanitizeSupplierEmail(mailMatch?.[1])
+                  if (cleanedScraped) effectiveEmail = cleanedScraped
                 }
               }
 
               let baseOrigin = ''
               try {
-                baseOrigin = new URL(suggestedUrl).origin
+                baseOrigin = new URL(safeScrapeUrl).origin
               } catch {}
 
-              const pagesToTry = [...new Set([suggestedUrl, ...(baseOrigin ? [`${baseOrigin}/impressum`, `${baseOrigin}/kontakt`] : [])])]
+              const pagesToTry = [...new Set([safeScrapeUrl, ...(baseOrigin ? [`${baseOrigin}/impressum`, `${baseOrigin}/kontakt`] : [])])]
               await Promise.allSettled(pagesToTry.map(async (pageUrl) => {
                 if (effectivePhone && effectiveEmail) return
                 const ctrl = new AbortController()
                 const t = setTimeout(() => ctrl.abort(), 1800)
                 try {
-                  const r = await fetch(pageUrl, {
+                  const { response: r } = await safeFetchPublicUrl(pageUrl, {
                     headers: {
                       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                       'Accept-Language': 'de-DE,de;q=0.9'
@@ -2635,7 +2421,7 @@ Antworte ausschließlich als JSON im Format:
               email: effectiveEmail,
               phone: effectivePhone,
               customerNumber: item.customerNumber || fromMail.customer_number || '',
-              preferredOrderMethod: item.preferredOrderMethod || suggestedOrderMethod,
+              preferredOrderMethod: suggestedOrderMethod,
               defaultCategory: suggestedDefaultCategory
             }
           } else {
@@ -2652,11 +2438,20 @@ Antworte ausschließlich als JSON im Format:
             const historicalSupName = supplierNameByProductName.get(lowerProdName) || supplierNameByProductName.get(lowerCleanName) || ''
             const effectiveSupName = item.supplierName || historicalSupName
             let suggestedSupplierId = item.supplierId || (historicalSupName ? findMatchingSupplierId(historicalSupName) : '')
+            const dbSupObj = suggestedSupplierId ? supplierById.get(suggestedSupplierId) : null
+            const supOrderMethod = String(item.supplierOrderMethod || dbSupObj?.preferred_order_method || '').trim().toLowerCase()
+            const isNonWebshopSup = supOrderMethod === 'email' || supOrderMethod === 'phone'
 
-            const isEmailWholesaler = isEmailOnlyWholesaler(effectiveSupName, item.supplierEmail)
             const lowerSupName = String(effectiveSupName || '').trim().toLowerCase()
-            const learnedSupDomain = !isEmailWholesaler && lowerSupName ? (shopDomainBySupplierName.get(lowerSupName) || '') : ''
-            const webshopDomain = resolveWebshopDomain(effectiveSupName, item.supplierUrl || learnedSupDomain, item.isWebshopSupplier, item.supplierEmail) || learnedSupDomain
+            const learnedSupDomain = !isNonWebshopSup && lowerSupName ? (shopDomainBySupplierName.get(lowerSupName) || '') : ''
+            const effectiveSupUrl = item.supplierUrl || dbSupObj?.order_url || dbSupObj?.url || learnedSupDomain
+            const effectiveSupEmail = sanitizeSupplierEmail(item.supplierEmail) || sanitizeSupplierEmail(dbSupObj?.email) || ''
+            const webshopDomain = resolveWebshopDomain({
+              supplierUrl: effectiveSupUrl,
+              supplierEmail: effectiveSupEmail,
+              supplierOrderMethod: supOrderMethod || null,
+              isWebshopFlag: !!item.isWebshopSupplier,
+            }) || learnedSupDomain
 
             // 1. Zuerst prüfen, ob genau dieses Produkt (oder die direkte Artikelnummer im Shop) schon einen Link hat
             let rawExistingUrl = item.orderUrl || existingProductOrderUrlByName.get(lowerProdName) || ''
@@ -2664,8 +2459,8 @@ Antworte ausschließlich als JSON im Format:
             let directImage = ''
             let shopPrice: number | null = null
 
-            // 2. Bildersuche über Bing (mit Artikelnummer + bereinigtem Namen!)
-            const normalizedSearchName = (cleanedName || item.name || '').replace(/[×]/g, 'x')
+            // 2. Bildersuche über Bing (kompakter Suchbegriff ohne Produktname-Stammdaten zu kürzen!)
+            const normalizedSearchName = toSearchQueryName(cleanedName || item.name || '')
             const query = `${normalizedSearchName} ${effectiveSku} ${webshopDomain}`.trim()
             let bingRes = await searchBingProductMeta(query, webshopDomain)
 
@@ -2688,7 +2483,7 @@ Antworte ausschließlich als JSON im Format:
               }
             }
 
-            if (isEmailWholesaler || !isDeepProductUrl(suggestedOrderUrl)) {
+            if (isNonWebshopSup || !isDeepProductUrl(suggestedOrderUrl)) {
               suggestedOrderUrl = ''
             }
 
@@ -2701,8 +2496,13 @@ Antworte ausschließlich als JSON im Format:
               } catch {}
             }
 
-            // Lieferanten-Standardkategorie als zusätzlichen Hinweis nutzen, falls vorhanden
-            const supObj = suggestedSupplierId ? supplierById.get(suggestedSupplierId) : null
+            // Lieferanten-Standardkategorie & Default-Mindestbestand laden
+            const supObj = (suggestedSupplierId ? supplierById.get(suggestedSupplierId) : null) || dbSupObj
+            const finalSupMethod = String(item.supplierOrderMethod || supObj?.preferred_order_method || '').trim().toLowerCase()
+            const finalIsNonWebshop = finalSupMethod === 'email' || finalSupMethod === 'phone'
+            if (finalIsNonWebshop) {
+              suggestedOrderUrl = ''
+            }
             const supDefaultCat = supObj?.default_category ? normalizeCategory(supObj.default_category, customCategories) : ''
 
             let effectiveCategory = normalizeCategory(aiResult?.category, customCategories) || normalizeCategory(item.category, customCategories)
@@ -2714,12 +2514,12 @@ Antworte ausschließlich als JSON im Format:
             const unit = effectiveUnit || 'Stück'
             const category = effectiveCategory
 
-            // Wenn eine Shop-URL vorliegt, versuche den Preis sowie Bild & Artikelnummer direkt von der Zielseite zu laden
+            // Wenn eine Shop-URL vorliegt, versuche den Preis sowie Bild & Artikelnummer sicher von der Zielseite zu laden
             if (suggestedOrderUrl) {
               const ctrl = new AbortController()
               const t = setTimeout(() => ctrl.abort(), 2800)
               try {
-                const r = await fetch(suggestedOrderUrl, {
+                const { response: r } = await safeFetchPublicUrl(suggestedOrderUrl, {
                   headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                     'Accept-Language': 'de-DE,de;q=0.9'
@@ -2754,7 +2554,7 @@ Antworte ausschließlich als JSON im Format:
             // 4. Zweiter Bild-Fallback: Wenn die spezifische Suche (mit interner Großhandels-SKU / Domain / Maßen) kein Bild geliefert hat,
             // mit dem prägnanten KI-Suchbegriff (oder bereinigtem Kern-Namen ohne SKU/Maße) auf Bing Images suchen!
             if (!item.image && !directImage && !bingRes.image) {
-              const simplifiedCore = (aiResult?.search_term || cleanedName || item.name || '')
+              const simplifiedCore = (aiResult?.search_term || toSearchQueryName(cleanedName || item.name || ''))
                 .replace(/["„“”]/g, ' ')
                 .replace(/\b(?:Kl\.?\s*[I123]+|Kal\.?\s*\d+|Fächerpack|ca\.?\s*\d+[xX×.,\d\s]*(?:g|kg|ml|l|cm)?|Ø\s*\d+\s*cm|H\s*\d+\s*x\s*B\s*\d+\s*cm|\d+\s*my)\b/gi, ' ')
                 .replace(/\s{2,}/g, ' ')
@@ -2786,9 +2586,7 @@ Antworte ausschließlich als JSON im Format:
               }
             }
 
-            // Punkt 2: Typische Bestellmenge immer vorschlagen, aber Mindestbestand (minStock > 0) NUR dann vorschlagen,
-            // wenn das Produkt in der Vergangenheit mindestens 2x bestellt wurde (also ein wiederkehrender Verbrauchsartikel ist!).
-            // Bei Einmal-Käufen bleibt minStock = 0 (keine falschen "Niedriger Bestand"-Alarme!).
+            // Typische Bestellmenge berechnen & Lieferanten-Default „Kein Mindestbestand“ berücksichtigen
             const pastQtys = quantitiesByProductName.get(lowerProdName) || quantitiesByProductName.get(lowerCleanName) || []
             let defaultOrderQty = 1
             if (pastQtys.length > 0) {
@@ -2803,24 +2601,42 @@ Antworte ausschließlich als JSON im Format:
             const suggestedStandardOrderQuantity = (item.standardOrderQuantity && Number(item.standardOrderQuantity) > 0)
               ? Number(item.standardOrderQuantity)
               : (aiResult?.standard_order_quantity || defaultOrderQty)
-            const suggestedMinStock = (item.minStock && Number(item.minStock) > 0)
-              ? Number(item.minStock)
-              : (aiResult?.min_stock || (pastQtys.length >= 2 ? Math.max(1, Math.floor(suggestedStandardOrderQuantity / 2)) : 0))
+            const supplierNoMinStock = getEffectiveSupplierNoMinStock(supObj)
+            const suggestedMinStock = computeSuggestedMinStock({
+              currentMinStock: item.minStock,
+              aiMinStock: aiResult?.min_stock,
+              pastQuantitiesCount: pastQtys.length,
+              standardOrderQuantity: suggestedStandardOrderQuantity,
+              supplierNoMinStock,
+            })
 
-            // Bestellweg: Webshop bei Shop-Link oder Webshop-Lieferant, E-Mail bei Großhändlern wie HEWO / Schwälbchen
-            const suggestedPreferredOrderMethod: 'email' | 'webshop' | 'phone' = isEmailWholesaler
-              ? 'email'
-              : (suggestedOrderUrl || webshopDomain || item.isWebshopSupplier ? 'webshop' : (item.preferredOrderMethod || 'webshop'))
+            const suggestedPreferredOrderMethod: 'email' | 'webshop' | 'link' | 'phone' =
+              finalSupMethod === 'phone'
+                ? (item.preferredOrderMethod || 'phone')
+                : finalIsNonWebshop
+                ? 'email'
+                : (suggestedOrderUrl || webshopDomain || item.isWebshopSupplier ? 'webshop' : (item.preferredOrderMethod || 'email'))
 
-            const allAlternatives = [...new Set([directImage, ...(bingRes.alternatives || [])].filter(Boolean))]
+            const rawImageCandidates = [
+              directImage,
+              bingRes.image,
+              bingRes.highResImage,
+              ...(bingRes.alternatives || []),
+            ].filter(Boolean)
+            const verifiedImages = item.image
+              ? {
+                  bestImage: item.image,
+                  validAlternatives: [...new Set([directImage, ...(bingRes.alternatives || [])].filter(Boolean))],
+                }
+              : await pickVerifiedImageCandidates(rawImageCandidates, { timeoutMs: 1800, maxToProbe: 5 })
 
             return {
               id: item.id,
               type: 'product',
               cleanName: cleanedName && cleanedName !== item.name ? cleanedName : undefined,
               supplierId: suggestedSupplierId || undefined,
-              image: item.image || directImage || bingRes.image || '',
-              alternatives: allAlternatives,
+              image: verifiedImages.bestImage || '',
+              alternatives: verifiedImages.validAlternatives,
               orderUrl: suggestedOrderUrl,
               productNumber: effectiveSku,
               price: suggestedPrice,
@@ -2902,7 +2718,7 @@ Antworte ausschließlich als JSON im Format:
           if (!p?.id) continue
           const patch: any = { is_auto_generated: false }
           if (p.name !== undefined && String(p.name).trim()) patch.name = String(p.name).trim()
-          if (p.category !== undefined) patch.category = p.category
+          if (p.category !== undefined) patch.category = normalizeCategory(p.category) || p.category
           if (p.unit !== undefined) patch.unit = p.unit
           if (p.price !== undefined && p.price !== null && p.price !== '') patch.price = Number(p.price) || 0
           if (p.min_stock !== undefined && p.min_stock !== null && p.min_stock !== '') patch.min_stock = Number(p.min_stock) || 0
@@ -2946,7 +2762,7 @@ Antworte ausschließlich als JSON im Format:
           const oldSup = oldSupById.get(s.id)
           const patch: any = { is_auto_generated: false }
           if (s.name !== undefined && String(s.name).trim()) patch.name = String(s.name).trim()
-          if (s.email !== undefined) patch.email = s.email || 'hello@unbekannt.com'
+          if (s.email !== undefined) patch.email = sanitizeSupplierEmail(s.email)
           if (s.phone !== undefined) patch.phone = s.phone || null
           if (s.url !== undefined) {
             patch.url = s.url || null
@@ -2957,7 +2773,7 @@ Antworte ausschließlich als JSON im Format:
           }
           if (s.customer_number !== undefined) patch.customer_number = s.customer_number || null
           if (s.preferred_order_method !== undefined) patch.preferred_order_method = s.preferred_order_method || null
-          if (s.default_category !== undefined) patch.default_category = s.default_category || null
+          if (s.default_category !== undefined) patch.default_category = normalizeCategory(s.default_category) || null
 
           const oldSupName = oldSupNameById.get(s.id)
           const { error: sErr } = await supabase
