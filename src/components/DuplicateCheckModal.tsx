@@ -68,13 +68,18 @@ export const DuplicateCheckModal: React.FC<DuplicateCheckModalProps> = ({ isOpen
             });
             if (fnErr) throw fnErr;
             if (data?.error) throw new Error(data.error);
+            if (!data?.success) throw new Error('Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.');
 
             const list: DuplicateSuggestion[] = Array.isArray(data?.duplicates) ? data.duplicates : [];
             setDuplicates(list);
             setSelectedIds(new Set(list.map(d => d.id)));
         } catch (err: any) {
             console.error('Duplicate check error:', err);
-            setError(err?.message || 'Fehler bei der KI-Duplikatprüfung.');
+            const rawMsg = err?.message || '';
+            const friendlyMsg = /failed to (send|fetch)|edge function|non-2xx|502|503|504|timeout|network/i.test(rawMsg)
+                ? 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.'
+                : (rawMsg || 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.');
+            setError(friendlyMsg);
         } finally {
             setLoading(false);
         }

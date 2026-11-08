@@ -529,6 +529,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 });
                 if (fnErr) throw fnErr;
                 if (data?.error) throw new Error(data.error);
+                if (!data?.success) throw new Error('Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.');
 
                 const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
                 const batchIds = targetBatch.map(p => p.id);
@@ -640,6 +641,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 });
                 if (fnErr) throw fnErr;
                 if (data?.error) throw new Error(data.error);
+                if (!data?.success) throw new Error('Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.');
 
                 const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
                 const batchIds = targetBatch.map(s => s.id);
@@ -650,14 +652,15 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         const cur = next[s.id];
                         if (!cur) continue;
                         const newMethod = cur.preferredOrderMethod || s.preferredOrderMethod || (cur.url || s.url ? 'webshop' : 'email');
-                        const newDefCat = cur.defaultCategory || s.defaultCategory || '';
+                        const hasMeaningfulDefCat = !!cur.defaultCategory && cur.defaultCategory !== 'Sonstiges' && cur.defaultCategory !== 'Ohne Kategorie';
+                        const newDefCat = hasMeaningfulDefCat ? cur.defaultCategory : (s.defaultCategory || cur.defaultCategory || '');
                         const aiFields = {
                             ...(cur.aiFields || {}),
                             url: !cur.url && !!s.url ? true : cur.aiFields?.url,
                             email: !cur.email && !!s.email ? true : cur.aiFields?.email,
                             phone: !cur.phone && !!s.phone ? true : cur.aiFields?.phone,
                             customerNumber: !cur.customerNumber && !!s.customerNumber ? true : cur.aiFields?.customerNumber,
-                            defaultCategory: !cur.defaultCategory && !!s.defaultCategory ? true : cur.aiFields?.defaultCategory,
+                            defaultCategory: !hasMeaningfulDefCat && !!s.defaultCategory ? true : cur.aiFields?.defaultCategory,
                             preferredOrderMethod: newMethod !== cur.preferredOrderMethod ? true : cur.aiFields?.preferredOrderMethod
                         };
                         next[s.id] = {
@@ -686,7 +689,11 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
             }
         } catch (err: any) {
             console.error('AI suggestion error:', err);
-            setError(err?.message || 'Fehler beim Laden der KI-Vorschläge.');
+            const rawMsg = err?.message || '';
+            const friendlyMsg = /failed to (send|fetch)|edge function|non-2xx|502|503|504|timeout|network/i.test(rawMsg)
+                ? 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.'
+                : (rawMsg || 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.');
+            setError(friendlyMsg);
         } finally {
             setAiLoading(false);
         }
@@ -1104,7 +1111,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <button
                                 type="button"
-                                onClick={() => setViewMode('overview')}
+                                onClick={() => { setError(null); setViewMode('overview'); }}
                                 style={{
                                     padding: '8px 12px',
                                     borderRadius: '8px',
@@ -1183,8 +1190,46 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     </div>
 
                     {error && (
-                        <div style={{ margin: '12px 24px 0 24px', padding: '10px 14px', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '13px' }}>
-                            {error}
+                        <div style={{
+                            margin: '12px 24px 0 24px',
+                            padding: '12px 14px',
+                            borderRadius: '10px',
+                            backgroundColor: '#fef2f2',
+                            border: '1px solid #fecaca',
+                            color: '#b91c1c',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '12px',
+                            flexWrap: 'wrap'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <AlertCircle size={17} style={{ flexShrink: 0 }} />
+                                <span>{error}</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => startAiCompletionAndOpenReview()}
+                                disabled={aiLoading}
+                                style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #fca5a5',
+                                    backgroundColor: '#fff',
+                                    color: '#b91c1c',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                }}
+                            >
+                                <RotateCcw size={13} />
+                                Erneut versuchen
+                            </button>
                         </div>
                     )}
 
@@ -1248,6 +1293,35 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                                         borderRadius: '999px',
                                         animation: 'agy-progress-indeterminate 1.3s ease-in-out infinite'
                                     }} />
+                                </div>
+                            </div>
+                        ) : reviewedIds.length === 0 && error ? (
+                            <div style={{ padding: '48px 24px', textAlign: 'center', maxWidth: '520px', margin: '0 auto' }}>
+                                <AlertCircle size={44} color="#dc2626" style={{ margin: '0 auto 12px auto' }} />
+                                <div style={{ fontSize: '17px', fontWeight: 800, color: '#991b1b', marginBottom: '6px' }}>
+                                    KI-Analyse derzeit nicht möglich
+                                </div>
+                                <div style={{ fontSize: '14px', color: '#b91c1c', marginBottom: '18px', lineHeight: 1.5 }}>
+                                    {error}
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setError(null); setViewMode('overview'); }}
+                                        className="btn btn-ghost"
+                                    >
+                                        Zurück zur Übersicht
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => startAiCompletionAndOpenReview()}
+                                        disabled={aiLoading}
+                                        className="btn btn-primary"
+                                        style={{ backgroundColor: '#dc2626', border: 'none', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        <RotateCcw size={15} />
+                                        Erneut versuchen
+                                    </button>
                                 </div>
                             </div>
                         ) : reviewedIds.length === 0 ? (
@@ -2237,7 +2311,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button
                             type="button"
-                            onClick={() => { setActiveTab('products'); setOverviewPage(0); setSessionReviewedIds(new Set()); }}
+                            onClick={() => { setActiveTab('products'); setOverviewPage(0); setSessionReviewedIds(new Set()); setError(null); }}
                             style={{
                                 padding: '8px 16px',
                                 borderRadius: '8px',
@@ -2256,7 +2330,7 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                         </button>
                         <button
                             type="button"
-                            onClick={() => { setActiveTab('suppliers'); setOverviewPage(0); setSessionReviewedIds(new Set()); }}
+                            onClick={() => { setActiveTab('suppliers'); setOverviewPage(0); setSessionReviewedIds(new Set()); setError(null); }}
                             style={{
                                 padding: '8px 16px',
                                 borderRadius: '8px',
@@ -2327,8 +2401,48 @@ export const DataCompletionModal: React.FC<DataCompletionModalProps> = ({
                 </div>
 
                 {error && (
-                    <div style={{ margin: '12px 24px 0 24px', padding: '10px 14px', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <AlertCircle size={16} /> {error}
+                    <div style={{
+                        margin: '12px 24px 0 24px',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        color: '#b91c1c',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <AlertCircle size={17} style={{ flexShrink: 0 }} />
+                            <span>{error}</span>
+                        </div>
+                        {(activeTab === 'products' ? filteredProducts.length > 0 : filteredSuppliers.length > 0) && (
+                            <button
+                                type="button"
+                                onClick={() => startAiCompletionAndOpenReview()}
+                                disabled={aiLoading}
+                                style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #fca5a5',
+                                    backgroundColor: '#fff',
+                                    color: '#b91c1c',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                }}
+                            >
+                                <RotateCcw size={13} />
+                                Erneut versuchen
+                            </button>
+                        )}
                     </div>
                 )}
 

@@ -628,6 +628,8 @@ export const Products: React.FC = () => {
                 }
             });
             if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+            if (!data?.success) throw new Error('Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.');
             const sug = Array.isArray(data?.suggestions) ? data.suggestions[0] : null;
             if (sug) {
                 if (Array.isArray(sug.alternatives) && sug.alternatives.length > 0) {
@@ -649,7 +651,11 @@ export const Products: React.FC = () => {
                 }
             }
         } catch (err: any) {
-            setNotification({ message: 'Fehler bei der Bildersuche: ' + (err?.message || String(err)), type: 'error' });
+            const rawMsg = err?.message || '';
+            const friendlyMsg = /failed to (send|fetch)|edge function|non-2xx|502|503|504|timeout|network/i.test(rawMsg)
+                ? 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.'
+                : (rawMsg || 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.');
+            setNotification({ message: friendlyMsg, type: 'error' });
         } finally {
             setIsExtractingUrlMeta(false);
         }

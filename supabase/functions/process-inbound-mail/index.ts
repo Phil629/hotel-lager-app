@@ -21,6 +21,18 @@ async function callGeminiJson(geminiParts: any[], totalBudgetMs = 110_000): Prom
   apiErrorData: any;
   rawText: string;
 }> {
+  if (!GEMINI_API_KEY) {
+    return {
+      ok: false,
+      parsedData: {
+        parse_error: "GEMINI_API_KEY fehlt",
+        raw_text: ""
+      },
+      apiErrorData: { error: { code: 500, message: "GEMINI_API_KEY not configured" } },
+      rawText: "",
+    }
+  }
+
   // Intelligentes Modell-Routing: Starte mit aktuellem Gemini 2.5 Flash / Flash-Lite für schnelle & präzise Analyse
   const GEMINI_MODELS = [
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -393,70 +405,6 @@ function normalizeCategory(rawCat?: string | null, customAllowed: string[] = [])
   return matched || c
 }
 
-const inferCategoryAndUnit = (name: string, currentCat?: string, currentUnit?: string, customAllowed: string[] = []) => {
-  const normCurrent = normalizeCategory(currentCat, customAllowed)
-  if (customAllowed.some(ca => ca.toLowerCase() === normCurrent.toLowerCase())) {
-    let unit = currentUnit || 'Stück'
-    return { category: normCurrent, unit }
-  }
-  const lower = (name || '').toLowerCase()
-
-  // Semantische Erkennung nach Produktart für Hotel-Warenwirtschaft:
-  // 1. Reinigung (Chemische Reiniger, Kaffeemaschinenreiniger, Spülmittel, Wischbezüge, Müllbeutel)
-  // WICHTIG: Milchreiniger/Entkalker sind IMMER Reinigung, selbst wenn sie von Coffee Perfect stammen!
-  const isCleaning = /(?:reiniger|kalklöser|milizid|spülmittel|waschmittel|müllbeutel|seife|schwamm|entkalker|schaben|kakerlaken|ungeziefer|putztuch|wischmopp|fettlöser|sahnereiniger|milchreiniger|maschinenreiniger|rohrreiniger|glasreiniger|allzweckreiniger|spültabs|sanitärreiniger)/i.test(lower)
-
-  // 2. Hygiene & Körperpflege (Toilettenpapier, Kosmetiktücher, Handseife, Waschgel, Desinfektion, Shampoo, Handschuhe)
-  const isHygiene = !isCleaning && /(?:toilettenpapier|kosmetiktücher|taschentücher|küchenrollen|händedesinfektion|desinfektionsmittel|desinfektion|shampoo|duschgel|waschgel|waschlotion|handseife|seifenspender|wandspender|handschuh|handschuhe|nitril|latex|hotelkosmetik|badelotion|zahnbürste|duschhaube)/i.test(lower)
-
-  // 3. Instandhaltung & Technik (Werkzeuge, LED/Leuchtmittel, Batterien, Sanitär, Duschköpfe, Dichtungen, Reparatur, Klebstoffe, Ersatzteile wie Türfächer, Wasserfilter)
-  const isMaintenance = /(?:kleber|montagekleber|klebeband|leim|schraube|nagel|dübel|duschkopf|duschbrause|kühlschrank|türfach|filter|filterkartusche|lampe|leuchtmittel|dulux|led|glühbirne|batterie|bohrer|zange|schraubendreher|dichtung|ersatzdichtung|abfluss|ventil|kabel|stecker|rauchmelder)/i.test(lower)
-
-  // 4. Bürobedarf (Papier, Marker, Stifte, Ordner, Etiketten, Umschläge, Tacker, RFID-Karten)
-  const isOffice = /(?:papier|briefmarke|kugelschreiber|marker|edding|klemmbrett|schere|ordner|etiketten|rfid|briefumschlag|tacker|heftklammer|büro|notizblock|post-it|toner|druckerpatrone|kassenrolle|laminier)/i.test(lower)
-
-  // 5. Hotel & Gastronomie (Geschirr, Besteck, Gläser, Servietten, Buffet, Türschilder, Duschhocker)
-  const isHotelGastro = /(?:porzellan|teller|tasse|becher|glas|gläser|besteck|messer|gabel|löffel|serviette|servietten|tischdecke|dessertdeckchen|salzstreuer|pfefferstreuer|türschild|duschhocker|menagen|buffet|tablett|ascher|speisekarte)/i.test(lower)
-
-  // 6. Lebensmittel (Frühstück, Obst, Gemüse, Molkerei, Brot, Wurst, Käse, Gewürze, Küchenfolien)
-  const isFood = /(?:melone|melonen|limette|limetten|käse|mozzarella|bavaria blu|bergader|camembert|weichkäse|schnittkäse|frischkäse|quark|schmand|sahne|schinken|lyoner|jagdwurst|salami|butter|rührei|honig|zucker|tomaten|gurken|paprika|zitronen|heidelbeeren|ananas|bananen|wurst|aufschnitt|joghurt|marmelade|konfitüre|brot|brötchen|croissant|müsli|haferflocken|alufolie|frischhaltefolie|backpapier|salz\b|pfeffer\b|öl\b|essig\b|ketchup|mayonnaise|senf)/i.test(lower)
-
-  // 7. Getränke (Kaffee, Tee, Wasser, Säfte, Bier, Wein, Softdrinks)
-  const isDrink = !isCleaning && /(?:pils|bier|cola|saft|schorle|\bwasser\b|mineralwasser|sprudel|bionade|orangina|\bmilch\b|kaffee|espresso|teavelope|tee\b|wein\b|sekt|zäpfle|getränk|sirup|limonade)/i.test(lower)
-
-  let category = normalizeCategory(currentCat)
-  const isReplaceableCat = !category || category === 'Sonstiges' || category === 'Ohne Kategorie' || category === 'Reinigung' || category === 'Bürobedarf'
-
-  if (isCleaning) {
-    category = 'Reinigung'
-  } else if (isHygiene) {
-    category = 'Hygiene'
-  } else if (isMaintenance) {
-    category = 'Instandhaltung'
-  } else if (isOffice) {
-    category = 'Bürobedarf'
-  } else if (isHotelGastro) {
-    category = 'Hotel & Gastro'
-  } else if (isFood && isReplaceableCat) {
-    category = 'Lebensmittel'
-  } else if (isDrink && isReplaceableCat) {
-    category = 'Getränke'
-  } else if (!category || category === 'Ohne Kategorie') {
-    category = 'Sonstiges'
-  }
-
-  let unit = currentUnit || 'Stück'
-  if (!currentUnit || currentUnit === 'Stk' || currentUnit === 'Stück') {
-    if (/\b(\d+\s*x\s*\d+[,\.]?\d*\s*l|kasten|kiste)\b/i.test(lower)) unit = 'Kasten'
-    else if (/\b(karton|kt:|paket|pakete)\b/i.test(lower)) unit = 'Karton'
-    else if (/\b(rolle|rollen)\b/i.test(lower)) unit = 'Rolle'
-    else if (/\bkanister\b|(?<![\d,\.])(?:5|10)\s*l\b/i.test(lower)) unit = 'Kanister'
-    else if (/\bflasche\b|(?<![\d,\.])(?:1\s*l|500\s*ml|750\s*ml)\b/i.test(lower)) unit = 'Flasche'
-    else if (/\b(pack|packung|beutel|dose|tüte)\b/i.test(lower)) unit = 'Packung'
-  }
-  return { category: normalizeCategory(category), unit }
-}
-
 const formatEuro = (val: number) => val.toFixed(2).replace('.', ',')
 
 const extractPriceFromHtml = (html: string): number | null => {
@@ -578,12 +526,9 @@ async function enrichSingleProduct(params: {
   image: string;
   alternatives: string[];
   sku: string;
-  category: string;
-  unit: string;
 }> {
   const cleanName = cleanProductName(params.name) || params.name
   const webshopDomain = resolveWebshopDomain(params.supplierName || '', params.supplierUrl || '', false, params.supplierEmail || '')
-  const { category, unit } = inferCategoryAndUnit(params.name)
   let orderUrl = ''
   let image = ''
   let alternatives: string[] = []
@@ -670,9 +615,7 @@ async function enrichSingleProduct(params: {
     orderUrl: isDeepProductUrl(orderUrl) ? orderUrl : '',
     image,
     alternatives,
-    sku: effectiveSku,
-    category,
-    unit
+    sku: effectiveSku
   }
 }
 
@@ -940,6 +883,7 @@ Antworte ausschließlich als JSON:
       "product_name": "string (nur lesbarer Name)",
       "sku": "string | null",
       "category": "string (passende Kategorie auf Deutsch)",
+      "unit": "string (Bestelleinheit: Stück, Karton, Kasten, Flasche, Packung, Rolle, Dose oder Kanister)",
       "quantity": 1,
       "price": 0
     }
@@ -1230,13 +1174,15 @@ Antworte ausschließlich als JSON:
     let resolvedOrderUrl = matchedProd?.order_url || ''
     let resolvedSku = matchedProd?.product_number || item.sku || ''
     let resolvedCategory = (matchedProd?.category && matchedProd.category !== 'Sonstiges')
-      ? normalizeCategory(matchedProd.category)
-      : (item.category && item.category !== 'Sonstiges' ? normalizeCategory(item.category) : '')
-    let resolvedUnit = (matchedProd?.unit && matchedProd.unit !== 'Stk' && matchedProd.unit !== 'Stück') ? matchedProd.unit : ''
+      ? normalizeCategory(matchedProd.category, customCategories)
+      : (item.category && item.category !== 'Sonstiges' ? normalizeCategory(item.category, customCategories) : '')
+    let resolvedUnit = (matchedProd?.unit && matchedProd.unit !== 'Stk' && matchedProd.unit !== 'Stück')
+      ? matchedProd.unit
+      : (item.unit && item.unit !== 'Stk' ? String(item.unit).trim() : '')
     let resolvedName = canonicalProductName
 
-    // Automatische KI-Anreicherung bei neuen oder unvollständigen Produkten für maximalen Wow-Effekt
-    if (docType !== 'unknown' && (!resolvedImage || !resolvedOrderUrl || !resolvedCategory || !resolvedUnit)) {
+    // Automatische Webshop-Anreicherung (Bild & Bestell-Link) bei neuen oder unvollständigen Produkten
+    if (docType !== 'unknown' && (!resolvedImage || !resolvedOrderUrl)) {
       try {
         const enriched = await enrichSingleProduct({
           name: canonicalProductName,
@@ -1249,21 +1195,18 @@ Antworte ausschließlich als JSON:
         if (enriched.image && !resolvedImage) resolvedImage = enriched.image
         if (enriched.orderUrl && !resolvedOrderUrl) resolvedOrderUrl = enriched.orderUrl
         if (enriched.sku && !resolvedSku) resolvedSku = enriched.sku
-        if (enriched.category && !resolvedCategory) resolvedCategory = normalizeCategory(enriched.category)
-        if (enriched.unit && !resolvedUnit) resolvedUnit = enriched.unit
         if (enriched.cleanName && !matchedProd) resolvedName = enriched.cleanName
       } catch (enrichErr) {
         console.warn('Auto-enrich error on inbound item:', item.product_name, enrichErr)
       }
     }
 
-    if (!resolvedCategory || resolvedCategory === 'Sonstiges') {
-      const fallback = inferCategoryAndUnit(canonicalProductName, resolvedCategory, resolvedUnit)
-      if (fallback.category && fallback.category !== 'Sonstiges') {
-        resolvedCategory = fallback.category
-      }
+    if ((!resolvedCategory || resolvedCategory === 'Sonstiges') && matchedSupplier?.default_category) {
+      const supDef = normalizeCategory(matchedSupplier.default_category, customCategories)
+      if (supDef && supDef !== 'Sonstiges') resolvedCategory = supDef
     }
-    resolvedCategory = normalizeCategory(resolvedCategory) || 'Sonstiges'
+    resolvedCategory = normalizeCategory(resolvedCategory, customCategories) || 'Sonstiges'
+    if (!resolvedUnit) resolvedUnit = 'Stück'
 
     let orderStatus: string | null = null
     if (docType === 'order_confirmation' || docType === 'delivery_note') {
@@ -1600,7 +1543,12 @@ Antworte ausschließlich als JSON:
 `
         const res = await callGeminiJson([{ text: pastePrompt }], 45_000)
         if (!res.ok) {
-          return new Response(JSON.stringify({ success: false, error: 'KI-Analyse fehlgeschlagen', details: res.parsedData }), {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.',
+            errorCode: 'GEMINI_UNAVAILABLE',
+            details: res.parsedData
+          }), {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           })
@@ -1778,7 +1726,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
         if (!res.ok) {
           return new Response(JSON.stringify({
             success: false,
-            error: 'KI-Duplikatprüfung vorübergehend nicht erreichbar. Bitte kurz erneut versuchen.',
+            error: 'Die KI (Gemini) ist vorübergehend nicht erreichbar oder überlastet. Bitte versuche es später erneut.',
+            errorCode: 'GEMINI_UNAVAILABLE',
             details: res.parsedData
           }), {
             status: 200,
@@ -2116,7 +2065,6 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           }
         }
 
-        const { category, unit } = inferCategoryAndUnit(productNameHint || extractedTitle)
         const priceCheck = evaluatePricePlausibility(extractedPrice, knownPriceHint)
 
         const filteredCandidates = candidateImages.filter(img => img && !/manifest|favicon|icon[-_.]|apple-touch|logo/i.test(img))
@@ -2133,8 +2081,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
           sku: extractedSku || null,
           price: extractedPrice,
           priceCheck,
-          category,
-          unit,
+          category: null,
+          unit: null,
           matchedSupplierId,
           matchedSupplierName
         }), {
@@ -2451,6 +2399,8 @@ Jedes Element in "duplicates" (nur falls echte Duplikate existieren!) hat die Fe
 
         const aiPromises: Promise<void>[] = []
 
+        let geminiFailureReason = ''
+
         if (productItemsToAnalyze.length > 0) {
           const aiPrompt = `
 Du bist ein erfahrener Hotel-Wirtschaftsleiter und Chefeinkäufer für das Hotel Schottenhof.
@@ -2495,14 +2445,25 @@ Antworte ausschließlich als JSON im Format:
 `
           aiPromises.push((async () => {
             try {
-              const aiRes = await callGeminiJson([{ text: aiPrompt }], 22_000)
-              if (aiRes.ok && Array.isArray(aiRes.parsedData?.results)) {
-                for (const r of aiRes.parsedData.results) {
-                  if (r.id) aiAnalysisById.set(String(r.id), r)
+              const aiRes = await callGeminiJson([{ text: aiPrompt }], 25_000)
+              if (!aiRes.ok || !Array.isArray(aiRes.parsedData?.results)) {
+                console.error("AI product completion failed:", JSON.stringify(aiRes.apiErrorData || aiRes.parsedData).substring(0, 500))
+                if (!geminiFailureReason) {
+                  geminiFailureReason = 'Die KI (Gemini) ist vorübergehend nicht erreichbar oder überlastet. Bitte versuche es später erneut.'
                 }
+                return
+              }
+              for (const r of aiRes.parsedData.results) {
+                if (r.id) aiAnalysisById.set(String(r.id), r)
+              }
+              if (aiAnalysisById.size === 0 && !geminiFailureReason) {
+                geminiFailureReason = 'Die KI (Gemini) hat keine gültige Antwort geliefert. Bitte versuche es später erneut.'
               }
             } catch (e) {
-              console.warn("AI product completion error:", e)
+              console.error("AI product completion error:", e)
+              if (!geminiFailureReason) {
+                geminiFailureReason = 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.'
+              }
             }
           })())
         }
@@ -2564,20 +2525,42 @@ Antworte ausschließlich als JSON im Format:
 `
           aiPromises.push((async () => {
             try {
-              const supAiRes = await callGeminiJson([{ text: supAiPrompt }], 22_000)
-              if (supAiRes.ok && Array.isArray(supAiRes.parsedData?.suppliers)) {
-                for (const sr of supAiRes.parsedData.suppliers) {
-                  if (sr.id) aiSupplierById.set(String(sr.id), sr)
+              const supAiRes = await callGeminiJson([{ text: supAiPrompt }], 25_000)
+              if (!supAiRes.ok || !Array.isArray(supAiRes.parsedData?.suppliers)) {
+                console.error("AI supplier completion failed:", JSON.stringify(supAiRes.apiErrorData || supAiRes.parsedData).substring(0, 500))
+                if (!geminiFailureReason) {
+                  geminiFailureReason = 'Die KI (Gemini) ist vorübergehend nicht erreichbar oder überlastet. Bitte versuche es später erneut.'
                 }
+                return
+              }
+              for (const sr of supAiRes.parsedData.suppliers) {
+                if (sr.id) aiSupplierById.set(String(sr.id), sr)
+              }
+              if (aiSupplierById.size === 0 && !geminiFailureReason) {
+                geminiFailureReason = 'Die KI (Gemini) hat keine gültige Antwort geliefert. Bitte versuche es später erneut.'
               }
             } catch (e) {
-              console.warn("AI supplier completion error:", e)
+              console.error("AI supplier completion error:", e)
+              if (!geminiFailureReason) {
+                geminiFailureReason = 'Die KI (Gemini) ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.'
+              }
             }
           })())
         }
 
         if (aiPromises.length > 0) {
           await Promise.all(aiPromises)
+        }
+
+        if (geminiFailureReason) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: geminiFailureReason,
+            errorCode: 'GEMINI_UNAVAILABLE'
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
         }
 
         const results = await Promise.all(items.map(async (item: any) => {
@@ -2592,11 +2575,14 @@ Antworte ausschließlich als JSON im Format:
             const domHint = resolveSupplierDomainHint(item.name, item.url || aiSup?.url, effectiveEmail) || shopDomainBySupplierName.get(lowerName) || ''
             const suggestedUrl = item.url || aiSup?.url || (domHint ? (domHint.startsWith('shop.') || domHint.startsWith('cloud.') ? `https://${domHint}` : `https://www.${domHint.replace(/^www\./, '')}`) : '')
             const isEmailOnly = isEmailOnlyWholesaler(item.name, effectiveEmail)
-            const suggestedOrderMethod: 'email' | 'webshop' = isEmailOnly
-              ? 'email'
-              : (aiSup?.preferred_order_method || (suggestedUrl || domHint ? 'webshop' : 'email'))
+            const suggestedOrderMethod: 'email' | 'webshop' = aiSup?.preferred_order_method || (isEmailOnly ? 'email' : (suggestedUrl || domHint ? 'webshop' : 'email'))
             const existingSupObj = supplierById.get(String(item.id))
-            const rawDefCat = item.defaultCategory || existingSupObj?.default_category || aiSup?.default_category || ''
+            const curSupCat = normalizeCategory(item.defaultCategory, customCategories)
+            const dbSupCat = normalizeCategory(existingSupObj?.default_category, customCategories)
+            const aiSupCat = normalizeCategory(aiSup?.default_category, customCategories)
+            const rawDefCat = (curSupCat && curSupCat !== 'Sonstiges')
+              ? curSupCat
+              : ((aiSupCat && aiSupCat !== 'Sonstiges') ? aiSupCat : (dbSupCat || aiSupCat || ''))
             const suggestedDefaultCategory = normalizeCategory(rawDefCat, customCategories) || ''
 
             // Falls Telefon oder E-Mail noch fehlen und eine Webseite bekannt ist, parallel auf Startseite & /impressum schauen
@@ -2654,7 +2640,7 @@ Antworte ausschließlich als JSON im Format:
             }
           } else {
             const aiResult = aiAnalysisById.get(String(item.id))
-            const cleanedName = aiResult?.clean_name || cleanProductName(item.name || '')
+            const cleanedName = (aiResult?.clean_name || String(item.name || '')).trim()
             const lowerProdName = String(item.name || '').trim().toLowerCase()
             const lowerCleanName = cleanedName.toLowerCase()
             const mailSku = skuByProductName.get(lowerProdName) || skuByProductName.get(lowerCleanName) || ''
@@ -2719,18 +2705,12 @@ Antworte ausschließlich als JSON im Format:
             const supObj = suggestedSupplierId ? supplierById.get(suggestedSupplierId) : null
             const supDefaultCat = supObj?.default_category ? normalizeCategory(supObj.default_category, customCategories) : ''
 
-            let effectiveCategory = normalizeCategory(aiResult?.category || item.category, customCategories)
-            let effectiveUnit = aiResult?.unit || item.unit
-            if (!effectiveCategory || effectiveCategory === 'Sonstiges') {
-              const fallback = inferCategoryAndUnit(cleanedName || item.name, effectiveCategory, effectiveUnit, customCategories)
-              if (!effectiveCategory || effectiveCategory === 'Sonstiges') {
-                effectiveCategory = (fallback.category && fallback.category !== 'Sonstiges')
-                  ? fallback.category
-                  : (supDefaultCat || fallback.category)
-              }
-              if (!effectiveUnit || effectiveUnit === 'Stück' || effectiveUnit === 'Stk') effectiveUnit = fallback.unit
+            let effectiveCategory = normalizeCategory(aiResult?.category, customCategories) || normalizeCategory(item.category, customCategories)
+            if ((!effectiveCategory || effectiveCategory === 'Sonstiges') && supDefaultCat && supDefaultCat !== 'Sonstiges') {
+              effectiveCategory = supDefaultCat
             }
             effectiveCategory = normalizeCategory(effectiveCategory, customCategories) || 'Sonstiges'
+            const effectiveUnit = aiResult?.unit || (item.unit && item.unit !== 'Stk' ? item.unit : '')
             const unit = effectiveUnit || 'Stück'
             const category = effectiveCategory
 
