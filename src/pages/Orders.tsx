@@ -15,6 +15,7 @@ import { useAppContext } from '../contexts/AppContext';
 import { KiLogModal, KiStatusBadge, timeAgo } from '../components/orders/KiLogModal';
 import { DeliveryDateModal } from '../components/orders/DeliveryDateModal';
 import { DefectModal } from '../components/orders/DefectModal';
+import { buildEmailClientUrls, buildOrderEmailTemplate, resolveOrderEmailAddress } from '../lib/orderEmailHelpers';
 
 const isLiveEnv = window.location.hostname === 'kunden.bestellwesen.com' || window.location.hostname === 'lager-hotel.netlify.app' || import.meta.env.VITE_SUPABASE_URL === 'https://owofhbbrywryehlnqmfj.supabase.co';
 
@@ -167,12 +168,12 @@ export const Orders: React.FC = () => {
                         id: generateId(),
                         date: new Date(orderDate).toISOString(),
                         productName: item.product.name,
-                        quantity: item.quantity,
+                        quantity: Math.max(1, Number(item.quantity) || 1),
                         status: 'open',
                         price: item.product.price,
                         supplierName: supplier?.name,
                         productImage: item.product.image,
-                        supplierEmail: item.product.emailOrderAddress || supplier?.orderEmail || supplier?.email,
+                        supplierEmail: resolveOrderEmailAddress(item.product, supplier) || undefined,
                         supplierPhone: item.product.supplierPhone || supplier?.orderPhone || supplier?.phone,
                         notes: orderNotes
                     };
@@ -518,12 +519,12 @@ export const Orders: React.FC = () => {
                  id: generateId(),
                  date: nowIso,
                  productName: prod.name,
-                 quantity: proposal.quantity,
+                 quantity: Math.max(1, Number(proposal.quantity) || 1),
                  status: 'open',
                  price: prod.price,
                  supplierName: supplier?.name,
                  productImage: prod.image,
-                 supplierEmail: prod.emailOrderAddress || supplier?.orderEmail || supplier?.email,
+                 supplierEmail: resolveOrderEmailAddress(prod, supplier) || undefined,
                  supplierPhone: prod.supplierPhone || supplier?.orderPhone || supplier?.phone,
                  notes: 'Aus Bestellvorschlägen generiert'
             };
@@ -536,6 +537,41 @@ export const Orders: React.FC = () => {
         } catch(e) {
             console.error('Order Proposal Error:', e);
             setNotification({ message: 'Fehler beim Speichern', type: 'error' });
+        }
+    };
+
+    const executeProposalBulkDbSave = async (proposalsToSave: {product: Product, quantity: number}[]) => {
+        if (proposalsToSave.length === 0) return;
+        try {
+            const nowIso = new Date().toISOString();
+            const createdIds: string[] = [];
+            for (const proposal of proposalsToSave) {
+                const prod = proposal.product;
+                const supplier = suppliers.find(s => s.id === prod.supplierId);
+                const newOrder: import('../types').Order = {
+                    id: generateId(),
+                    date: nowIso,
+                    productName: prod.name,
+                    quantity: Math.max(1, Number(proposal.quantity) || 1),
+                    status: 'open',
+                    price: prod.price,
+                    supplierName: supplier?.name,
+                    productImage: prod.image,
+                    supplierEmail: resolveOrderEmailAddress(prod, supplier) || undefined,
+                    supplierPhone: prod.supplierPhone || supplier?.orderPhone || supplier?.phone,
+                    notes: 'Aus Bestellvorschlägen (Sammel-E-Mail) generiert'
+                };
+                await DataService.saveOrder(newOrder);
+                createdIds.push(newOrder.id);
+            }
+            const savedProdIds = new Set(proposalsToSave.map(p => p.product.id));
+            setSessionGeneratedOrderIds(prev => [...prev, ...createdIds]);
+            setModalProposals(prev => prev.filter(p => !savedProdIds.has(p.product.id)));
+            loadOrders();
+            setNotification({ message: `${createdIds.length} Bestellungen für E-Mail erfasst.`, type: 'success' });
+        } catch (e) {
+            console.error('Bulk Order Proposal Error:', e);
+            setNotification({ message: 'Fehler beim Speichern der Sammelbestellung', type: 'error' });
         }
     };
 
@@ -1476,7 +1512,7 @@ export const Orders: React.FC = () => {
                     <div className="modal-box" style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
                         <div className="modal-header">
                             <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Neue Bestellung</h3>
-                            <button onClick={() => { setIsCreateModalOpen(false); clearCart(); setFilterCategory(''); setSearchTerm(''); }} className="btn btn-ghost btn-icon">
+                            <button onClick={() => { setIsCreateModalOpen(false); clearCart(); setFilterCategory(''); setSearchTerm(''); setIsCreatingNewProduct(false); setNewSupplierProduct(''); }} className="btn btn-ghost btn-icon">
                                 <X size={20} />
                             </button>
                         </div>
@@ -1735,7 +1771,7 @@ export const Orders: React.FC = () => {
                                                             value={item.quantity === 0 ? '' : item.quantity} 
                                                             onChange={e => {
                                                                 const val = e.target.value;
-                                                                updateCartQuantity(index, val === '' ? 0 : Number(val.replace(/^0+/, '')) || 0);
+                                                                updateCartQuantity(index, val === '' ? 0 : Math.max(0, Number(val.replace(/^0+/, '')) || 0));
                                                             }}
                                                             style={{ width: '60px', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: 'var(--font-size-md)' }} 
                                                         />
@@ -1748,10 +1784,30 @@ export const Orders: React.FC = () => {
                                                 ))}
                                             </div>
                                             
-                                            {isAiCartEnabled && (() => {
+                                            {(() => {
                                                 const supplierId = selectedProduct?.supplierId;
                                                 if (!supplierId) return null;
-                                                const suggestions = products.filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id));
+                                                const sup = suppliers.find(s => s.id === supplierId);
+                                                const suggestions = products
+                                                    .filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id))
+                                                    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+                                                const handleQuickCreateSupplierProduct = async () => {
+                                                    if (!newSupplierProduct.trim()) return;
+                                                    const newProduct: any = {
+                                                        id: generateId(),
+                                                        name: newSupplierProduct.trim(),
+                                                        supplierId: supplierId,
+                                                        category: sup?.defaultCategory || 'Sonstiges',
+                                                        unit: 'Stück',
+                                                        stock: 0,
+                                                        price: 0
+                                                    };
+                                                    await DataService.saveProduct(newProduct);
+                                                    await loadProducts();
+                                                    addToCart(newProduct);
+                                                    setNewSupplierProduct('');
+                                                    setIsCreatingNewProduct(false);
+                                                };
                                                 return (
                                                     <div style={{ padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                                                         <h6 style={{ margin: '0 0 10px 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Weitere Produkte vom Lieferanten hinzufügen:</h6>
@@ -1779,41 +1835,11 @@ export const Orders: React.FC = () => {
                                                                             onKeyDown={async e => {
                                                                                 if (e.key === 'Enter') {
                                                                                     e.preventDefault();
-                                                                                    if (!newSupplierProduct.trim()) return;
-                                                                                    const newProduct: any = {
-                                                                                        id: generateId(),
-                                                                                        name: newSupplierProduct.trim(),
-                                                                                        supplierId: supplierId,
-                                                                                        category: 'Sonstiges',
-                                                                                        unit: 'Stück',
-                                                                                        stock: 0,
-                                                                                        price: 0
-                                                                                    };
-                                                                                    await DataService.saveProduct(newProduct);
-                                                                                    await loadProducts();
-                                                                                    addToCart(newProduct);
-                                                                                    setNewSupplierProduct('');
-                                                                                    setIsCreatingNewProduct(false);
+                                                                                    await handleQuickCreateSupplierProduct();
                                                                                 }
                                                                             }}
                                                                         />
-                                                                        <button type="button" onClick={async () => {
-                                                                            if (!newSupplierProduct.trim()) return;
-                                                                            const newProduct: any = {
-                                                                                id: generateId(),
-                                                                                name: newSupplierProduct.trim(),
-                                                                                supplierId: supplierId,
-                                                                                category: 'Sonstiges',
-                                                                                unit: 'Stück',
-                                                                                stock: 0,
-                                                                                price: 0
-                                                                            };
-                                                                            await DataService.saveProduct(newProduct);
-                                                                            await loadProducts();
-                                                                            addToCart(newProduct);
-                                                                            setNewSupplierProduct('');
-                                                                            setIsCreatingNewProduct(false);
-                                                                        }} className="btn btn-sm btn-primary" style={{ padding: '4px 8px' }}>Hinzufügen</button>
+                                                                        <button type="button" onClick={handleQuickCreateSupplierProduct} className="btn btn-sm btn-primary" style={{ padding: '4px 8px' }}>Hinzufügen</button>
                                                                         <button type="button" onClick={() => { setIsCreatingNewProduct(false); setNewSupplierProduct(''); }} className="btn btn-sm btn-ghost" style={{ padding: '4px' }}><X size={14} /></button>
                                                                     </div>
                                                                 ) : (
@@ -1965,7 +1991,13 @@ export const Orders: React.FC = () => {
                                                 </div>
                                             )}
 
-                                            {(selectedProduct.emailOrderAddress || suppliers.find(s => s.id === selectedProduct.supplierId)?.email) && !selectedProduct.autoOrder && (
+                                            {(() => {
+                                                const sup = suppliers.find(s => s.id === selectedProduct.supplierId);
+                                                const orderEmailTo = resolveOrderEmailAddress(selectedProduct, sup);
+                                                if (!orderEmailTo || selectedProduct.autoOrder) return null;
+                                                const pref = StorageService.getSettings().preferredEmailClient || 'all';
+                                                const { gmailUrl, mailtoUrl } = buildEmailClientUrls(orderEmailTo, emailSubject, emailBody);
+                                                return (
                                                 <>
                                                     {getEffectiveOrderMethod(selectedProduct) !== 'email' && !isOrderEmailExpanded ? (
                                                         <button
@@ -2024,36 +2056,59 @@ export const Orders: React.FC = () => {
                                                                 />
                                                             </div>
 
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const encodedSubject = encodeURIComponent(emailSubject);
-                                                                    const encodedBody = encodeURIComponent(emailBody);
-                                                                    const emailTo = selectedProduct.emailOrderAddress || suppliers.find(s => s.id === selectedProduct.supplierId)?.email || '';
-                                                                    window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${emailTo}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
-                                                                }}
-                                                                style={{
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center',
-                                                                    gap: 'var(--spacing-sm)',
-                                                                    padding: 'var(--spacing-sm)',
-                                                                    borderRadius: 'var(--radius-sm)',
-                                                                    border: '1px solid var(--color-border)',
-                                                                    backgroundColor: '#EA4335',
-                                                                    color: 'white',
-                                                                    cursor: 'pointer',
-                                                                    fontWeight: 500,
-                                                                    width: '100%'
-                                                                }}
-                                                            >
-                                                                <Mail size={16} />
-                                                                In Gmail öffnen
-                                                            </button>
+                                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                                {(pref === 'all' || pref === 'gmail') && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => window.open(gmailUrl, '_blank')}
+                                                                        style={{
+                                                                            flex: '1 1 160px',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            gap: 'var(--spacing-sm)',
+                                                                            padding: 'var(--spacing-sm)',
+                                                                            borderRadius: 'var(--radius-sm)',
+                                                                            border: '1px solid var(--color-border)',
+                                                                            backgroundColor: '#EA4335',
+                                                                            color: 'white',
+                                                                            cursor: 'pointer',
+                                                                            fontWeight: 500
+                                                                        }}
+                                                                    >
+                                                                        <Mail size={16} />
+                                                                        In Gmail öffnen
+                                                                    </button>
+                                                                )}
+                                                                {(pref === 'all' || pref === 'mailto') && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => { window.location.href = mailtoUrl; }}
+                                                                        style={{
+                                                                            flex: '1 1 160px',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            gap: 'var(--spacing-sm)',
+                                                                            padding: 'var(--spacing-sm)',
+                                                                            borderRadius: 'var(--radius-sm)',
+                                                                            border: '1px solid var(--color-border)',
+                                                                            backgroundColor: 'var(--color-primary)',
+                                                                            color: 'white',
+                                                                            cursor: 'pointer',
+                                                                            fontWeight: 500
+                                                                        }}
+                                                                    >
+                                                                        <Mail size={16} />
+                                                                        Mail-App öffnen
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </>
-                                            )}
+                                                );
+                                            })()}
                                         </div>
 
                                         {selectedProduct.autoOrder && (
@@ -2676,13 +2731,49 @@ export const Orders: React.FC = () => {
                                         {Array.from(new Set(modalProposals.map(p => p.supplierName))).map(supplierName => {
                                             const supplierProposals = modalProposals.filter(p => p.supplierName === supplierName);
                                             if (supplierProposals.length === 0) return null;
+                                            const orderableProposals = supplierProposals.filter(p => p.openQty === 0);
+                                            const headerSupplier = suppliers.find(s => s.id === supplierProposals[0]?.supplierId);
+                                            const headerEmailAddr = resolveOrderEmailAddress(orderableProposals[0]?.product, headerSupplier);
+                                            const headerMethod = headerSupplier?.preferredOrderMethod;
+                                            const isEmailSupplierHeader = headerMethod === 'email' || (!headerMethod && !headerSupplier?.url && !headerSupplier?.orderUrl && !headerSupplier?.loginUrl && !!headerEmailAddr);
+                                            const prefClient = StorageService.getSettings().preferredEmailClient || 'all';
+                                            const bulkEmailTpl = (orderableProposals.length > 1 && headerEmailAddr && isEmailSupplierHeader)
+                                                ? buildOrderEmailTemplate(orderableProposals.map(p => ({ product: p.product, quantity: p.quantity })), suppliers)
+                                                : null;
+                                            const bulkEmailUrls = (bulkEmailTpl && headerEmailAddr)
+                                                ? buildEmailClientUrls(headerEmailAddr, bulkEmailTpl.subject, bulkEmailTpl.body)
+                                                : null;
                                             
                                             return (
                                                 <div key={supplierName} style={{ marginBottom: 'var(--spacing-2xl)' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '8px', marginBottom: 'var(--spacing-md)' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '8px', marginBottom: 'var(--spacing-md)', flexWrap: 'wrap', gap: '8px' }}>
                                                         <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--color-text-main)' }}>{supplierName}</h3>
                                                         {supplierName !== 'Kein Lieferant' && (
-                                                            <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+                                                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                {bulkEmailUrls && (
+                                                                    <>
+                                                                        {(prefClient === 'all' || prefClient === 'gmail') && (
+                                                                            <a
+                                                                                href={bulkEmailUrls.gmailUrl}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                onClick={() => executeProposalBulkDbSave(orderableProposals)}
+                                                                                style={{ fontSize: '12px', padding: '5px 12px', borderRadius: 'var(--radius-sm)', backgroundColor: '#ef4444', color: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600, textDecoration: 'none' }}
+                                                                            >
+                                                                                <Mail size={14} /> Alle per Gmail ({orderableProposals.length})
+                                                                            </a>
+                                                                        )}
+                                                                        {(prefClient === 'all' || prefClient === 'mailto') && (
+                                                                            <a
+                                                                                href={bulkEmailUrls.mailtoUrl}
+                                                                                onClick={() => executeProposalBulkDbSave(orderableProposals)}
+                                                                                style={{ fontSize: '12px', padding: '5px 12px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600, textDecoration: 'none' }}
+                                                                            >
+                                                                                <Mail size={14} /> Alle per Mail-App ({orderableProposals.length})
+                                                                            </a>
+                                                                        )}
+                                                                    </>
+                                                                )}
                                                                 {!isLiveEnv && isAiCartEnabled && (
                                                                     <CheckoutButton
                                                                     supplierId={supplierProposals[0].supplierId}
@@ -2725,7 +2816,7 @@ export const Orders: React.FC = () => {
                                                             
                                                             const prod = prop.product;
                                                             const supp = suppliers.find(s => s.id === prod.supplierId);
-                                                            const emailAddr = prod.emailOrderAddress || supp?.email || '';
+                                                            const emailAddr = resolveOrderEmailAddress(prod, supp);
                                                             const effM = getEffectiveOrderMethod(prod);
                                                             const effWebUrl = prod.orderUrl || supp?.orderUrl || supp?.url || supp?.loginUrl || '';
                                                             let btnText = "Bestellen";
@@ -2759,14 +2850,13 @@ export const Orders: React.FC = () => {
                                                                                 </div>
                                                                                 
                                                                                 {(() => {
-                                                                                    const _emailAddr = prod.emailOrderAddress || suppliers.find(s => s.id === prod.supplierId)?.email || '';
+                                                                                    const _emailAddr = resolveOrderEmailAddress(prod, supp);
                                                                                     const { subject, body } = generateEmailTemplate([{ product: prod, quantity: prop.quantity }]);
-                                                                                    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${_emailAddr}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                                                                    const mailtoUrl = `mailto:${_emailAddr}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                                                                    const { gmailUrl, mailtoUrl } = buildEmailClientUrls(_emailAddr, subject, body);
                                                                                     const webshopUrl = effWebUrl;
 
                                                                                     if (btnText === '📧 E-Mail öffnen') {
-                                                                                        const pref = StorageService.getSettings().preferredEmailClient;
+                                                                                        const pref = StorageService.getSettings().preferredEmailClient || 'all';
                                                                                         return (
                                                                                             <div style={{ display: 'flex', gap: '8px' }}>
                                                                                                 {(pref === 'all' || pref === 'gmail') && (
@@ -2779,7 +2869,7 @@ export const Orders: React.FC = () => {
                                                                                                         <Mail size={16} /> {pref === 'gmail' ? 'E-Mail öffnen' : 'Gmail'}
                                                                                                     </a>
                                                                                                 )}
-                                                                                                {(pref === 'all' || pref === 'mailto' || !pref) && (
+                                                                                                {(pref === 'all' || pref === 'mailto') && (
                                                                                                     <a 
                                                                                                         href={mailtoUrl}
                                                                                                         onClick={() => executeProposalDbSave(prop)}

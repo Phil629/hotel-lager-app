@@ -19,6 +19,8 @@ import { StockUpdateModal } from '../components/products/StockUpdateModal';
 import { QuickAddModal } from '../components/products/QuickAddModal';
 import { STANDARD_CATEGORIES as CATEGORIES, normalizeCategory } from '../lib/categories';
 import { sanitizeSupplierEmail, isSupplierWebshop } from '../lib/supplierHelpers';
+import { buildEmailClientUrls, resolveOrderEmailAddress } from '../lib/orderEmailHelpers';
+import { useCart } from '../hooks/useCart';
 
 export const Products: React.FC = () => {
     const { canSeePrices, isAiCartEnabled } = useAppContext();
@@ -72,24 +74,30 @@ export const Products: React.FC = () => {
     });
     // isEmailSectionOpen removed as requested
     const [showIoTLink, setShowIoTLink] = useState<{ product: Product, curl: string, powershell: string } | null>(null);
-    const [isOrderEmailExpanded, setIsOrderEmailExpanded] = useState(false);
     const [phoneCallProduct, setPhoneCallProduct] = useState<Product | null>(null);
-
-    const getEffectiveOrderMethod = (product: Product) => {
-        if (product.preferredOrderMethod) return product.preferredOrderMethod;
-        const supplier = suppliers.find(s => s.id === product.supplierId);
-        return supplier?.preferredOrderMethod || 'email';
-    };
     const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
-        
+
+    const {
+        orderCart,
+        emailSubject,
+        emailBody,
+        isOrderEmailExpanded,
+        setEmailSubject,
+        setEmailBody,
+        setIsOrderEmailExpanded,
+        handleProductSelect,
+        addToCart,
+        updateCartQuantity,
+        removeFromCart,
+        clearCart,
+        getEffectiveOrderMethod,
+    } = useCart(suppliers);
+
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
     const [isCreatingNewProduct, setIsCreatingNewProduct] = useState(false);
     const [newSupplierProduct, setNewSupplierProduct] = useState('');
-    const [orderCart, setOrderCart] = useState<{product: Product, quantity: number}[]>([]);
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
     const [orderNotes, setOrderNotes] = useState('');
-    const [emailSubject, setEmailSubject] = useState('');
-    const [emailBody, setEmailBody] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -763,77 +771,13 @@ export const Products: React.FC = () => {
         }
     };
 
-    const generateEmailTemplate = (cart: {product: Product, quantity: number}[]) => {
-        if (cart.length === 0) return { subject: '', body: '' };
-        const mainProduct = cart[0].product;
-        const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
-        
-        let subject = mainProduct.emailOrderSubject || supplier?.emailSubjectTemplate || `Bestellung: {product_name}`;
-        let body = mainProduct.emailOrderBody || supplier?.emailBodyTemplate || `Sehr geehrte Damen und Herren,\n\nbitte liefern Sie:\n{PRODUKTE}\n\nMit freundlichen Grüßen\nEinkauf`;
-
-        const listSubjectInfo = cart.length === 1 ? mainProduct.name : `${cart.length} Produkte`;
-        subject = subject.replace(/{product_name}/g, listSubjectInfo);
-        
-        const listBodyInfo = cart.map(c => `- ${c.quantity}x ${c.product.name}`).join('\n');
-        
-        if (body.includes('{PRODUKTE}')) {
-            body = body.replace(/{PRODUKTE}/g, listBodyInfo);
-        } else if (body.includes('{product_name}')) {
-            // Fallback for old templates
-            if (cart.length === 1) {
-                body = body.replace(/{product_name}/g, mainProduct.name).replace(/{quantity}/g, cart[0].quantity.toString()).replace(/{unit}/g, mainProduct.unit || '');
-            } else {
-                body = body.replace(/{quantity}x?\s*{product_name}(?:\s*\({unit}\))?|{product_name}/g, '\n' + listBodyInfo);
-            }
-        } else {
-            // Append if no placeholder found
-            body = body + `\n\n${listBodyInfo}`;
-        }
-        
-        return { subject, body };
-    };
-
     const handleOrderClick = (product: Product) => {
-        const initialCart = [{ product, quantity: product.standardOrderQuantity || 1 }];
-        setOrderCart(initialCart);
+        handleProductSelect(product);
         setOrderDate(new Date().toISOString().split('T')[0]);
         setOrderNotes('');
-
-        const { subject, body } = generateEmailTemplate(initialCart);
-        setEmailSubject(subject);
-        setEmailBody(body);
-        setIsOrderEmailExpanded(product.preferredOrderMethod === 'email');
+        setIsCreatingNewProduct(false);
+        setNewSupplierProduct('');
         setIsOrderModalOpen(true);
-    };
-
-    const addToCart = (product: Product) => {
-        setOrderCart(prev => {
-            const newCart = [...prev, { product, quantity: product.standardOrderQuantity || 1 }];
-            const { subject, body } = generateEmailTemplate(newCart);
-            setEmailSubject(subject);
-            setEmailBody(body);
-            return newCart;
-        });
-    };
-
-    const updateCartQuantity = (index: number, quantity: number) => {
-        setOrderCart(prev => {
-            const newCart = prev.map((c, i) => i === index ? { ...c, quantity } : c);
-            const { subject, body } = generateEmailTemplate(newCart);
-            setEmailSubject(subject);
-            setEmailBody(body);
-            return newCart;
-        });
-    };
-
-    const removeFromCart = (index: number) => {
-        setOrderCart(prev => {
-            const newCart = prev.filter((_, i) => i !== index);
-            const { subject, body } = generateEmailTemplate(newCart);
-            setEmailSubject(subject);
-            setEmailBody(body);
-            return newCart;
-        });
     };
 
     const handleCreateOrder = async (e: React.FormEvent) => {
@@ -843,7 +787,9 @@ export const Products: React.FC = () => {
         setIsLoading(true);
         try {
             const mainProduct = orderCart[0].product;
-            if (mainProduct.autoOrder && mainProduct.emailOrderAddress) {
+            const mainSupplier = suppliers.find(s => s.id === mainProduct.supplierId);
+            const autoOrderEmail = resolveOrderEmailAddress(mainProduct, mainSupplier);
+            if (mainProduct.autoOrder && autoOrderEmail) {
                 const settings = StorageService.getSettings();
                 if (!settings.serviceId || !settings.templateId || !settings.publicKey) {
                     setNotification({ message: 'Fehler: EmailJS ist nicht konfiguriert.', type: 'error' });
@@ -851,11 +797,11 @@ export const Products: React.FC = () => {
                     return;
                 }
                 const templateParams = {
-                    to_email: mainProduct.emailOrderAddress,
+                    to_email: autoOrderEmail,
                     subject: emailSubject,
                     message: emailBody,
                     product_name: orderCart.length > 1 ? orderCart.length + " Produkte" : mainProduct.name,
-                    quantity: orderCart.length > 1 ? "" : orderCart[0].quantity,
+                    quantity: orderCart.length > 1 ? "" : Math.max(1, orderCart[0].quantity || 1),
                     unit: orderCart.length > 1 ? "" : mainProduct.unit
                 };
                 await emailjs.send(settings.serviceId, settings.templateId, templateParams, settings.publicKey);
@@ -868,12 +814,12 @@ export const Products: React.FC = () => {
                     id: generateId(),
                     date: new Date(orderDate).toISOString(),
                     productName: item.product.name,
-                    quantity: item.quantity,
+                    quantity: Math.max(1, Number(item.quantity) || 1),
                     status: 'open',
                     price: item.product.price,
                     supplierName: supplier?.name,
                     productImage: item.product.image,
-                    supplierEmail: item.product.emailOrderAddress || supplier?.orderEmail || supplier?.email,
+                    supplierEmail: resolveOrderEmailAddress(item.product, supplier) || undefined,
                     supplierPhone: item.product.supplierPhone || supplier?.orderPhone || supplier?.phone,
                     notes: orderNotes
                 };
@@ -881,7 +827,7 @@ export const Products: React.FC = () => {
             }
 
             setIsOrderModalOpen(false);
-            setOrderCart([]);
+            clearCart();
             if (!mainProduct.autoOrder) {
                 setNotification({ message: 'Bestellung erfolgreich angelegt!', type: 'success' });
             }
@@ -949,21 +895,20 @@ export const Products: React.FC = () => {
         return { product, curl, powershell };
     };
 
-        const prepareEmailLink = (type: 'mailto' | 'gmail') => {
+    const prepareEmailLink = (type: 'mailto' | 'gmail') => {
         if (orderCart.length === 0) return;
 
         const mainProduct = orderCart[0].product;
         const supplier = suppliers.find(s => s.id === mainProduct.supplierId);
-        const emailAddr = mainProduct.emailOrderAddress || supplier?.email || '';
+        const emailAddr = resolveOrderEmailAddress(mainProduct, supplier);
         if (!emailAddr) return;
 
-        const encodedSubject = encodeURIComponent(emailSubject);
-        const encodedBody = encodeURIComponent(emailBody);
+        const { gmailUrl, mailtoUrl } = buildEmailClientUrls(emailAddr, emailSubject, emailBody);
 
         if (type === 'gmail') {
-            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${emailAddr}&su=${encodedSubject}&body=${encodedBody}`, '_blank');
+            window.open(gmailUrl, '_blank');
         } else {
-            window.location.href = `mailto:${emailAddr}?subject=${encodedSubject}&body=${encodedBody}`;
+            window.location.href = mailtoUrl;
         }
     };
 
@@ -1484,11 +1429,16 @@ export const Products: React.FC = () => {
                                                                         <ExternalLink size={16} /> Webshop
                                                                     </button>
                                                                 )}
-                                                                {(product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email) && (
-                                                                    <button onClick={() => window.location.href = `mailto:${product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email}`} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
-                                                                        <Mail size={16} /> E-Mail
-                                                                    </button>
-                                                                )}
+                                                                {(() => {
+                                                                    const sup = suppliers.find(s => s.id === product.supplierId);
+                                                                    const resolvedEmail = resolveOrderEmailAddress(product, sup);
+                                                                    if (!resolvedEmail) return null;
+                                                                    return (
+                                                                        <button onClick={() => window.location.href = `mailto:${resolvedEmail}`} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
+                                                                            <Mail size={16} /> E-Mail
+                                                                        </button>
+                                                                    );
+                                                                })()}
                                                                 {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
                                                                     <button onClick={() => setPhoneCallProduct(product)} style={{ flex: '1 1 auto', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 500 }}>
                                                                         <Phone size={16} /> Anrufen
@@ -1641,26 +1591,33 @@ export const Products: React.FC = () => {
                                                                         </div>
                                                                     </td>
                                                                     <td>
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                            {product.orderUrl && (
-                                                                                <button onClick={() => window.open(product.orderUrl, '_blank')} className="btn btn-sm btn-primary" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
-                                                                                    <ExternalLink size={13} /> Webshop
-                                                                                </button>
-                                                                            )}
-                                                                            {(product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email) && (
-                                                                                <button onClick={() => window.location.href = `mailto:${product.emailOrderAddress || suppliers.find(s => s.id === product.supplierId)?.email}`} className="btn btn-sm btn-ghost" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
-                                                                                    <Mail size={13} /> E-Mail
-                                                                                </button>
-                                                                            )}
-                                                                            {(product.supplierPhone || suppliers.find(s => s.id === product.supplierId)?.phone) && (
-                                                                                <button onClick={() => setPhoneCallProduct(product)} className="btn btn-sm btn-ghost" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
-                                                                                    <Phone size={13} /> Anrufen
-                                                                                </button>
-                                                                            )}
-                                                                            {!product.orderUrl && !product.emailOrderAddress && !product.supplierPhone && (
-                                                                                <span style={{ color: 'var(--color-text-faint)', fontSize: '13px', fontStyle: 'italic' }}>—</span>
-                                                                            )}
-                                                                        </div>
+                                                                        {(() => {
+                                                                            const sup = suppliers.find(s => s.id === product.supplierId);
+                                                                            const resolvedEmail = resolveOrderEmailAddress(product, sup);
+                                                                            const resolvedPhone = product.supplierPhone || sup?.orderPhone || sup?.phone;
+                                                                            return (
+                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                                                    {product.orderUrl && (
+                                                                                        <button onClick={() => window.open(product.orderUrl, '_blank')} className="btn btn-sm btn-primary" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
+                                                                                            <ExternalLink size={13} /> Webshop
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {resolvedEmail && (
+                                                                                        <button onClick={() => window.location.href = `mailto:${resolvedEmail}`} className="btn btn-sm btn-ghost" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
+                                                                                            <Mail size={13} /> E-Mail
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {resolvedPhone && (
+                                                                                        <button onClick={() => setPhoneCallProduct(product)} className="btn btn-sm btn-ghost" style={{ width: 'fit-content', borderRadius: 'var(--radius-sm)' }}>
+                                                                                            <Phone size={13} /> Anrufen
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {!product.orderUrl && !resolvedEmail && !resolvedPhone && (
+                                                                                        <span style={{ color: 'var(--color-text-faint)', fontSize: '13px', fontStyle: 'italic' }}>—</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })()}
                                                                     </td>
                                                                     <td style={{ textAlign: 'center' }}>
                                                                         <button onClick={() => handleOrderClick(product)} className="btn btn-primary btn-sm" style={{ borderRadius: 'var(--radius-full)', paddingLeft: '16px', paddingRight: '16px' }}>
@@ -2359,6 +2316,7 @@ export const Products: React.FC = () => {
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
+                        padding: '16px',
                         zIndex: 1000
                     }}>
                         <div style={{
@@ -2366,14 +2324,14 @@ export const Products: React.FC = () => {
                             padding: 'var(--spacing-xl)',
                             borderRadius: 'var(--radius-lg)',
                             width: '100%',
-                            maxWidth: '400px',
+                            maxWidth: '520px',
                             boxShadow: 'var(--shadow-lg)',
                             maxHeight: '90vh', // Ensure it doesn't overflow screen
                             overflowY: 'auto'  // Allow scrolling
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
                                 <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Bestellung aufgeben</h3>
-                                <button onClick={() => setIsOrderModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                                <button type="button" onClick={() => { setIsOrderModalOpen(false); clearCart(); setIsCreatingNewProduct(false); setNewSupplierProduct(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
                                     <X size={24} />
                                 </button>
                             </div>
@@ -2388,9 +2346,12 @@ export const Products: React.FC = () => {
                                                 <input 
                                                     type="number" 
                                                     min="1" 
-                                                    value={item.quantity} 
-                                                    onChange={e => updateCartQuantity(index, Number(e.target.value))}
-                                                    style={{ width: '60px', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: 'var(--font-size-md)' }} 
+                                                    value={item.quantity === 0 ? '' : item.quantity} 
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        updateCartQuantity(index, val === '' ? 0 : Math.max(0, Number(val.replace(/^0+/, '')) || 0));
+                                                    }}
+                                                    style={{ width: '64px', padding: '6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: 'var(--font-size-md)' }} 
                                                 />
                                                 {index > 0 && (
                                                     <button type="button" onClick={() => removeFromCart(index)} style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '4px' }}>
@@ -2401,11 +2362,30 @@ export const Products: React.FC = () => {
                                         ))}
                                     </div>
                                     
-                                    {isAiCartEnabled && (() => {
+                                    {(() => {
                                         const supplierId = selectedProductForOrder.supplierId;
                                         if (!supplierId) return null;
-                                        const suggestions = products.filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id));
-                                        if (suggestions.length === 0) return null;
+                                        const sup = suppliers.find(s => s.id === supplierId);
+                                        const suggestions = products
+                                            .filter(p => p.supplierId === supplierId && !orderCart.some(c => c.product.id === p.id))
+                                            .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+                                        const handleQuickCreateSupplierProduct = async () => {
+                                            if (!newSupplierProduct.trim()) return;
+                                            const newProduct: import('../types').Product = {
+                                                id: generateId(),
+                                                name: newSupplierProduct.trim(),
+                                                supplierId: supplierId,
+                                                category: sup?.defaultCategory || 'Sonstiges',
+                                                unit: 'Stück',
+                                                stock: 0,
+                                                price: 0
+                                            };
+                                            await DataService.saveProduct(newProduct);
+                                            await loadProducts();
+                                            addToCart(newProduct);
+                                            setNewSupplierProduct('');
+                                            setIsCreatingNewProduct(false);
+                                        };
                                         return (
                                             <div style={{ padding: '12px', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                                                 <h5 style={{ margin: '0 0 10px 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Weitere Produkte vom Lieferanten hinzufügen:</h5>
@@ -2433,41 +2413,11 @@ export const Products: React.FC = () => {
                                                                     onKeyDown={async e => {
                                                                         if (e.key === 'Enter') {
                                                                             e.preventDefault();
-                                                                            if (!newSupplierProduct.trim()) return;
-                                                                            const newProduct: import('../types').Product = {
-                                                                                id: generateId(),
-                                                                                name: newSupplierProduct.trim(),
-                                                                                supplierId: supplierId,
-                                                                                category: 'Sonstiges',
-                                                                                unit: 'Stück',
-                                                                                stock: 0,
-                                                                                price: 0
-                                                                            };
-                                                                            await DataService.saveProduct(newProduct);
-                                                                            await loadProducts();
-                                                                            addToCart(newProduct);
-                                                                            setNewSupplierProduct('');
-                                                                            setIsCreatingNewProduct(false);
+                                                                            await handleQuickCreateSupplierProduct();
                                                                         }
                                                                     }}
                                                                 />
-                                                                <button type="button" onClick={async () => {
-                                                                    if (!newSupplierProduct.trim()) return;
-                                                                    const newProduct: import('../types').Product = {
-                                                                        id: generateId(),
-                                                                        name: newSupplierProduct.trim(),
-                                                                        supplierId: supplierId,
-                                                                        category: 'Sonstiges',
-                                                                        unit: 'Stück',
-                                                                        stock: 0,
-                                                                        price: 0
-                                                                    };
-                                                                    await DataService.saveProduct(newProduct);
-                                                                    await loadProducts();
-                                                                    addToCart(newProduct);
-                                                                    setNewSupplierProduct('');
-                                                                    setIsCreatingNewProduct(false);
-                                                                }} className="btn btn-sm btn-primary" style={{ padding: '4px 8px' }}>Hinzufügen</button>
+                                                                <button type="button" onClick={handleQuickCreateSupplierProduct} className="btn btn-sm btn-primary" style={{ padding: '4px 8px' }}>Hinzufügen</button>
                                                                 <button type="button" onClick={() => { setIsCreatingNewProduct(false); setNewSupplierProduct(''); }} className="btn btn-sm btn-ghost" style={{ padding: '4px' }}><X size={14} /></button>
                                                             </div>
                                                         ) : (
@@ -2712,7 +2662,12 @@ export const Products: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {(selectedProductForOrder.emailOrderAddress || suppliers.find(s => s.id === selectedProductForOrder.supplierId)?.email) && !selectedProductForOrder.autoOrder && (
+                                    {(() => {
+                                        const sup = suppliers.find(s => s.id === selectedProductForOrder.supplierId);
+                                        const orderEmailAddr = resolveOrderEmailAddress(selectedProductForOrder, sup);
+                                        if (!orderEmailAddr || selectedProductForOrder.autoOrder) return null;
+                                        const pref = StorageService.getSettings().preferredEmailClient || 'all';
+                                        return (
                                         <>
                                             {getEffectiveOrderMethod(selectedProductForOrder) !== 'email' && !isOrderEmailExpanded ? (
                                                 <button
@@ -2771,31 +2726,59 @@ export const Products: React.FC = () => {
                                                         />
                                                     </div>
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => prepareEmailLink('gmail')}
-                                                        style={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            gap: 'var(--spacing-sm)',
-                                                            padding: 'var(--spacing-sm)',
-                                                            borderRadius: 'var(--radius-sm)',
-                                                            border: '1px solid var(--color-border)',
-                                                            backgroundColor: '#EA4335',
-                                                            color: 'white',
-                                                            cursor: 'pointer',
-                                                            fontWeight: 500,
-                                                            width: '100%'
-                                                        }}
-                                                    >
-                                                        <Mail size={16} />
-                                                        In Gmail öffnen
-                                                    </button>
+                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                        {(pref === 'all' || pref === 'gmail') && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => prepareEmailLink('gmail')}
+                                                                style={{
+                                                                    flex: '1 1 160px',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    gap: 'var(--spacing-sm)',
+                                                                    padding: 'var(--spacing-sm)',
+                                                                    borderRadius: 'var(--radius-sm)',
+                                                                    border: '1px solid var(--color-border)',
+                                                                    backgroundColor: '#EA4335',
+                                                                    color: 'white',
+                                                                    cursor: 'pointer',
+                                                                    fontWeight: 500
+                                                                }}
+                                                            >
+                                                                <Mail size={16} />
+                                                                In Gmail öffnen
+                                                            </button>
+                                                        )}
+                                                        {(pref === 'all' || pref === 'mailto') && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => prepareEmailLink('mailto')}
+                                                                style={{
+                                                                    flex: '1 1 160px',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    gap: 'var(--spacing-sm)',
+                                                                    padding: 'var(--spacing-sm)',
+                                                                    borderRadius: 'var(--radius-sm)',
+                                                                    border: '1px solid var(--color-border)',
+                                                                    backgroundColor: 'var(--color-primary)',
+                                                                    color: 'white',
+                                                                    cursor: 'pointer',
+                                                                    fontWeight: 500
+                                                                }}
+                                                            >
+                                                                <Mail size={16} />
+                                                                Mail-App öffnen
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </>
-                                    )}
+                                        );
+                                    })()}
                                 </div>
 
                                 {selectedProductForOrder.autoOrder && (
@@ -2819,7 +2802,7 @@ export const Products: React.FC = () => {
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-md)' }}>
                                     <button
                                         type="button"
-                                        onClick={() => setIsOrderModalOpen(false)}
+                                        onClick={() => { setIsOrderModalOpen(false); clearCart(); setIsCreatingNewProduct(false); setNewSupplierProduct(''); }}
                                         style={{
                                             padding: 'var(--spacing-sm) var(--spacing-md)',
                                             borderRadius: 'var(--radius-md)',
