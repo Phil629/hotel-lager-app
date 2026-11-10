@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { Layout } from './components/Layout';
@@ -7,19 +7,20 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { supabase } from './services/supabase';
 import { StorageService } from './services/storage';
 import { AppContext } from './contexts/AppContext';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 
-// Lazy-loaded pages for fast initial bundle and optimal code splitting
-const Products = lazy(() => import('./pages/Products').then(m => ({ default: m.Products })));
-const Orders = lazy(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
-const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
-const Suppliers = lazy(() => import('./pages/Suppliers').then(m => ({ default: m.Suppliers })));
-const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
-const Consumption = lazy(() => import('./pages/Consumption').then(m => ({ default: m.Consumption })));
-const Inventory = lazy(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
-const Auth = lazy(() => import('./pages/Auth').then(m => ({ default: m.Auth })));
-const Admin = lazy(() => import('./pages/Admin').then(m => ({ default: m.Admin })));
-const Setup = lazy(() => import('./pages/Setup').then(m => ({ default: m.Setup })));
-const UpdatePassword = lazy(() => import('./pages/UpdatePassword').then(m => ({ default: m.UpdatePassword })));
+// Lazy-loaded pages with auto-retry across production deployments
+const Products = lazyWithRetry(() => import('./pages/Products').then(m => ({ default: m.Products })), 'products');
+const Orders = lazyWithRetry(() => import('./pages/Orders').then(m => ({ default: m.Orders })), 'orders');
+const Settings = lazyWithRetry(() => import('./pages/Settings').then(m => ({ default: m.Settings })), 'settings');
+const Suppliers = lazyWithRetry(() => import('./pages/Suppliers').then(m => ({ default: m.Suppliers })), 'suppliers');
+const Pricing = lazyWithRetry(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })), 'pricing');
+const Consumption = lazyWithRetry(() => import('./pages/Consumption').then(m => ({ default: m.Consumption })), 'consumption');
+const Inventory = lazyWithRetry(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })), 'inventory');
+const Auth = lazyWithRetry(() => import('./pages/Auth').then(m => ({ default: m.Auth })), 'auth');
+const Admin = lazyWithRetry(() => import('./pages/Admin').then(m => ({ default: m.Admin })), 'admin');
+const Setup = lazyWithRetry(() => import('./pages/Setup').then(m => ({ default: m.Setup })), 'setup');
+const UpdatePassword = lazyWithRetry(() => import('./pages/UpdatePassword').then(m => ({ default: m.UpdatePassword })), 'update-password');
 
 const PageLoading = () => (
   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: 'var(--color-text-muted)', fontSize: '15px' }}>

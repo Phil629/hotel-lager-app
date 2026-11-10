@@ -1,5 +1,6 @@
 import React from 'react';
 import { logError } from '../services/errors';
+import { isChunkLoadError } from '../lib/lazyWithRetry';
 
 interface State {
   hasError: boolean;
@@ -17,6 +18,20 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    if (isChunkLoadError(error)) {
+      // Chunk load error typically means a new build was deployed.
+      // Auto-reload once to fetch fresh HTML and chunk hashes.
+      const lastReload = sessionStorage.getItem('chunk_eb_reload_ts');
+      const now = Date.now();
+      if (!lastReload || now - Number(lastReload) > 10000) {
+        sessionStorage.setItem('chunk_eb_reload_ts', String(now));
+        window.location.reload();
+        return;
+      }
+      console.warn('ErrorBoundary: ChunkLoadError after reload, showing update prompt:', error);
+      return;
+    }
+
     console.error('ErrorBoundary caught:', error, info);
     logError(`UI-Absturz: ${error.message}`, {
       stack: error.stack?.slice(0, 1000),
@@ -26,6 +41,8 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
 
   render() {
     if (this.state.hasError) {
+      const isChunk = isChunkLoadError(this.state.error);
+
       return (
         <div style={{
           display: 'flex',
@@ -38,12 +55,16 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
           textAlign: 'center',
           backgroundColor: 'var(--color-background)',
         }}>
-          <div style={{ fontSize: '48px' }}>⚠️</div>
-          <h2 style={{ margin: 0, color: 'var(--color-text-main)' }}>Hoppla, ein Fehler ist aufgetreten</h2>
-          <p style={{ margin: 0, color: 'var(--color-text-muted)', maxWidth: '400px' }}>
-            Ein unerwarteter Fehler hat diese Seite zum Absturz gebracht. Bitte lade die Seite neu.
+          <div style={{ fontSize: '48px' }}>{isChunk ? '🔄' : '⚠️'}</div>
+          <h2 style={{ margin: 0, color: 'var(--color-text-main)' }}>
+            {isChunk ? 'Neue Version verfügbar' : 'Hoppla, ein Fehler ist aufgetreten'}
+          </h2>
+          <p style={{ margin: 0, color: 'var(--color-text-muted)', maxWidth: '420px', lineHeight: 1.5 }}>
+            {isChunk
+              ? 'Die Anwendung wurde aktualisiert. Bitte lade die Seite neu, um die neueste Version zu laden.'
+              : 'Ein unerwarteter Fehler hat diese Seite zum Absturz gebracht. Bitte lade die Seite neu.'}
           </p>
-          {this.state.error && (
+          {this.state.error && !isChunk && (
             <pre style={{
               fontSize: '12px',
               color: 'var(--color-text-muted)',
@@ -58,7 +79,14 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
             </pre>
           )}
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              try {
+                sessionStorage.clear();
+              } catch {
+                // ignore
+              }
+              window.location.reload();
+            }}
             style={{
               padding: '10px 24px',
               backgroundColor: 'var(--color-primary)',
@@ -69,7 +97,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
               fontWeight: 600,
             }}
           >
-            Seite neu laden
+            {isChunk ? 'Jetzt aktualisieren' : 'Seite neu laden'}
           </button>
         </div>
       );
@@ -78,3 +106,4 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
     return this.props.children;
   }
 }
+
